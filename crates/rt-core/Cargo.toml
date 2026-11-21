@@ -14,6 +14,8 @@ bytes = "1"
 futures-core = "0.3"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
+# Companion protocol (strand G): the `x-rt-head` header and the `/v1/send` envelope.
+serde_json = "1"
 thiserror = "2"
 url = "2"
 # std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.

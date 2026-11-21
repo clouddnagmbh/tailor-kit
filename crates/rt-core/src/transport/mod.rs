@@ -165,9 +165,50 @@ pub async fn collect(
     limit: usize,
     started: web_time::Instant,
 ) -> Result<CompletedResponse, TransportError> {
-    let _ = (response, limit, started);
-    todo!("wave 2, strand A")
+    let Response { head, mut body } = response;
+    // Chunks are kept as `Bytes` (no copy) and joined once at the end; a body that arrives in
+    // one chunk is never copied.
+    let mut kept: Vec<Bytes> = Vec::new();
+    let mut kept_len = 0usize;
+    let mut size = 0u64;
+    let mut truncated = false;
+    while let Some(chunk) = std::future::poll_fn(|cx| body.as_mut().poll_next(cx)).await {
+        let chunk = chunk?;
+        size += chunk.len() as u64;
+        let room = limit - kept_len;
+        if chunk.len() <= room {
+            kept_len += chunk.len();
+            kept.push(chunk);
+        } else {
+            truncated = true;
+            if room > 0 {
+                kept_len += room;
+                kept.push(chunk.slice(..room));
+            }
+        }
+    }
+    let body = match kept.len() {
+        0 => Bytes::new(),
+        1 => kept.pop().unwrap_or_default(),
+        _ => {
+            let mut joined = Vec::with_capacity(kept_len);
+            for part in &kept {
+                joined.extend_from_slice(part);
+            }
+            Bytes::from(joined)
+        }
+    };
+    Ok(CompletedResponse {
+        head,
+        body,
+        truncated,
+        size,
+        total: started.elapsed(),
+    })
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;

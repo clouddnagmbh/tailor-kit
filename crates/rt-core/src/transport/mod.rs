@@ -207,6 +207,8 @@ pub async fn collect(
     })
 }
 
+pub mod companion;
+
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;
 

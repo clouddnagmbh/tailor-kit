@@ -1,0 +1,79 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 The RequestTailor Authors */
+
+/* Design tokens. Components use only these variables, never raw colours, so light and dark
+   themes work everywhere. Names are interface (working rule 1); values belong to strand A.
+   Theme: `data-theme="light" | "dark"` on <html>; without it, the OS preference applies. */
+
+:root {
+  color-scheme: light dark;
+  --rt-font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rt-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --rt-size: 13px;
+  --rt-size-small: 12px;
+  --rt-radius: 4px;
+  --rt-gap: 8px;
+
+  --rt-bg: #ffffff;
+  --rt-bg-panel: #f6f7f9;
+  --rt-bg-hover: #eceef2;
+  --rt-bg-selected: #e1e8f5;
+  --rt-fg: #1d2129;
+  --rt-fg-muted: #626a78;
+  --rt-border: #d9dce1;
+  --rt-accent: #2f62d0;
+  --rt-accent-fg: #ffffff;
+  --rt-ok: #1f8a4c;
+  --rt-warn: #a86400;
+  --rt-danger: #c4312b;
+  /* Variable highlighting by state (strand B). */
+  --rt-var-resolved: #1f8a4c;
+  --rt-var-secret: #8a4fd0;
+  --rt-var-unresolved: #c4312b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --rt-bg: #17191d;
+    --rt-bg-panel: #1e2126;
+    --rt-bg-hover: #282c33;
+    --rt-bg-selected: #233453;
+    --rt-fg: #e3e6eb;
+    --rt-fg-muted: #9aa2af;
+    --rt-border: #343943;
+    --rt-accent: #6b97f5;
+    --rt-accent-fg: #0d1117;
+    --rt-ok: #4cc27f;
+    --rt-warn: #e0a440;
+    --rt-danger: #f07069;
+    --rt-var-resolved: #4cc27f;
+    --rt-var-secret: #b98af0;
+    --rt-var-unresolved: #f07069;
+  }
+}
+
+:root[data-theme="dark"] {
+  --rt-bg: #17191d;
+  --rt-bg-panel: #1e2126;
+  --rt-bg-hover: #282c33;
+  --rt-bg-selected: #233453;
+  --rt-fg: #e3e6eb;
+  --rt-fg-muted: #9aa2af;
+  --rt-border: #343943;
+  --rt-accent: #6b97f5;
+  --rt-accent-fg: #0d1117;
+  --rt-ok: #4cc27f;
+  --rt-warn: #e0a440;
+  --rt-danger: #f07069;
+  --rt-var-resolved: #4cc27f;
+  --rt-var-secret: #b98af0;
+  --rt-var-unresolved: #f07069;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--rt-bg);
+  color: var(--rt-fg);
+  font: var(--rt-size) / 1.4 var(--rt-font-ui);
+}

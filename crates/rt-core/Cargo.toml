@@ -9,10 +9,13 @@ publish.workspace = true
 
 
 [dependencies]
+base64 = "0.22"
 bytes = "1"
 futures-core = "0.3"
+percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+url = "2"
 # std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
 web-time = "1"
 

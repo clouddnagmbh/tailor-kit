@@ -2,9 +2,12 @@
 <!-- Copyright 2026 The RequestTailor Authors -->
 <!-- Conflict of one file after a pull, in a modal dialog: our version and theirs side by side,
      "Use ours" / "Use theirs". Resolving changes files, so it is disabled while there are
-     unsaved changes (`blocked` says why). Owner: wave 4, strand A2. -->
+     unsaved changes (`blocked` says why). Owner: wave 4, strand A2.
+     Wave 12, strand B: when the file merges on the model, the conflicted fields come first,
+     decided one by one (`merge/MergeFields`); the whole versions stay below. -->
 <script lang="ts">
-  import type { GitConflict, GitResolution } from "../commands/types";
+  import type { GitConflict, GitResolution, MergeState } from "../commands/types";
+  import MergeFields from "../merge/MergeFields.svelte";
   import { getApp } from "../state/app.svelte";
 
   let {
@@ -22,11 +25,24 @@
 
   let conflict = $state<GitConflict | null>(null);
   let error = $state<string | null>(null);
+  let merge = $state<MergeState | null>(null);
+  const perField = $derived(
+    merge !== null &&
+      (merge.conflicts.some((c) => c.file === path) || (merge.clean ?? []).includes(path)),
+  );
 
   $effect(() => {
     const p = path;
     conflict = null;
     error = null;
+    merge = null;
+    // Field conflicts are an addition: without them (or on an error) the file view stays.
+    app.backend.merges.conflicts().then(
+      (m) => {
+        if (p === path) merge = m;
+      },
+      () => {},
+    );
     app.backend.git.conflict(p).then(
       (c) => {
         if (p === path) conflict = c;
@@ -61,8 +77,16 @@
   {:else if !conflict}
     <p class="hint">Loading…</p>
   {:else}
-    <p class="hint">Both sides changed this file. Keep one version; you can edit it afterwards.</p>
-    {#if blocked}<p class="warn" role="status">{blocked}</p>{/if}
+    {#if perField && merge}
+      <p class="hint">Both sides changed these fields. Pick a side for each; the rest of the file is merged.</p>
+      <div class="fields">
+        <MergeFields {merge} only={path} {blocked} onresolved={() => onclose()} />
+      </div>
+      <h3 class="whole">Or keep one whole version</h3>
+    {:else}
+      <p class="hint">Both sides changed this file. Keep one version; you can edit it afterwards.</p>
+      {#if blocked}<p class="warn" role="status">{blocked}</p>{/if}
+    {/if}
     <div class="sides">
       <section aria-labelledby="rt-git-ours">
         <div class="side-head">
@@ -121,6 +145,13 @@
     margin: 0;
     font-size: var(--rt-size-small);
     color: var(--rt-fg-muted);
+  }
+  .fields {
+    padding: 0 calc(var(--rt-gap) * 2) calc(var(--rt-gap) * 2);
+    overflow: auto;
+  }
+  .whole {
+    padding: 0 calc(var(--rt-gap) * 2) var(--rt-gap);
   }
   .sides {
     display: grid;

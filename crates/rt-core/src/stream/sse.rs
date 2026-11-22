@@ -202,6 +202,26 @@ impl SseSession {
         }
     }
 
+    /// Sends `request` over any [`Transport`](crate::transport::Transport) (the browser's
+    /// `fetch`) and reads the response as a session. The request goes out without its
+    /// timeout, which would also cover the endless body; a caller that wants a limit for the
+    /// response head races this future against a timer.
+    pub async fn open_over<T: crate::transport::Transport>(
+        transport: &T,
+        mut request: crate::transport::HttpRequest,
+    ) -> Result<Self, TransportError> {
+        let started = Instant::now();
+        request.options.timeout = None;
+        let response = transport.send(request).await?;
+        let head = StreamHead {
+            status: response.head.status,
+            version: response.head.version,
+            headers: response.head.headers.clone(),
+            url: response.head.url.clone(),
+        };
+        Ok(Self::new(head, response.body, started))
+    }
+
     fn at_ms(&self) -> u64 {
         u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX)
     }
@@ -249,9 +269,7 @@ impl SseSession {
             });
         }
         loop {
-            let Some(body) = self.body.as_mut() else {
-                return None;
-            };
+            let body = self.body.as_mut()?;
             let chunk = std::future::poll_fn(|cx| body.as_mut().poll_next(cx)).await;
             match chunk {
                 Some(Ok(bytes)) => {

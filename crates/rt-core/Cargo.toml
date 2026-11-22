@@ -14,6 +14,9 @@ bytes = "1"
 futures-core = "0.3"
 # AWS Signature V4 (wave 5, strand D): pure Rust, builds on every target.
 hmac = "0.12"
+# OAuth 2.0 (wave 5, strand C): PKCE verifier and state from the OS random source; the S256
+# challenge uses sha2 (below). MIT OR Apache-2.0, pure Rust.
+getrandom = "0.2"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 # Companion protocol (strand G): the `x-rt-head` header and the `/v1/send` envelope.
@@ -42,6 +45,8 @@ pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
 
 # Transport (strand A), browser: fetch via web-sys.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# The browser's crypto.getRandomValues for getrandom (OAuth 2.0 PKCE and state).
+getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

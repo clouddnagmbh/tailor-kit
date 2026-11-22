@@ -14,16 +14,20 @@
        identity if none is set.
      - Before a commit the secret scanner checks the checked files (`git.scan`, wave 5): with
        findings nothing is committed and SecretFindings lists them (file, line, hint). A
-       commit the backend refuses with `secrets-found` shows them the same way. -->
+       commit the backend refuses with `secrets-found` shows them the same way.
+     Wave 12: owner strand A (semantic diff in the changes and the log). The "Tools" section
+     lists the palette entries of all wave 12 strands (`api-commands.ts`); it is interface. -->
 <script lang="ts">
   import { tick, untrack } from "svelte";
 
   import { BackendError, type CollectionInfo } from "../commands/backend";
   import type { GitBranch, GitCommit, GitFile, GitResolution, GitStatus, SecretFinding } from "../commands/types";
   import { getApp } from "../state/app.svelte";
+  import { gitApiCommands } from "./api-commands";
   import ConflictView from "./ConflictView.svelte";
   import DiffView from "./DiffView.svelte";
   import SecretFindings from "./SecretFindings.svelte";
+  import { getGitViews } from "./views.svelte";
   import {
     ago,
     branchLabel,
@@ -38,6 +42,8 @@
 
   let { onopen }: { onopen: (info: CollectionInfo) => Promise<void> } = $props();
   const app = getApp();
+  const views = getGitViews();
+  const tools = $derived(gitApiCommands(app, views));
   const git = app.backend.git;
 
   let status = $state<GitStatus | null>(null);
@@ -474,6 +480,17 @@
       {#if findings.length > 0}<SecretFindings {findings} />{/if}
     </section>
 
+    {#if tools.length > 0}
+      <section class="tools" aria-label="Tools">
+        <h3>Tools</h3>
+        <ul data-testid="git-tools">
+          {#each tools as t (t.id)}
+            <li><button class="link" data-testid="git-tool-{t.id}" onclick={() => t.run()}>{t.label}</button></li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
     {#if commits.length > 0}
       <section class="log" aria-label="Recent commits">
         <h3>Recent commits</h3>
@@ -696,6 +713,20 @@
   }
   .commit button {
     align-self: flex-start;
+  }
+  .tools ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .tools .link {
+    background: none;
+    border: none;
+    padding: 2px 0;
+    color: var(--rt-accent);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
   }
   .log li {
     overflow: hidden;

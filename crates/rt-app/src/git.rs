@@ -21,6 +21,15 @@
 //!
 //! Owners in wave 4: strand A1 (native, `rt-git`), strand A2 (web and the Git UI).
 //! Changes to these types are interface changes.
+//!
+//! Wave 12 (interface): revisions. `GitApi` reads any commit without a checkout:
+//! `revParse`, `treeAt` ([`GitTree`]), `show`, `fileLog` ([`GitFileCommit`]), `mergeBase` and
+//! `commits`. A *rev* is a full or abbreviated commit id, a local or remote branch (`main`,
+//! `origin/main`), a ref under `refs/` or `HEAD`, optionally followed by `~<n>` or `^` (first
+//! parent). Paths are collection-relative; a leading `/` makes a path relative to the
+//! repository root (`show` only, e.g. an OpenAPI spec next to the collection folder).
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +87,92 @@ pub struct GitCommit {
     pub author: String,
     /// Author time, Unix seconds.
     pub time: i64,
+}
+
+/// The collection's files at a commit, read from Git's object store (no checkout): the same
+/// files [`rt_format::FileSet::from_dir`] reads from disk (`*.yml` below the collection root,
+/// without hidden folders, `node_modules` and nested collections). Collection files are UTF-8
+/// text; a file that is not is left out.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct GitTree {
+    /// The commit the rev resolved to (full hex id).
+    pub oid: String,
+    /// Path relative to the collection root → text.
+    pub files: BTreeMap<String, String>,
+}
+
+impl GitTree {
+    pub fn to_file_set(&self) -> rt_format::FileSet {
+        rt_format::FileSet {
+            files: self
+                .files
+                .iter()
+                .map(|(p, t)| (p.clone(), t.as_bytes().to_vec()))
+                .collect(),
+        }
+    }
+
+    pub fn into_file_set(self) -> rt_format::FileSet {
+        rt_format::FileSet {
+            files: self
+                .files
+                .into_iter()
+                .map(|(p, t)| (p, t.into_bytes()))
+                .collect(),
+        }
+    }
+}
+
+/// Whether a path is one [`GitTree`] holds (relative to the collection root): a `.yml` file
+/// outside hidden folders and `node_modules`. Nested collections are checked by the caller,
+/// which sees the whole tree.
+pub fn tree_path(path: &str) -> bool {
+    let mut parts = path.split('/').peekable();
+    while let Some(part) = parts.next() {
+        if parts.peek().is_some() && (part.starts_with('.') || part == "node_modules") {
+            return false;
+        }
+        if parts.peek().is_none() {
+            return part.ends_with(".yml") && !part.is_empty();
+        }
+    }
+    false
+}
+
+/// Drops the files of nested collections (a folder below the root with its own
+/// `opencollection.yml`) from `files`, as [`rt_format::FileSet::from_dir`] skips them.
+pub fn drop_nested(files: &mut BTreeMap<String, String>) {
+    let nested: Vec<String> = files
+        .keys()
+        .filter_map(|p| p.strip_suffix(&format!("/{}", rt_format::COLLECTION_FILE)))
+        .map(|dir| format!("{dir}/"))
+        .collect();
+    if !nested.is_empty() {
+        files.retain(|p, _| !nested.iter().any(|dir| p.starts_with(dir)));
+    }
+}
+
+/// How a commit of [`GitApi.fileLog`] touched the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GitFileChange {
+    Added,
+    Modified,
+    Deleted,
+    /// Moved from [`GitFileCommit::from`] (with or without changes).
+    Renamed,
+}
+
+/// A commit that changed a file, newest first in `fileLog`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitFileCommit {
+    pub commit: GitCommit,
+    /// The file's path at this commit (it differs from today's after a rename).
+    pub path: String,
+    pub change: GitFileChange,
+    /// The path before a rename.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 /// What `pull` did.
@@ -225,6 +320,29 @@ pub fn text_diff(path: &str, old: Option<&[u8]>, new: Option<&[u8]>) -> GitDiff 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tree_paths_are_the_files_from_dir_reads() {
+        assert!(tree_path("opencollection.yml"));
+        assert!(tree_path("users/get.yml"));
+        assert!(!tree_path("openapi.yaml"));
+        assert!(!tree_path(".github/workflows/ci.yml"));
+        assert!(!tree_path("node_modules/x/a.yml"));
+        assert!(tree_path(".hidden.yml"));
+        let mut files: BTreeMap<String, String> = [
+            "opencollection.yml",
+            "a.yml",
+            "sub/opencollection.yml",
+            "sub/b.yml",
+            "subway/c.yml",
+        ]
+        .iter()
+        .map(|p| (p.to_string(), String::new()))
+        .collect();
+        drop_nested(&mut files);
+        let left: Vec<&str> = files.keys().map(String::as_str).collect();
+        assert_eq!(left, vec!["a.yml", "opencollection.yml", "subway/c.yml"]);
+    }
 
     fn kinds(d: &GitDiff) -> Vec<(DiffLineKind, &str)> {
         d.hunks

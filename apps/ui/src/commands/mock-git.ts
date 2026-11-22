@@ -15,7 +15,7 @@
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
-import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitIdentity, GitPullResult, GitResolution, GitStatus, RequestSpec, SecretFinding } from "./types";
+import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
 export interface MockGitHost {
@@ -158,7 +158,7 @@ export function lineDiff(path: string, old: string | null, current: string | nul
 export class MockGit implements GitApi {
   private own: Tree = new Map();
   private isRepo = true;
-  private commits = new Map<string, Commit>();
+  private store = new Map<string, Commit>();
   private branchesMap = new Map<string, string | null>();
   private current: string | null = "main";
   private tracking = new Set<string>();
@@ -205,7 +205,7 @@ export class MockGit implements GitApi {
    *  pull stops with a conflict. */
   scenario(name: "none" | "clean" | "conflict"): void {
     this.started = true;
-    this.commits.clear();
+    this.store.clear();
     this.branchesMap.clear();
     this.tracking.clear();
     this.fetched.clear();
@@ -234,7 +234,7 @@ export class MockGit implements GitApi {
       this.remoteCommit({ [path]: { ...base, url: "{{baseUrl}}/health/remote" } }, "Remote change to health");
       const ours = { ...base, url: "{{baseUrl}}/health/local" };
       this.writeWork(path, ours);
-      const tree = clone(this.commits.get(first)!.tree);
+      const tree = clone(this.store.get(first)!.tree);
       tree.set(path, clone(ours));
       this.branchesMap.set("main", this.newCommit([first], tree, "Local change to health", "Demo Author"));
     }
@@ -245,7 +245,7 @@ export class MockGit implements GitApi {
     this.start();
     if (!this.remote) throw new Error("mock git: no remote");
     const parent = this.remote.get(branch);
-    const tree: Tree = parent ? clone(this.commits.get(parent)!.tree) : new Map();
+    const tree: Tree = parent ? clone(this.store.get(parent)!.tree) : new Map();
     for (const [p, spec] of Object.entries(files)) {
       if (spec) tree.set(p, clone(spec));
       else tree.delete(p);
@@ -272,7 +272,7 @@ export class MockGit implements GitApi {
       oid += h.toString(16).padStart(8, "0");
     }
     oid = oid.slice(0, 40);
-    this.commits.set(oid, { oid, parents, tree, message, author, time: this.startTime + 60 * this.counter });
+    this.store.set(oid, { oid, parents, tree, message, author, time: this.startTime + 60 * this.counter });
     return oid;
   }
 
@@ -282,7 +282,7 @@ export class MockGit implements GitApi {
 
   private headTree(): Tree {
     const h = this.head();
-    return h ? this.commits.get(h)!.tree : new Map();
+    return h ? this.store.get(h)!.tree : new Map();
   }
 
   private ancestors(oid: string): Set<string> {
@@ -292,7 +292,7 @@ export class MockGit implements GitApi {
       const o = todo.pop()!;
       if (seen.has(o)) continue;
       seen.add(o);
-      todo.push(...this.commits.get(o)!.parents);
+      todo.push(...this.store.get(o)!.parents);
     }
     return seen;
   }
@@ -302,11 +302,11 @@ export class MockGit implements GitApi {
     return [...this.ancestors(from)].filter((o) => !exclude.has(o)).length;
   }
 
-  private mergeBase(a: string, b: string): string | null {
+  private baseOf(a: string, b: string): string | null {
     const ofB = this.ancestors(b);
     // Nearest common ancestor by commit order (the mock's histories are small).
     const common = [...this.ancestors(a)].filter((o) => ofB.has(o));
-    common.sort((x, y) => this.commits.get(y)!.time - this.commits.get(x)!.time);
+    common.sort((x, y) => this.store.get(y)!.time - this.store.get(x)!.time);
     return common[0] ?? null;
   }
 
@@ -359,8 +359,36 @@ export class MockGit implements GitApi {
   }
 
   private toCommit(oid: string): GitCommit {
-    const c = this.commits.get(oid)!;
+    const c = this.store.get(oid)!;
     return { oid, summary: c.message.split("\n")[0], author: c.author, time: c.time };
+  }
+
+  /** The commit `rev` names: an oid (or a prefix of 4+), a local branch, `origin/<branch>`,
+   *  `HEAD`, each optionally followed by `~<n>` or `^` (first parent). */
+  private resolveRev(rev: string): string {
+    this.start();
+    this.requireRepo();
+    const m = /^(.*?)((?:~\d*|\^)*)$/.exec(rev.trim());
+    const name = m?.[1] ?? "";
+    let oid: string | null = null;
+    if (name === "HEAD") oid = this.head();
+    else if (this.branchesMap.has(name)) oid = this.branchesMap.get(name) ?? null;
+    else if (name.startsWith("origin/")) oid = this.fetched.get(name.slice("origin/".length)) ?? null;
+    else if (/^[0-9a-f]{4,40}$/.test(name)) {
+      const hits = [...this.store.keys()].filter((o) => o.startsWith(name));
+      oid = hits.length === 1 ? hits[0] : null;
+    }
+    if (!oid) throw err(`Unknown revision "${rev}".`);
+    let at: string = oid;
+    for (const step of (m?.[2] ?? "").match(/~\d*|\^/g) ?? []) {
+      const n = step === "^" ? 1 : Number(step.slice(1) || "1");
+      for (let i = 0; i < n; i++) {
+        const parent: string | undefined = this.store.get(at)!.parents[0];
+        if (!parent) throw err(`Unknown revision "${rev}".`);
+        at = parent;
+      }
+    }
+    return at;
   }
 
   // ---- GitApi ----
@@ -383,6 +411,61 @@ export class MockGit implements GitApi {
       files: this.files(),
       merging: this.mergeHead !== null,
     };
+  }
+
+  // Wave 12 (interface): revisions.
+
+  async revParse(rev: string): Promise<string> {
+    this.calls.push(`revParse ${rev}`);
+    return this.resolveRev(rev);
+  }
+
+  async treeAt(rev: string): Promise<GitTree> {
+    this.calls.push(`treeAt ${rev}`);
+    const oid = this.resolveRev(rev);
+    const files: Record<string, string> = {};
+    for (const [p, spec] of this.store.get(oid)!.tree) files[p] = renderSpec(spec);
+    return { oid, files };
+  }
+
+  async show(rev: string, path: string): Promise<string | null> {
+    this.calls.push(`show ${rev} ${path}`);
+    const spec = this.store.get(this.resolveRev(rev))!.tree.get(path.replace(/^\//, ""));
+    return spec ? renderSpec(spec) : null;
+  }
+
+  async fileLog(path: string, limit: number): Promise<GitFileCommit[]> {
+    this.calls.push(`fileLog ${path}`);
+    const head = this.head();
+    if (!head) return [];
+    const out: GitFileCommit[] = [];
+    const ordered = [...this.ancestors(head)].sort((x, y) => this.store.get(y)!.time - this.store.get(x)!.time);
+    for (const oid of ordered) {
+      if (out.length >= limit) break;
+      const c = this.store.get(oid)!;
+      const here = c.tree.get(path);
+      const before = c.parents[0] ? this.store.get(c.parents[0])!.tree.get(path) : undefined;
+      const change = !before && here ? "added" : before && !here ? "deleted" : !same(before, here) ? "modified" : null;
+      if (change) out.push({ commit: this.toCommit(oid), path, change });
+    }
+    return out;
+  }
+
+  async mergeBase(a: string, b: string): Promise<string | null> {
+    this.calls.push(`mergeBase ${a} ${b}`);
+    return this.baseOf(this.resolveRev(a), this.resolveRev(b));
+  }
+
+  async commits(from: string | null, to: string, limit: number): Promise<GitCommit[]> {
+    this.calls.push(`commits ${from ?? ""}..${to}`);
+    const hidden = from ? this.ancestors(this.resolveRev(from)) : new Set<string>();
+    const out: GitCommit[] = [];
+    let oid: string | undefined = this.resolveRev(to);
+    while (oid && !hidden.has(oid) && out.length < limit) {
+      out.push(this.toCommit(oid));
+      oid = this.store.get(oid)!.parents[0];
+    }
+    return out;
   }
 
   async diff(path: string): Promise<GitDiff> {
@@ -425,7 +508,7 @@ export class MockGit implements GitApi {
     this.calls.push("log");
     this.start();
     const out: GitCommit[] = [];
-    for (let o = this.head(); o && out.length < limit; o = this.commits.get(o)!.parents[0] ?? null) {
+    for (let o = this.head(); o && out.length < limit; o = this.store.get(o)!.parents[0] ?? null) {
       out.push(this.toCommit(o));
     }
     return out;
@@ -460,7 +543,7 @@ export class MockGit implements GitApi {
       }
     }
     const target = this.branchesMap.get(name)!;
-    const to = target ? this.commits.get(target)!.tree : new Map();
+    const to = target ? this.store.get(target)!.tree : new Map();
     this.guardLocal(this.headTree(), to, "switch branches");
     this.moveWork(this.headTree(), to);
     this.current = name;
@@ -515,7 +598,7 @@ export class MockGit implements GitApi {
     this.tracking.add(branch);
     const ours = this.head();
     if (ours === theirs || (ours && this.ancestors(ours).has(theirs))) return { outcome: "up-to-date" };
-    const theirsTree = this.commits.get(theirs)!.tree;
+    const theirsTree = this.store.get(theirs)!.tree;
     if (!ours || this.ancestors(theirs).has(ours)) {
       this.guardLocal(this.headTree(), theirsTree, "pull");
       const commits = this.countOnly(theirs, ours);
@@ -524,8 +607,8 @@ export class MockGit implements GitApi {
       return { outcome: "fast-forward", commits };
     }
     if (!this.who) throw err("Set your name and email for commits first: this pull creates a merge commit.");
-    const baseOid = this.mergeBase(ours, theirs);
-    const baseTree = baseOid ? this.commits.get(baseOid)!.tree : new Map<string, RequestSpec>();
+    const baseOid = this.baseOf(ours, theirs);
+    const baseTree = baseOid ? this.store.get(baseOid)!.tree : new Map<string, RequestSpec>();
     const oursTree = this.headTree();
     this.guardLocal(baseTree, theirsTree, "pull");
     const merged: Tree = new Map();
@@ -557,9 +640,9 @@ export class MockGit implements GitApi {
     this.start();
     if (!this.mergeHead) throw err("No merge is in progress.");
     const ours = this.head()!;
-    const b = this.mergeBase(ours, this.mergeHead);
+    const b = this.baseOf(ours, this.mergeHead);
     const text = (oid: string | null) => {
-      const spec = oid ? this.commits.get(oid)!.tree.get(path) : undefined;
+      const spec = oid ? this.store.get(oid)!.tree.get(path) : undefined;
       return spec ? renderSpec(spec) : null;
     };
     return { path, base: text(b), ours: text(ours), theirs: text(this.mergeHead) };
@@ -571,7 +654,7 @@ export class MockGit implements GitApi {
     if (!this.mergeHead) throw err("No merge is in progress.");
     await this.requireSaved("resolve a conflict");
     const side = resolution === "ours" ? this.head()! : this.mergeHead;
-    this.writeWork(path, this.commits.get(side)!.tree.get(path));
+    this.writeWork(path, this.store.get(side)!.tree.get(path));
     this.conflicts.delete(path);
   }
 

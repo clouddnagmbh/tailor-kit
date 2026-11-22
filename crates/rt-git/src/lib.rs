@@ -62,6 +62,14 @@
 //! push of a branch, checkout of a remote branch).
 //!
 //! Owner: wave 4, strand A1.
+//!
+//! # Revisions (wave 12)
+//!
+//! [`Repo::rev_parse`], [`Repo::tree_at`], [`Repo::show`], [`Repo::merge_base`],
+//! [`Repo::commits`] and [`Repo::file_log`] read any commit without touching the work tree
+//! (`GitApi` of wave 12). Wave 12 owners: `merge.rs` strand B (semantic pull and
+//! `rt merge-driver`), `file_log.rs` strand D, `review.rs` strand E, `rewrite.rs` strand G;
+//! `revisions.rs` is interface.
 
 pub mod credentials;
 pub mod http;
@@ -70,11 +78,19 @@ pub mod local;
 
 mod branch;
 mod commit;
+/// Wave 12, strand D: `fileLog`.
+mod file_log;
 mod merge;
 mod net;
 mod pack;
 mod remote;
 mod repo;
+/// Wave 12, strand E: fetching a PR head for review.
+pub mod review;
+/// Wave 12 interface: reading revisions without a checkout.
+mod revisions;
+/// Wave 12, strand G: history scan and rewrite.
+pub mod rewrite;
 mod status;
 mod util;
 mod worktree;

@@ -91,6 +91,8 @@
   const remoteBranches = $derived(
     branches.filter((b) => b.remote && !localBranches.some((l) => b.name.endsWith(`/${l.name}`))),
   );
+  /** Branches the current one can be compared with (semantic diff, `between`). */
+  const compareTargets = $derived(branches.filter((b) => b.name !== status?.branch));
   const canCommit = $derived(!busy && !conflicted && message.trim() !== "" && selected.length > 0);
 
   const describe = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -130,6 +132,13 @@
       void refresh();
     });
   });
+
+  /** Opens the branch compare: the current branch → the chosen one. */
+  function compareWith(e: Event & { currentTarget: HTMLSelectElement }): void {
+    const to = e.currentTarget.value;
+    e.currentTarget.value = "";
+    if (to) views.open({ kind: "diff", scope: { kind: "between", from: status?.branch ?? "HEAD", to } });
+  }
 
   /** Runs a Git command with progress, error display and the credentials prompt. */
   async function act(name: string, run: () => Promise<void>): Promise<void> {
@@ -447,6 +456,7 @@
           />
           {files.length} changed {files.length === 1 ? "file" : "files"}
         </label>
+        <button class="link" data-testid="git-semantic-diff" onclick={() => views.open({ kind: "diff", scope: { kind: "working" } })}>Show changes by field</button>
         <ul>
           {#each files as f (f.path)}
             <li data-testid="git-file">
@@ -496,9 +506,20 @@
         <h3>Recent commits</h3>
         <ol data-testid="git-log">
           {#each commits as c (c.oid)}
-            <li title="{c.oid.slice(0, 10)} by {c.author}, {ago(c.time)}">{c.summary}</li>
+            <li title="{c.oid.slice(0, 10)} by {c.author}, {ago(c.time)}">
+              <button class="link commit-link" data-testid="git-commit-changes" onclick={() => views.open({ kind: "diff", scope: { kind: "commit", rev: c.oid } })}>{c.summary}</button>
+            </li>
           {/each}
         </ol>
+        {#if compareTargets.length > 0}
+          <label class="compare">
+            Compare with
+            <select data-testid="git-compare-branch" onchange={compareWith}>
+              <option value="">Branch…</option>
+              {#each compareTargets as b (b.name)}<option value={b.name}>{b.name}</option>{/each}
+            </select>
+          </label>
+        {/if}
       </section>
     {/if}
   {/if}
@@ -727,6 +748,32 @@
     cursor: pointer;
     font: inherit;
     text-align: left;
+  }
+  .link {
+    background: none;
+    border: none;
+    padding: 2px 0;
+    color: var(--rt-accent);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+  .commit-link {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--rt-size-small);
+    padding: 0;
+  }
+  .compare {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    margin-top: 4px;
+    font-size: var(--rt-size-small);
   }
   .log li {
     overflow: hidden;

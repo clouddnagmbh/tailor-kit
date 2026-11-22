@@ -61,7 +61,8 @@ impl Repo {
         let Some(workdir) = find_workdir(&root) else {
             return Ok(None);
         };
-        let repo = gix::open_opts(&workdir, options.open()).ctx("cannot open the Git repository")?;
+        let repo =
+            gix::open_opts(&workdir, options.open()).ctx("cannot open the Git repository")?;
         if repo.is_bare() {
             return Ok(None);
         }
@@ -164,9 +165,7 @@ impl Repo {
         else {
             return Ok(None);
         };
-        Ok(Some(
-            r.peel_to_commit().ctx("cannot read a branch")?.id,
-        ))
+        Ok(Some(r.peel_to_commit().ctx("cannot read a branch")?.id))
     }
 
     /// The index (empty if there is none yet), owned so it can be changed and written.
@@ -176,7 +175,10 @@ impl Repo {
             self.repo.open_index().ctx("cannot read the index")
         } else {
             let empty = ObjectId::empty_tree(self.repo.object_hash());
-            let mut file = self.repo.index_from_tree(&empty).ctx("cannot create an index")?;
+            let mut file = self
+                .repo
+                .index_from_tree(&empty)
+                .ctx("cannot create an index")?;
             file.set_path(path);
             Ok(file)
         }
@@ -269,8 +271,9 @@ pub fn global_identity(options: &Options) -> Option<GitIdentity> {
 /// Writes `values` (section, subsection, key, value) into `<git_dir>/config`.
 pub(crate) fn set_local_config(git_dir: &Path, values: &[(&str, &str, &str, &str)]) -> Result<()> {
     let path = git_dir.join("config");
-    let mut file = gix::config::File::from_path_no_includes(path.clone(), gix::config::Source::Local)
-        .ctx("cannot read the repository configuration")?;
+    let mut file =
+        gix::config::File::from_path_no_includes(path.clone(), gix::config::Source::Local)
+            .ctx("cannot read the repository configuration")?;
     for (section, subsection, key, value) in values {
         let sub = (!subsection.is_empty()).then(|| gix::bstr::BStr::new(subsection.as_bytes()));
         file.set_raw_value_by(*section, sub, *key, gix::bstr::BStr::new(value.as_bytes()))

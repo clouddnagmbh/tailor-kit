@@ -9,9 +9,9 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use gix::bstr::{BStr, BString, ByteSlice};
-use gix::index::entry::{Mode, Stage, Stat};
 use gix::filter::plumbing::driver::apply::{Delay, MaybeDelayed};
 use gix::filter::plumbing::pipeline::convert::{ToGitOutcome, ToWorktreeOutcome, to_worktree};
+use gix::index::entry::{Mode, Stage, Stat};
 
 use crate::repo::Repo;
 use crate::util::{Blob, Context, Flat, Result, blob_bytes, fail, flatten};
@@ -87,7 +87,12 @@ impl<'r> Probe<'r> {
         let file = fs_path(self.workdir, path)?;
         let md = match std::fs::symlink_metadata(&file) {
             Ok(md) => md,
-            Err(e) if matches!(e.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory) => {
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                ) =>
+            {
                 return Ok(FileState::Missing);
             }
             Err(e) => return Err(fail(format!("cannot read {path}: {e}"))),
@@ -98,7 +103,9 @@ impl<'r> Probe<'r> {
         }
         if md.is_symlink() {
             let target = std::fs::read_link(&file).ctx("cannot read a symbolic link")?;
-            let bytes = gix::path::into_bstr(target).ctx("invalid symbolic link")?.into_owned();
+            let bytes = gix::path::into_bstr(target)
+                .ctx("invalid symbolic link")?
+                .into_owned();
             let id = gix::objs::compute_hash(hash, gix::objs::Kind::Blob, &bytes)
                 .ctx("cannot hash a file")?;
             return Ok(FileState::File(Blob {
@@ -135,7 +142,8 @@ impl<'r> Probe<'r> {
                 out
             }
         };
-        let id = gix::objs::compute_hash(hash, gix::objs::Kind::Blob, &data).ctx("cannot hash a file")?;
+        let id = gix::objs::compute_hash(hash, gix::objs::Kind::Blob, &data)
+            .ctx("cannot hash a file")?;
         Ok(FileState::File(Blob { mode, id }))
     }
 
@@ -252,7 +260,12 @@ fn changed(from: &Flat, to: &Flat) -> BTreeSet<BString> {
 
 /// Paths `switch` from `from` to `to` would refuse to touch: tracked files with local
 /// changes, untracked files (or folders) in the way. Repository paths.
-pub fn blocked(repo: &Repo, from: &Flat, to: &Flat, index: &gix::index::State) -> Result<Vec<BString>> {
+pub fn blocked(
+    repo: &Repo,
+    from: &Flat,
+    to: &Flat,
+    index: &gix::index::State,
+) -> Result<Vec<BString>> {
     let mut probe = Probe::new(repo)?;
     let mut blocked = Vec::new();
     let paths = changed(from, to);
@@ -275,9 +288,7 @@ pub fn blocked(repo: &Repo, from: &Flat, to: &Flat, index: &gix::index::State) -
             while let Some(pos) = parent.rfind_byte(b'/') {
                 parent = parent[..pos].as_bstr();
                 let removed = from.contains_key(parent) && !to.contains_key(parent);
-                if !removed
-                    && let FileState::File(_) = probe.state(parent, index)?
-                {
+                if !removed && let FileState::File(_) = probe.state(parent, index)? {
                     blocked.push(parent.to_owned());
                 }
             }
@@ -307,7 +318,12 @@ pub fn blocked_error(repo: &Repo, what: &str, paths: &[BString]) -> rt_app::AppE
 /// Moves the working tree from tree `from` to tree `to`: deletes and writes exactly the files
 /// that differ, after checking that none of them has local changes. Returns the index for
 /// `to` (not written yet: the caller may add conflict stages first).
-pub fn switch(repo: &Repo, from: gix::ObjectId, to: gix::ObjectId, what: &str) -> Result<gix::index::File> {
+pub fn switch(
+    repo: &Repo,
+    from: gix::ObjectId,
+    to: gix::ObjectId,
+    what: &str,
+) -> Result<gix::index::File> {
     let from = flatten(&repo.repo, from)?;
     let to_flat = flatten(&repo.repo, to)?;
     let old = repo.load_index()?;
@@ -329,7 +345,10 @@ pub fn switch(repo: &Repo, from: gix::ObjectId, to: gix::ObjectId, what: &str) -
             written.insert(p.clone(), stat_of(&file));
         }
     }
-    let mut index = repo.repo.index_from_tree(&to).ctx("cannot build the index")?;
+    let mut index = repo
+        .repo
+        .index_from_tree(&to)
+        .ctx("cannot build the index")?;
     let (entries, backing) = index.entries_mut_and_pathbacking();
     for entry in entries {
         let path = entry.path_in(backing);

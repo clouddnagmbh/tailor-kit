@@ -22,7 +22,6 @@ use std::collections::{BTreeMap, HashSet};
 
 use gix::ObjectId;
 
-
 use crate::credentials::CredentialSource;
 use crate::local::{is_ancestor, missing_objects, tree_objects};
 use crate::net::{Auth, HttpTarget, ensure_tls};
@@ -95,14 +94,16 @@ pub fn parse_advertisement(body: &[u8]) -> Result<Advertisement> {
             }
             first = false;
         }
-        let text = std::str::from_utf8(refpart).map_err(|_| fail("the server sent an invalid ref"))?;
+        let text =
+            std::str::from_utf8(refpart).map_err(|_| fail("the server sent an invalid ref"))?;
         let (oid, name) = text
             .split_once(' ')
             .ok_or_else(|| fail("the server sent an invalid ref"))?;
         if name == "capabilities^{}" {
             continue;
         }
-        let oid = ObjectId::from_hex(oid.as_bytes()).map_err(|_| fail("the server sent an invalid ref"))?;
+        let oid = ObjectId::from_hex(oid.as_bytes())
+            .map_err(|_| fail("the server sent an invalid ref"))?;
         adv.refs.insert(name.to_owned(), oid);
     }
     Ok(adv)
@@ -116,7 +117,9 @@ pub fn check_report(body: &[u8], remote_ref: &str) -> Result<()> {
         let line = line.trim_end_matches('\n');
         if let Some(status) = line.strip_prefix("unpack ") {
             if status != "ok" {
-                return Err(fail(format!("the server could not store the pushed objects: {status}")));
+                return Err(fail(format!(
+                    "the server could not store the pushed objects: {status}"
+                )));
             }
             unpack_ok = true;
         } else if let Some(rest) = line.strip_prefix("ng ") {
@@ -163,7 +166,9 @@ impl Client<'_> {
                 .send()
                 .map_err(|e| fail(format!("cannot reach {}: {e}", self.target.host)))?;
             let status = resp.status();
-            if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            if status == reqwest::StatusCode::UNAUTHORIZED
+                || status == reqwest::StatusCode::FORBIDDEN
+            {
                 if !self.use_auth && matches!(self.auth, Auth::Some(_)) {
                     self.use_auth = true;
                     continue;
@@ -208,7 +213,9 @@ pub fn push(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_owned();
-    let body = resp.bytes().map_err(|e| fail(format!("cannot read the server's answer: {e}")))?;
+    let body = resp
+        .bytes()
+        .map_err(|e| fail(format!("cannot read the server's answer: {e}")))?;
     if content_type != "application/x-git-receive-pack-advertisement" {
         return Err(fail(format!(
             "{} does not accept pushes over smart HTTP",
@@ -224,7 +231,9 @@ pub fn push(
     if let Some(cur) = current
         && (!repo.has_object(cur) || !is_ancestor(repo, cur, new))
     {
-        return Err(fail("the remote branch has commits you do not have: pull first"));
+        return Err(fail(
+            "the remote branch has commits you do not have: pull first",
+        ));
     }
 
     // Everything reachable from advertised commits we know is on the remote.
@@ -286,7 +295,9 @@ pub fn push(
             .header("Accept", "application/x-git-receive-pack-result")
             .body(request.clone())
     })?;
-    let body = resp.bytes().map_err(|e| fail(format!("cannot read the server's answer: {e}")))?;
+    let body = resp
+        .bytes()
+        .map_err(|e| fail(format!("cannot read the server's answer: {e}")))?;
     if adv.capabilities.iter().any(|c| c == "report-status") {
         check_report(&body, remote_ref)
     } else {
@@ -304,7 +315,9 @@ mod tests {
         body.extend_from_slice(b"0000");
         let a = "1111111111111111111111111111111111111111";
         let b = "2222222222222222222222222222222222222222";
-        body.extend(pkt_line(format!("{a} refs/heads/main\0report-status delete-refs side-band-64k\n").as_bytes()));
+        body.extend(pkt_line(
+            format!("{a} refs/heads/main\0report-status delete-refs side-band-64k\n").as_bytes(),
+        ));
         body.extend(pkt_line(format!("{b} refs/heads/dev\n").as_bytes()));
         body.extend_from_slice(b"0000");
         let adv = parse_advertisement(&body).unwrap();

@@ -69,10 +69,17 @@ impl Repo {
 
     /// Fetches `remote` into its remote-tracking branches; returns the remote's `HEAD` branch
     /// if it said.
-    pub(crate) fn fetch(&self, remote: &str, creds: &dyn CredentialSource, with_head: bool) -> Result<Option<String>> {
+    pub(crate) fn fetch(
+        &self,
+        remote: &str,
+        creds: &dyn CredentialSource,
+        with_head: bool,
+    ) -> Result<Option<String>> {
         match self.remote_endpoint(remote, false)? {
             Endpoint::Local(path) => crate::local::fetch(&self.repo, remote, &path, &self.options),
-            Endpoint::Http(target) => crate::net::fetch(&self.repo, remote, &target, creds, with_head),
+            Endpoint::Http(target) => {
+                crate::net::fetch(&self.repo, remote, &target, creds, with_head)
+            }
         }
     }
 
@@ -105,7 +112,12 @@ impl Repo {
             }
         }
         self.repo
-            .reference(upstream.tracking.as_str(), head, PreviousValue::Any, "update by push")
+            .reference(
+                upstream.tracking.as_str(),
+                head,
+                PreviousValue::Any,
+                "update by push",
+            )
             .ctx("cannot update the remote-tracking branch")?;
         if new_upstream {
             self.set_local_config(&[
@@ -119,9 +131,15 @@ impl Repo {
     /// Fetches the upstream and brings the current branch up to date with it: nothing to do,
     /// fast-forward, a merge commit, or a stopped merge with conflicts. Without a configured
     /// upstream, `origin/<branch>` is used (and becomes the upstream).
-    pub fn pull(&self, creds: &dyn CredentialSource, fallback: Option<&GitIdentity>) -> Result<GitPullResult> {
+    pub fn pull(
+        &self,
+        creds: &dyn CredentialSource,
+        fallback: Option<&GitIdentity>,
+    ) -> Result<GitPullResult> {
         if self.merge_head()?.is_some() {
-            return Err(fail("finish the merge (resolve and commit) before pulling again"));
+            return Err(fail(
+                "finish the merge (resolve and commit) before pulling again",
+            ));
         }
         let branch = self
             .head_branch()?
@@ -149,7 +167,12 @@ impl Repo {
             // Nothing committed here yet: take the remote branch as it is.
             let mut index = switch(self, self.head_tree()?, self.commit_tree(theirs)?, "pull")?;
             self.write_index(&mut index)?;
-            self.set_branch(&local, theirs, PreviousValue::MustNotExist, "pull: fast-forward")?;
+            self.set_branch(
+                &local,
+                theirs,
+                PreviousValue::MustNotExist,
+                "pull: fast-forward",
+            )?;
             let commits = self.count_between(theirs, None)?;
             return Ok(GitPullResult::FastForward { commits });
         };
@@ -157,7 +180,12 @@ impl Repo {
             return Ok(GitPullResult::UpToDate);
         }
         if is_ancestor(&self.repo, ours, theirs) {
-            let mut index = switch(self, self.commit_tree(ours)?, self.commit_tree(theirs)?, "pull")?;
+            let mut index = switch(
+                self,
+                self.commit_tree(ours)?,
+                self.commit_tree(theirs)?,
+                "pull",
+            )?;
             self.write_index(&mut index)?;
             self.set_branch(
                 &local,
@@ -192,10 +220,7 @@ impl Repo {
 /// Folder name for a clone of `url`: its last path segment without `.git`.
 pub fn repo_name(url: &str) -> Result<String> {
     let trimmed = url.trim().trim_end_matches(['/', '\\']);
-    let last = trimmed
-        .rsplit(['/', '\\', ':'])
-        .next()
-        .unwrap_or_default();
+    let last = trimmed.rsplit(['/', '\\', ':']).next().unwrap_or_default();
     let name = last.strip_suffix(".git").unwrap_or(last);
     if name.is_empty() || name == "." || name == ".." || name.starts_with('.') {
         return Err(fail(format!("cannot derive a folder name from {url:?}")));
@@ -205,7 +230,12 @@ pub fn repo_name(url: &str) -> Result<String> {
 
 /// Clones `url` into `<parent>/<repository name>` and checks out the remote's default
 /// branch. Refuses if that folder exists and is not empty. Returns the new folder.
-pub fn clone(url: &str, parent: &Path, creds: &dyn CredentialSource, options: &Options) -> Result<PathBuf> {
+pub fn clone(
+    url: &str,
+    parent: &Path,
+    creds: &dyn CredentialSource,
+    options: &Options,
+) -> Result<PathBuf> {
     let url = url.trim();
     let name = repo_name(url)?;
     let parent = std::fs::canonicalize(parent).ctx("cannot open the folder")?;
@@ -225,7 +255,12 @@ pub fn clone(url: &str, parent: &Path, creds: &dyn CredentialSource, options: &O
     // Validate the URL before creating anything.
     let url = match endpoint(url, &parent)? {
         Endpoint::Local(path) => std::fs::canonicalize(&path)
-            .map_err(|_| fail(format!("the remote repository {} does not exist", path.display())))?
+            .map_err(|_| {
+                fail(format!(
+                    "the remote repository {} does not exist",
+                    path.display()
+                ))
+            })?
             .to_string_lossy()
             .into_owned(),
         Endpoint::Http(_) => url.to_owned(),
@@ -242,7 +277,12 @@ pub fn clone(url: &str, parent: &Path, creds: &dyn CredentialSource, options: &O
     result.map(|()| target)
 }
 
-fn clone_into(url: &str, target: &Path, creds: &dyn CredentialSource, options: &Options) -> Result<()> {
+fn clone_into(
+    url: &str,
+    target: &Path,
+    creds: &dyn CredentialSource,
+    options: &Options,
+) -> Result<()> {
     let repo = gix::ThreadSafeRepository::init_opts(
         target,
         gix::create::Kind::WithWorktree,
@@ -255,7 +295,12 @@ fn clone_into(url: &str, target: &Path, creds: &dyn CredentialSource, options: &
         &git_dir,
         &[
             ("remote", "origin", "url", url),
-            ("remote", "origin", "fetch", "+refs/heads/*:refs/remotes/origin/*"),
+            (
+                "remote",
+                "origin",
+                "fetch",
+                "+refs/heads/*:refs/remotes/origin/*",
+            ),
         ],
     )?;
     let repo = Repo::require(target, options)?;

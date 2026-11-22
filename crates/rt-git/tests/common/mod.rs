@@ -60,14 +60,27 @@ pub fn read(dir: &Path, rel: &str) -> String {
 
 pub fn append_config(work_or_git_dir: &Path, text: &str) {
     let git = work_or_git_dir.join(".git");
-    let config = if git.is_dir() { git.join("config") } else { work_or_git_dir.join("config") };
-    let mut f = std::fs::OpenOptions::new().append(true).open(config).unwrap();
+    let config = if git.is_dir() {
+        git.join("config")
+    } else {
+        work_or_git_dir.join("config")
+    };
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(config)
+        .unwrap();
     f.write_all(text.as_bytes()).unwrap();
 }
 
 /// Sets the commit identity in the repository's own configuration.
 pub fn set_user(dir: &Path, name: &str) {
-    append_config(dir, &format!("[user]\n\tname = {name}\n\temail = {}@example.com\n", name.to_lowercase()));
+    append_config(
+        dir,
+        &format!(
+            "[user]\n\tname = {name}\n\temail = {}@example.com\n",
+            name.to_lowercase()
+        ),
+    );
 }
 
 /// A new repository in `dir` with a test identity.
@@ -90,7 +103,9 @@ pub fn bare(dir: &Path) {
 pub fn add_remote(dir: &Path, url: &str) {
     append_config(
         dir,
-        &format!("[remote \"origin\"]\n\turl = {url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"),
+        &format!(
+            "[remote \"origin\"]\n\turl = {url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+        ),
     );
 }
 
@@ -158,7 +173,8 @@ pub fn git_http() -> Option<&'static GitHttp> {
             if !exec.status.success() {
                 return None;
             }
-            let backend = PathBuf::from(String::from_utf8(exec.stdout).ok()?.trim()).join("git-http-backend");
+            let backend =
+                PathBuf::from(String::from_utf8(exec.stdout).ok()?.trim()).join("git-http-backend");
             if !backend.exists() {
                 return None;
             }
@@ -167,7 +183,9 @@ pub fn git_http() -> Option<&'static GitHttp> {
             std::fs::create_dir_all(&root).ok()?;
             let root = std::fs::canonicalize(root).ok()?;
             let (listener, port) = (47821..=47829).find_map(|port| {
-                TcpListener::bind(("127.0.0.1", port)).ok().map(|l| (l, port))
+                TcpListener::bind(("127.0.0.1", port))
+                    .ok()
+                    .map(|l| (l, port))
             })?;
             let served = root.clone();
             std::thread::spawn(move || {
@@ -221,11 +239,15 @@ fn serve(conn: TcpStream, backend: &Path, root: &Path) -> std::io::Result<()> {
     if let Some(len) = headers.get("content-length") {
         body.resize(len.parse().unwrap_or(0), 0);
         reader.read_exact(&mut body)?;
-    } else if headers.get("transfer-encoding").is_some_and(|v| v.eq_ignore_ascii_case("chunked")) {
+    } else if headers
+        .get("transfer-encoding")
+        .is_some_and(|v| v.eq_ignore_ascii_case("chunked"))
+    {
         loop {
             let mut size = String::new();
             reader.read_line(&mut size)?;
-            let size = usize::from_str_radix(size.trim().split(';').next().unwrap_or("0"), 16).unwrap_or(0);
+            let size = usize::from_str_radix(size.trim().split(';').next().unwrap_or("0"), 16)
+                .unwrap_or(0);
             let mut chunk = vec![0; size + 2];
             reader.read_exact(&mut chunk)?;
             if size == 0 {
@@ -291,7 +313,9 @@ fn serve(conn: TcpStream, backend: &Path, root: &Path) -> std::io::Result<()> {
         .map(|p| (p, 4))
         .or_else(|| cgi.windows(2).position(|w| w == b"\n\n").map(|p| (p, 2)));
     let Some((end, sep)) = split else {
-        out.write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+        out.write_all(
+            b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )?;
         return Ok(());
     };
     let head = String::from_utf8_lossy(&cgi[..end]).into_owned();
@@ -308,7 +332,13 @@ fn serve(conn: TcpStream, backend: &Path, root: &Path) -> std::io::Result<()> {
     }
     let mut msg = format!("HTTP/1.1 {status}\r\n").into_bytes();
     msg.extend(response);
-    msg.extend(format!("Content-Length: {}\r\nConnection: close\r\n\r\n", payload.len()).into_bytes());
+    msg.extend(
+        format!(
+            "Content-Length: {}\r\nConnection: close\r\n\r\n",
+            payload.len()
+        )
+        .into_bytes(),
+    );
     msg.extend_from_slice(payload);
     out.write_all(&msg)?;
     Ok(())

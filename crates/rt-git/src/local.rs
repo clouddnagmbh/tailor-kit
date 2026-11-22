@@ -93,7 +93,10 @@ pub fn is_ancestor(repo: &gix::Repository, ancestor: ObjectId, tip: ObjectId) ->
 
 pub(crate) fn open(path: &Path, options: &crate::Options) -> Result<gix::Repository> {
     if !path.exists() {
-        return Err(fail(format!("the remote repository {} does not exist", path.display())));
+        return Err(fail(format!(
+            "the remote repository {} does not exist",
+            path.display()
+        )));
     }
     gix::open_opts(path, options.open()).ctx(&format!(
         "cannot open the remote repository {}",
@@ -136,7 +139,9 @@ pub fn push(
     if let Some(cur) = current
         && (!src.has_object(cur) || !is_ancestor(src, cur, new))
     {
-        return Err(fail("the remote branch has commits you do not have: pull first"));
+        return Err(fail(
+            "the remote branch has commits you do not have: pull first",
+        ));
     }
     let ids = missing_objects(src, &[new], &|id| dst.has_object(id))?;
     copy_objects(src, &dst, &ids)?;
@@ -160,7 +165,10 @@ pub fn fetch(
     let src = open(path, options)?;
     let refs = src.references().ctx("cannot list the remote branches")?;
     let mut branches = Vec::new();
-    for r in refs.local_branches().ctx("cannot list the remote branches")? {
+    for r in refs
+        .local_branches()
+        .ctx("cannot list the remote branches")?
+    {
         let mut r = r.map_err(|e| fail(format!("cannot list the remote branches: {e}")))?;
         let name = r.name().shorten().to_string();
         let id = r.peel_to_id().ctx("cannot read a remote branch")?.detach();
@@ -178,10 +186,10 @@ pub fn fetch(
         )
         .ctx("cannot update a remote-tracking branch")?;
     }
-    let head = src
-        .head_name()
-        .ok()
-        .flatten()
-        .and_then(|h| h.as_bstr().strip_prefix(b"refs/heads/").map(|b| String::from_utf8_lossy(b).into_owned()));
+    let head = src.head_name().ok().flatten().and_then(|h| {
+        h.as_bstr()
+            .strip_prefix(b"refs/heads/")
+            .map(|b| String::from_utf8_lossy(b).into_owned())
+    });
     Ok(head)
 }

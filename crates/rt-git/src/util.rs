@@ -102,9 +102,7 @@ pub type Flat = BTreeMap<BString, Blob>;
 
 /// Every file of `tree` (submodule entries included, as `Mode::COMMIT`).
 pub fn flatten(repo: &gix::Repository, tree: ObjectId) -> Result<Flat> {
-    let index = repo
-        .index_from_tree(&tree)
-        .ctx("cannot read a tree")?;
+    let index = repo.index_from_tree(&tree).ctx("cannot read a tree")?;
     Ok(index
         .entries()
         .iter()
@@ -122,12 +120,16 @@ pub fn flatten(repo: &gix::Repository, tree: ObjectId) -> Result<Flat> {
 
 /// Text of a blob for display: `None` if it is missing; lossy for non-UTF-8 bytes.
 pub fn blob_text(repo: &gix::Repository, id: ObjectId) -> Result<String> {
-    let blob = repo.find_blob(id).ctx("cannot read a file from the repository")?;
+    let blob = repo
+        .find_blob(id)
+        .ctx("cannot read a file from the repository")?;
     Ok(String::from_utf8_lossy(&blob.data).into_owned())
 }
 
 /// Bytes of a blob.
 pub fn blob_bytes(repo: &gix::Repository, id: ObjectId) -> Result<Vec<u8>> {
-    let mut blob = repo.find_blob(id).ctx("cannot read a file from the repository")?;
+    let mut blob = repo
+        .find_blob(id)
+        .ctx("cannot read a file from the repository")?;
     Ok(blob.take_data())
 }

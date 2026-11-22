@@ -20,7 +20,9 @@ pub fn load(data_dir: Option<&Path>) -> Result<Option<GitIdentity>, AppError> {
     match std::fs::read(dir.join(FILE)) {
         Ok(bytes) => Ok(serde_json::from_slice(&bytes).ok()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(AppError::Shell(format!("cannot read the Git identity: {e}"))),
+        Err(e) => Err(AppError::Shell(format!(
+            "cannot read the Git identity: {e}"
+        ))),
     }
 }
 
@@ -28,11 +30,19 @@ pub fn load(data_dir: Option<&Path>) -> Result<Option<GitIdentity>, AppError> {
 pub fn save(data_dir: Option<&Path>, identity: &GitIdentity) -> Result<(), AppError> {
     let name = identity.name.trim();
     let email = identity.email.trim();
-    if name.is_empty() || email.is_empty() || name.contains(['<', '>', '\n']) || email.contains(['<', '>', '\n']) {
-        return Err(AppError::Git("name and email are required (without < > or line breaks)".into()));
+    if name.is_empty()
+        || email.is_empty()
+        || name.contains(['<', '>', '\n'])
+        || email.contains(['<', '>', '\n'])
+    {
+        return Err(AppError::Git(
+            "name and email are required (without < > or line breaks)".into(),
+        ));
     }
     let Some(dir) = data_dir else {
-        return Err(AppError::Shell("the app has no data folder to keep the identity in".into()));
+        return Err(AppError::Shell(
+            "the app has no data folder to keep the identity in".into(),
+        ));
     };
     let io = |e: std::io::Error| AppError::Shell(format!("cannot save the Git identity: {e}"));
     std::fs::create_dir_all(dir).map_err(io)?;

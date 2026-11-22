@@ -63,11 +63,15 @@ impl Repo {
                 .ctx("cannot commit the merge")?
                 .detach();
             self.write_index(&mut index)?;
-            return Ok(GitPullResult::Merged { oid: id.to_string() });
+            return Ok(GitPullResult::Merged {
+                oid: id.to_string(),
+            });
         }
-        outcome
-            .tree_merge
-            .index_changed_after_applying_conflicts(&mut index, how, RemovalMode::Prune);
+        outcome.tree_merge.index_changed_after_applying_conflicts(
+            &mut index,
+            how,
+            RemovalMode::Prune,
+        );
         self.write_index(&mut index)?;
         let git_dir = self.git_dir();
         let io = |e: std::io::Error| fail(format!("cannot record the merge: {e}"));
@@ -86,9 +90,10 @@ impl Repo {
     }
 
     fn stage_blob(&self, index: &gix::index::State, path: &BStr, stage: Stage) -> Option<Blob> {
-        index
-            .entry_by_path_and_stage(path, stage)
-            .map(|e| Blob { mode: e.mode, id: e.id })
+        index.entry_by_path_and_stage(path, stage).map(|e| Blob {
+            mode: e.mode,
+            id: e.id,
+        })
     }
 
     /// Base, ours and theirs of a conflicted file.
@@ -130,7 +135,13 @@ impl Repo {
         match chosen {
             Some(blob) => {
                 let file = Probe::new(self)?.write(repo_path.as_ref(), blob)?;
-                index.dangerously_push_entry(stat_of(&file), blob.id, Flags::empty(), blob.mode, repo_path.as_ref());
+                index.dangerously_push_entry(
+                    stat_of(&file),
+                    blob.id,
+                    Flags::empty(),
+                    blob.mode,
+                    repo_path.as_ref(),
+                );
             }
             None => {
                 let file = crate::worktree::fs_path(&self.workdir, repo_path.as_ref())?;

@@ -85,7 +85,10 @@ pub use repo::{Options, Repo, global_identity, init};
 
 /// Status of the collection at `root`: `repo: false` (everything else empty) when it is not
 /// in a Git repository.
-pub fn status(root: &std::path::Path, options: &Options) -> Result<rt_app::git::GitStatus, rt_app::AppError> {
+pub fn status(
+    root: &std::path::Path,
+    options: &Options,
+) -> Result<rt_app::git::GitStatus, rt_app::AppError> {
     match Repo::open(root, options)? {
         Some(repo) => repo.status(),
         None => Ok(rt_app::git::GitStatus {

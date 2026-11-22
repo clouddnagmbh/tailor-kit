@@ -47,7 +47,11 @@ pub fn endpoint(url: &str, base: &Path) -> Result<Endpoint> {
             let path = gix::path::from_bstr(parsed.path.as_bstr())
                 .map_err(|_| fail(format!("invalid remote path {url:?}")))?
                 .into_owned();
-            Ok(Endpoint::Local(if path.is_absolute() { path } else { base.join(path) }))
+            Ok(Endpoint::Local(if path.is_absolute() {
+                path
+            } else {
+                base.join(path)
+            }))
         }
         gix::url::Scheme::Http | gix::url::Scheme::Https => {
             let host = parsed
@@ -61,7 +65,9 @@ pub fn endpoint(url: &str, base: &Path) -> Result<Endpoint> {
                     .parse::<std::net::IpAddr>()
                     .is_ok_and(|ip| ip.is_loopback());
             let host = match parsed.port {
-                Some(port) if host.contains(':') && !host.starts_with('[') => format!("[{host}]:{port}"),
+                Some(port) if host.contains(':') && !host.starts_with('[') => {
+                    format!("[{host}]:{port}")
+                }
                 Some(port) => format!("{host}:{port}"),
                 None => host,
             };
@@ -204,7 +210,10 @@ mod tests {
         assert_eq!(http("http://127.0.0.1:8080/x").host, "127.0.0.1:8080");
         assert!(http("http://localhost/x").loopback);
         assert!(!http("http://example.com/x").loopback);
-        assert!(matches!(endpoint("/srv/repo.git", Path::new("/")).unwrap(), Endpoint::Local(_)));
+        assert!(matches!(
+            endpoint("/srv/repo.git", Path::new("/")).unwrap(),
+            Endpoint::Local(_)
+        ));
         match endpoint("../up", Path::new("/base/dir")).unwrap() {
             Endpoint::Local(p) => assert_eq!(p, Path::new("/base/dir/../up")),
             other => panic!("{other:?}"),
@@ -217,13 +226,22 @@ mod tests {
 
     #[test]
     fn credentials_go_over_plain_http_only_to_loopback() {
-        assert!(matches!(http("https://example.com/x").auth(&One).unwrap(), Auth::Some(_)));
-        assert!(matches!(http("http://127.0.0.1:1/x").auth(&One).unwrap(), Auth::Some(_)));
+        assert!(matches!(
+            http("https://example.com/x").auth(&One).unwrap(),
+            Auth::Some(_)
+        ));
+        assert!(matches!(
+            http("http://127.0.0.1:1/x").auth(&One).unwrap(),
+            Auth::Some(_)
+        ));
         let insecure = http("http://example.com/x");
         let auth = insecure.auth(&One).unwrap();
         assert!(matches!(auth, Auth::Refused));
         assert!(matches!(insecure.auth_error(&auth), AppError::Git(m) if m.contains("https")));
         let none = insecure.auth(&NoCredentials).unwrap();
-        assert_eq!(insecure.auth_error(&none), AppError::GitAuth("example.com".into()));
+        assert_eq!(
+            insecure.auth_error(&none),
+            AppError::GitAuth("example.com".into())
+        );
     }
 }

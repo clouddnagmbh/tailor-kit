@@ -82,7 +82,9 @@ impl Repo {
             files: files
                 .into_iter()
                 .filter_map(|(path, state)| {
-                    scope.rel(path.as_bstr()).map(|path| GitFile { path, state })
+                    scope
+                        .rel(path.as_bstr())
+                        .map(|path| GitFile { path, state })
                 })
                 .collect(),
             merging: self.merge_head()?.is_some(),
@@ -90,7 +92,11 @@ impl Repo {
     }
 
     /// Files of the collection that are neither tracked nor ignored (repository paths).
-    fn untracked(&self, index: &gix::index::State, known: &BTreeSet<BString>) -> Result<Vec<BString>> {
+    fn untracked(
+        &self,
+        index: &gix::index::State,
+        known: &BTreeSet<BString>,
+    ) -> Result<Vec<BString>> {
         let mut excludes = self
             .repo
             .excludes(
@@ -194,7 +200,12 @@ impl Repo {
         let new = match std::fs::symlink_metadata(&file) {
             Ok(md) if md.is_symlink() => {
                 let target = std::fs::read_link(&file).ctx("cannot read a symbolic link")?;
-                Some(gix::path::into_bstr(target).ctx("invalid symbolic link")?.into_owned().into())
+                Some(
+                    gix::path::into_bstr(target)
+                        .ctx("invalid symbolic link")?
+                        .into_owned()
+                        .into(),
+                )
             }
             Ok(md) if md.is_file() => Some(std::fs::read(&file).ctx("cannot read a file")?),
             Ok(_) => None,

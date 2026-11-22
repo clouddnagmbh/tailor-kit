@@ -151,7 +151,13 @@ impl Repo {
         for (path, object) in updates {
             if let Some((oid, kind)) = object {
                 let stat = stat_of(&crate::worktree::fs_path(&self.workdir, path.as_bstr())?);
-                index.dangerously_push_entry(stat, oid, Flags::empty(), index_mode(kind), path.as_bstr());
+                index.dangerously_push_entry(
+                    stat,
+                    oid,
+                    Flags::empty(),
+                    index_mode(kind),
+                    path.as_bstr(),
+                );
             }
         }
         self.write_index(&mut index)?;
@@ -183,7 +189,9 @@ impl Repo {
         let walk = self
             .repo
             .rev_walk([head])
-            .sorting(gix::revision::walk::Sorting::ByCommitTime(Default::default()))
+            .sorting(gix::revision::walk::Sorting::ByCommitTime(
+                Default::default(),
+            ))
             .all()
             .ctx("cannot walk the history")?;
         let mut out = Vec::new();

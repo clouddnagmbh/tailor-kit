@@ -9,6 +9,10 @@
 //!   picks `h2` via ALPN, HTTP/1.1 otherwise. Plain `http://` is always HTTP/1.1.
 //! - TLS: rustls with the `ring` provider; certificates are checked by the operating system
 //!   (`rustls-platform-verifier`), so corporate CAs in the OS trust store work.
+//! - Client certificates (wave 5, strand D): a request with `SendOptions::client_identity`
+//!   goes through a connection pool of its own that presents that identity, so pooled
+//!   connections never mix identities. A redirect to another origin drops the identity (it
+//!   was chosen for the first host), like the credential headers.
 //! - Timing: our own connector measures DNS, TCP connect and TLS handshake per connection.
 //!   A request on a reused connection reports `None` for those phases.
 //! - Redirects are followed here, not by hyper, so every hop is visible and the browser rules
@@ -29,7 +33,7 @@ mod tests;
 mod tls;
 
 use std::error::Error as StdError;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -46,19 +50,26 @@ use self::connector::{ConnInfo, Connector};
 use self::redirect::NextMethod;
 use self::tls::TlsSetup;
 use super::{
-    HttpBody, HttpRequest, HttpVersion, Redirect, Response, ResponseHead, Timing, Transport,
-    TransportError,
+    ClientIdentity, HttpBody, HttpRequest, HttpVersion, Redirect, Response, ResponseHead, Timing,
+    Transport, TransportError,
 };
 
 /// Idle pooled connections are closed after this long.
 const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 /// At most this much of a redirect response's body is read, so the connection can be reused.
 const REDIRECT_DRAIN_LIMIT: usize = 64 * 1024;
+/// At most this many client-certificate pools are kept; the oldest is dropped first.
+const MAX_IDENTITY_POOLS: usize = 8;
+
+type HttpClient = Client<Connector, Full<Bytes>>;
 
 /// The transport used by the CLI and the desktop app. Cheap to clone; reuses connections.
 #[derive(Clone)]
 pub struct NativeTransport {
-    client: Client<Connector, Full<Bytes>>,
+    client: HttpClient,
+    tls: Arc<TlsSetup>,
+    /// One pool per client certificate in use.
+    identities: Arc<Mutex<Vec<(ClientIdentity, HttpClient)>>>,
 }
 
 impl std::fmt::Debug for NativeTransport {
@@ -93,12 +104,30 @@ impl NativeTransport {
     }
 
     fn with_tls(tls: TlsSetup) -> Self {
-        let client = Client::builder(TokioExecutor::new())
-            .timer(TokioTimer::new())
-            .pool_timer(TokioTimer::new())
-            .pool_idle_timeout(POOL_IDLE_TIMEOUT)
-            .build(Connector::new(Arc::new(tls)));
-        Self { client }
+        let tls = Arc::new(tls);
+        Self {
+            client: build_client(tls.clone()),
+            tls,
+            identities: Arc::default(),
+        }
+    }
+
+    /// The pool for requests presenting `identity` (`None`: the shared pool).
+    fn client_for(&self, identity: Option<&ClientIdentity>) -> HttpClient {
+        let Some(identity) = identity else {
+            return self.client.clone();
+        };
+        let mut pools = self.identities.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, client)) = pools.iter().find(|(id, _)| id == identity) {
+            return client.clone();
+        }
+        let tls = TlsSetup::with_identity(self.tls.extra_roots().to_vec(), Some(identity.clone()));
+        let client = build_client(Arc::new(tls));
+        if pools.len() >= MAX_IDENTITY_POOLS {
+            pools.remove(0);
+        }
+        pools.push((identity.clone(), client.clone()));
+        client
     }
 
     async fn send_until_head(
@@ -125,15 +154,12 @@ impl NativeTransport {
             headers.push(("Content-Type".to_owned(), content_type.clone()));
         }
         let mut redirects = Vec::new();
+        let mut client = self.client_for(options.client_identity.as_ref());
 
         loop {
             let req = build_request(&method, &uri, &headers, body.as_ref())?;
             let sent_at = Instant::now();
-            let res = self
-                .client
-                .request(req)
-                .await
-                .map_err(|e| client_error(&e))?;
+            let res = client.request(req).await.map_err(|e| client_error(&e))?;
             let head_at = Instant::now();
             let status = res.status().as_u16();
 
@@ -155,6 +181,7 @@ impl NativeTransport {
                 }
                 if !redirect::same_origin(&uri, &next_uri) {
                     headers.retain(|(k, _)| !redirect::is_credential_header(k));
+                    client = self.client.clone();
                 }
                 redirects.push(Redirect {
                     status,
@@ -225,6 +252,14 @@ impl Transport for NativeTransport {
             None => exchange.await,
         }
     }
+}
+
+fn build_client(tls: Arc<TlsSetup>) -> HttpClient {
+    Client::builder(TokioExecutor::new())
+        .timer(TokioTimer::new())
+        .pool_timer(TokioTimer::new())
+        .pool_idle_timeout(POOL_IDLE_TIMEOUT)
+        .build(Connector::new(tls))
 }
 
 fn parse_url(url: &str) -> Result<Uri, TransportError> {

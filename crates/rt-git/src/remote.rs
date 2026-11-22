@@ -238,7 +238,7 @@ pub fn clone(
 ) -> Result<PathBuf> {
     let url = url.trim();
     let name = repo_name(url)?;
-    let parent = std::fs::canonicalize(parent).ctx("cannot open the folder")?;
+    let parent = crate::util::canonical(parent).ctx("cannot open the folder")?;
     let target = parent.join(&name);
     let existed = target.exists();
     if existed {
@@ -254,7 +254,7 @@ pub fn clone(
     }
     // Validate the URL before creating anything.
     let url = match endpoint(url, &parent)? {
-        Endpoint::Local(path) => std::fs::canonicalize(&path)
+        Endpoint::Local(path) => crate::util::canonical(&path)
             .map_err(|_| {
                 fail(format!(
                     "the remote repository {} does not exist",
@@ -262,7 +262,8 @@ pub fn clone(
                 ))
             })?
             .to_string_lossy()
-            .into_owned(),
+            // Forward slashes: Git configuration treats backslashes as escapes.
+            .replace('\\', "/"),
         Endpoint::Http(_) => url.to_owned(),
     };
     std::fs::create_dir_all(&target).ctx("cannot create the folder")?;

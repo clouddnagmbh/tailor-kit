@@ -28,6 +28,20 @@ impl<T, E: std::fmt::Display> Context<T> for std::result::Result<T, E> {
     }
 }
 
+/// `std::fs::canonicalize` without Windows' verbatim prefix (`\\?\C:\x` → `C:\x`), so paths
+/// compare, print and go into Git URLs the usual way.
+pub fn canonical(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    let path = std::fs::canonicalize(path)?;
+    if cfg!(windows)
+        && let Some(s) = path.to_str()
+        && let Some(rest) = s.strip_prefix(r"\\?\")
+        && rest.as_bytes().get(1) == Some(&b':')
+    {
+        return Ok(std::path::PathBuf::from(rest));
+    }
+    Ok(path)
+}
+
 /// The collection's place in the repository: repository-relative paths with this prefix
 /// belong to it.
 #[derive(Debug, Clone)]

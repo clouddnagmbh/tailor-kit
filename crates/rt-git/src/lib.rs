@@ -82,6 +82,17 @@ mod worktree;
 pub use credentials::{CredentialSource, Credentials, NoCredentials, StoreCredentials};
 pub use remote::clone;
 pub use repo::{Options, Repo, global_identity, init};
+pub use util::canonical;
+
+/// A URL for the local repository at `path`: `file://` on Unix, the plain path on Windows
+/// (where `file://C:\x` would read as a host). Both are handled in-process.
+pub fn local_url(path: &std::path::Path) -> String {
+    if cfg!(windows) {
+        path.to_string_lossy().replace('\\', "/")
+    } else {
+        format!("file://{}", path.display())
+    }
+}
 
 /// Status of the collection at `root`: `repo: false` (everything else empty) when it is not
 /// in a Git repository.

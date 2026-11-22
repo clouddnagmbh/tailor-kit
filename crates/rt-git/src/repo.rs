@@ -9,7 +9,7 @@ use gix::ObjectId;
 use gix::bstr::{BString, ByteSlice};
 use rt_app::git::GitIdentity;
 
-use crate::util::{Context, Result, Scope, fail};
+use crate::util::{Context, Result, Scope, canonical, fail};
 
 /// How repositories are opened.
 #[derive(Debug, Clone, Default)]
@@ -57,7 +57,7 @@ fn find_workdir(start: &Path) -> Option<PathBuf> {
 impl Repo {
     /// The repository containing the collection folder `root`; `None` if there is none.
     pub fn open(root: &Path, options: &Options) -> Result<Option<Self>> {
-        let root = std::fs::canonicalize(root).ctx("cannot open the collection folder")?;
+        let root = canonical(root).ctx("cannot open the collection folder")?;
         let Some(workdir) = find_workdir(&root) else {
             return Ok(None);
         };
@@ -66,7 +66,7 @@ impl Repo {
         if repo.is_bare() {
             return Ok(None);
         }
-        let workdir = std::fs::canonicalize(repo.workdir().unwrap_or(&workdir))
+        let workdir = crate::util::canonical(repo.workdir().unwrap_or(&workdir))
             .ctx("cannot open the Git repository")?;
         let rel = root
             .strip_prefix(&workdir)
@@ -290,7 +290,7 @@ pub(crate) fn set_local_config(git_dir: &Path, values: &[(&str, &str, &str, &str
 /// Creates a repository in the collection folder `root` (branch `main` unless
 /// `init.defaultBranch` says otherwise). Refuses if `root` already is a work tree.
 pub fn init(root: &Path, options: &Options) -> Result<()> {
-    let root = std::fs::canonicalize(root).ctx("cannot open the collection folder")?;
+    let root = canonical(root).ctx("cannot open the collection folder")?;
     if root.join(".git").exists() {
         return Err(fail("the collection folder already is a Git repository"));
     }

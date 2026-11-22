@@ -45,7 +45,7 @@ pub fn tmp(name: &str) -> Tmp {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    Tmp(std::fs::canonicalize(&dir).unwrap())
+    Tmp(rt_git::canonical(&dir).unwrap())
 }
 
 pub fn write(dir: &Path, rel: &str, text: &str) {
@@ -101,6 +101,8 @@ pub fn bare(dir: &Path) {
 }
 
 pub fn add_remote(dir: &Path, url: &str) {
+    // Backslashes are escapes in Git configuration files (Windows paths).
+    let url = url.replace('\\', "/");
     append_config(
         dir,
         &format!(
@@ -173,15 +175,19 @@ pub fn git_http() -> Option<&'static GitHttp> {
             if !exec.status.success() {
                 return None;
             }
-            let backend =
-                PathBuf::from(String::from_utf8(exec.stdout).ok()?.trim()).join("git-http-backend");
+            let name = if cfg!(windows) {
+                "git-http-backend.exe"
+            } else {
+                "git-http-backend"
+            };
+            let backend = PathBuf::from(String::from_utf8(exec.stdout).ok()?.trim()).join(name);
             if !backend.exists() {
                 return None;
             }
             let root = std::env::temp_dir().join(format!("rt-git-http-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(&root).ok()?;
-            let root = std::fs::canonicalize(root).ok()?;
+            let root = rt_git::canonical(&root).ok()?;
             let (listener, port) = (47821..=47829).find_map(|port| {
                 TcpListener::bind(("127.0.0.1", port))
                     .ok()
@@ -271,9 +277,9 @@ fn serve(conn: TcpStream, backend: &Path, root: &Path) -> std::io::Result<()> {
         return Ok(());
     }
     let mut cmd = Command::new(backend);
-    cmd.env_clear()
-        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-        .env("GIT_PROJECT_ROOT", root)
+    // The test process's environment stays (Windows needs `SYSTEMROOT` and friends); the CGI
+    // variables below are what `git http-backend` reads.
+    cmd.env("GIT_PROJECT_ROOT", root)
         .env("GIT_HTTP_EXPORT_ALL", "1")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")

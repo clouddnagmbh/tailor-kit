@@ -175,3 +175,55 @@ pub fn fetch(
         _ => None,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::credentials::NoCredentials;
+
+    struct One;
+    impl CredentialSource for One {
+        fn get(&self, _host: &str) -> Result<Option<Credentials>> {
+            Ok(Some(Credentials {
+                username: "u".into(),
+                password: "p".into(),
+            }))
+        }
+    }
+
+    fn http(url: &str) -> HttpTarget {
+        match endpoint(url, Path::new("/base")).unwrap() {
+            Endpoint::Http(t) => t,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn hosts_carry_the_port_when_the_url_names_one() {
+        assert_eq!(http("https://github.com/a/b.git").host, "github.com");
+        assert_eq!(http("http://127.0.0.1:8080/x").host, "127.0.0.1:8080");
+        assert!(http("http://localhost/x").loopback);
+        assert!(!http("http://example.com/x").loopback);
+        assert!(matches!(endpoint("/srv/repo.git", Path::new("/")).unwrap(), Endpoint::Local(_)));
+        match endpoint("../up", Path::new("/base/dir")).unwrap() {
+            Endpoint::Local(p) => assert_eq!(p, Path::new("/base/dir/../up")),
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(
+            endpoint("ssh://example.com/a/b.git", Path::new("/")),
+            Err(AppError::Unsupported(_))
+        ));
+    }
+
+    #[test]
+    fn credentials_go_over_plain_http_only_to_loopback() {
+        assert!(matches!(http("https://example.com/x").auth(&One).unwrap(), Auth::Some(_)));
+        assert!(matches!(http("http://127.0.0.1:1/x").auth(&One).unwrap(), Auth::Some(_)));
+        let insecure = http("http://example.com/x");
+        let auth = insecure.auth(&One).unwrap();
+        assert!(matches!(auth, Auth::Refused));
+        assert!(matches!(insecure.auth_error(&auth), AppError::Git(m) if m.contains("https")));
+        let none = insecure.auth(&NoCredentials).unwrap();
+        assert_eq!(insecure.auth_error(&none), AppError::GitAuth("example.com".into()));
+    }
+}

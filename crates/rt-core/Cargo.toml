@@ -45,6 +45,10 @@ tower-service = "0.3"
 # Client certificates (strand D, wave 5): PKCS#12 archives and encrypted PKCS#8 keys.
 p12-keystore = "0.4"
 pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
+# WebSocket sessions (wave 8, strand A): framing and the client handshake over our own TCP/TLS
+# stream (no TLS or connect features). MIT / MIT OR Apache-2.0.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 # Transport (strand A), browser: fetch via web-sys.
 [target.'cfg(target_arch = "wasm32")'.dependencies]

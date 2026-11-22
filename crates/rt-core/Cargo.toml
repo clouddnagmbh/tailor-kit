@@ -12,10 +12,13 @@ publish.workspace = true
 base64 = "0.22"
 bytes = "1"
 futures-core = "0.3"
+# AWS Signature V4 (wave 5, strand D): pure Rust, builds on every target.
+hmac = "0.12"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 # Companion protocol (strand G): the `x-rt-head` header and the `/v1/send` envelope.
 serde_json = "1"
+sha2 = "0.10"
 thiserror = "2"
 url = "2"
 # std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
@@ -33,6 +36,9 @@ rustls-platform-verifier = "0.7"
 tokio = { version = "1", features = ["net", "time", "rt"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tower-service = "0.3"
+# Client certificates (strand D, wave 5): PKCS#12 archives and encrypted PKCS#8 keys.
+p12-keystore = "0.4"
+pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
 
 # Transport (strand A), browser: fetch via web-sys.
 [target.'cfg(target_arch = "wasm32")'.dependencies]

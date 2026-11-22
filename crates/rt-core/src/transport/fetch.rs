@@ -32,6 +32,8 @@
 //!   headers plus those in `Access-Control-Expose-Headers`.
 //! - **Body**: `Content-Encoding` (gzip, br, ...) is decoded by the browser, so the body and
 //!   `size` are the decoded bytes.
+//! - **Client certificates** (mTLS) cannot be presented: a request with
+//!   `SendOptions::client_identity` fails with [`TransportError::Tls`].
 //! - **Version and timing**: the HTTP version is [`HttpVersion::Unknown`]; only `ttfb` is
 //!   measured (`fetch` call until the response headers), `dns`, `connect` and `tls` are `None`.
 
@@ -76,6 +78,15 @@ impl Transport for FetchTransport {
             body,
             options,
         } = request;
+        // Wave 5: `fetch` cannot present a client certificate; fail instead of sending
+        // without the one the request needs.
+        if options.client_identity.is_some() {
+            return Err(TransportError::Tls(
+                "the browser cannot present client certificates (mTLS); send this request \
+                 from the desktop app or the CLI"
+                    .to_owned(),
+            ));
+        }
 
         let parsed = web_sys::Url::new(&url)
             .map_err(|e| TransportError::InvalidUrl(format!("{url}: {}", js_message(&e))))?;

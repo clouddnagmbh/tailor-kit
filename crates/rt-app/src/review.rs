@@ -20,7 +20,18 @@
 //! Owner: wave 12 interface; implementation strand E.
 
 use rt_core::services::LocalBoxFuture;
+use rt_core::transport::Transport;
 use serde::{Deserialize, Serialize};
+
+mod client;
+mod detect;
+pub mod device;
+mod github;
+mod gitlab;
+mod time;
+
+pub use github::GithubProvider;
+pub use gitlab::GitlabProvider;
 
 use crate::SecretKey;
 use rt_format::diff::FieldPath;
@@ -42,6 +53,13 @@ pub fn token_slot(host: &str) -> SecretKey {
 /// The local ref a PR's head is fetched into, e.g. `refs/requesttailor/review/github/7`.
 pub fn review_ref(kind: ReviewKind, number: u64) -> String {
     format!("refs/requesttailor/review/{}/{number}", kind.id())
+}
+
+/// The local ref the PR's target branch is fetched into next to the head, so the merge base
+/// exists locally (`refs/requesttailor/review/github/7-base`; not `<n>/base`, which Git
+/// cannot keep next to the ref `<n>`).
+pub fn review_base_ref(kind: ReviewKind, number: u64) -> String {
+    format!("refs/requesttailor/review/{}/{number}-base", kind.id())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,7 +140,8 @@ pub struct ReviewComment {
     pub body: String,
     /// Unix seconds.
     pub created: i64,
-    /// Repository-relative path, for a line comment.
+    /// Path relative to the collection, for a line comment (the shell converts from and to the
+    /// repository-relative path the host uses; comments outside the collection keep theirs).
     pub path: Option<String>,
     /// 1-based line on the head side.
     pub line: Option<u32>,
@@ -136,7 +155,7 @@ pub struct ReviewComment {
 /// A new line comment, at the PR's head.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewReviewComment {
-    /// Repository-relative path.
+    /// Path relative to the collection (the shell prefixes the collection's folder).
     pub path: String,
     /// 1-based line on the head side.
     pub line: u32,
@@ -239,10 +258,67 @@ pub trait ReviewProvider {
 }
 
 /// The review repository for a remote URL (`https://github.com/acme/orders.git`,
-/// `git@gitlab.com:group/sub/api.git`, or one on a host in `hosts`).
-///
-/// Interface state (wave 12): always `None`; strand E implements it.
+/// `git@gitlab.com:group/sub/api.git`, or one on a host in `hosts`). `None` for a remote the
+/// app does not know (a local path, another host).
 pub fn detect(remote_url: &str, hosts: &[ReviewHost]) -> Option<ReviewRepo> {
-    let _ = (remote_url, hosts);
-    None
+    detect::detect(remote_url, hosts)
+}
+
+/// The provider for `repo` with the user's `token`, over `transport`.
+pub fn provider<'t, T: Transport>(
+    transport: &'t T,
+    repo: &ReviewRepo,
+    token: &str,
+) -> Box<dyn ReviewProvider + 't> {
+    match repo.kind {
+        ReviewKind::Github => Box::new(GithubProvider::new(transport, repo.clone(), token)),
+        ReviewKind::Gitlab => Box::new(GitlabProvider::new(transport, repo.clone(), token)),
+    }
+}
+
+/// Combined state of checks: failure if any failed, else pending if any is pending, else
+/// success if any succeeded, else neutral (none at all: [`CiState::None`]).
+pub fn combine(checks: &[CiCheck]) -> CiState {
+    let any = |s: CiState| checks.iter().any(|c| c.state == s);
+    if checks.is_empty() {
+        CiState::None
+    } else if any(CiState::Failure) {
+        CiState::Failure
+    } else if any(CiState::Pending) {
+        CiState::Pending
+    } else if any(CiState::Success) {
+        CiState::Success
+    } else {
+        CiState::Neutral
+    }
+}
+
+/// Checks a list of self-hosted hosts before it is saved: a host name, an `http(s)://` API
+/// base, no duplicates. Returns it normalised (trimmed, no trailing `/` on the API base).
+pub fn normalize_hosts(hosts: &[ReviewHost]) -> Result<Vec<ReviewHost>, ReviewError> {
+    let mut out: Vec<ReviewHost> = Vec::new();
+    for h in hosts {
+        let host = h.host.trim().to_ascii_lowercase();
+        let api = h.api.trim().trim_end_matches('/').to_owned();
+        if host.is_empty() || host.contains('/') || host.contains(char::is_whitespace) {
+            return Err(ReviewError::Host(format!(
+                "{:?} is not a host name (e.g. git.example.com or git.example.com:8443)",
+                h.host
+            )));
+        }
+        if !(api.starts_with("https://") || api.starts_with("http://")) || api.len() < 9 {
+            return Err(ReviewError::Host(format!(
+                "the API address of {host} must start with https:// (or http://)"
+            )));
+        }
+        if out.iter().any(|o| o.host == host) {
+            return Err(ReviewError::Host(format!("{host} is listed twice")));
+        }
+        out.push(ReviewHost {
+            host,
+            kind: h.kind,
+            api,
+        });
+    }
+    Ok(out)
 }

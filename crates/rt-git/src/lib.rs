@@ -70,6 +70,12 @@
 //! (`GitApi` of wave 12). Wave 12 owners: `merge.rs` strand B (semantic pull and
 //! `rt merge-driver`), `file_log.rs` strand D, `review.rs` strand E, `rewrite.rs` strand G;
 //! `revisions.rs` is interface.
+//!
+//! # Commits without a checkout (wave 13)
+//!
+//! [`Repo::commit_to_branch`] writes files onto a (new) branch: the branch's or a start
+//! revision's tree with the files written or removed. Only that branch ref moves; the work
+//! tree, the index and `HEAD` stay as they are, and the checked-out branch is refused.
 
 pub mod credentials;
 pub mod http;
@@ -92,12 +98,15 @@ mod revisions;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
 mod status;
+/// Committing files onto a branch without a checkout (since wave 13).
+mod tree_commit;
 mod util;
 mod worktree;
 
 pub use credentials::{CredentialSource, Credentials, NoCredentials, StoreCredentials};
 pub use remote::clone;
 pub use repo::{Options, Repo, global_identity, init};
+pub use tree_commit::TreeFile;
 pub use util::canonical;
 
 /// A URL for the local repository at `path`: `file://` on Unix, the plain path on Windows

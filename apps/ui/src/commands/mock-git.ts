@@ -428,11 +428,26 @@ export class MockGit implements GitApi {
     return { oid, files };
   }
 
-  /** Mock helper (not `GitApi`): the request `path` at `rev` as a model, `null` if it is not
-   *  there; for mocks that work on models rather than texts (mock-timeline.ts). */
+  // Mock helpers (not `GitApi`) for mocks that work on models rather than texts
+  // (mock-timeline.ts, mock-merges.ts). They return copies.
+
+  /** The request `path` at `rev` as a model, `null` if it is not there. */
   specAt(rev: string, path: string): RequestSpec | null {
     const spec = this.store.get(this.resolveRev(rev))!.tree.get(path.replace(/^\//, ""));
-    return spec ? structuredClone(spec) : null;
+    return spec ? clone(spec) : null;
+  }
+
+  /** Every request at `rev` as a model, by path. */
+  specsAt(rev: string): Map<string, RequestSpec> {
+    return clone(this.store.get(this.resolveRev(rev))!.tree);
+  }
+
+  /** The commits of the merge in progress (`null` without one): `HEAD`, the merged commit
+   *  and their merge base. */
+  mergeCommits(): { ours: string; theirs: string; base: string | null } | null {
+    const ours = this.head();
+    if (!this.mergeHead || !ours) return null;
+    return { ours, theirs: this.mergeHead, base: this.baseOf(ours, this.mergeHead) };
   }
 
   async show(rev: string, path: string): Promise<string | null> {

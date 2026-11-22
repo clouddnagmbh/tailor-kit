@@ -33,9 +33,11 @@ export function mockScan(files: [string, string][]): SecretFinding[] {
   for (const [path, text] of files) {
     text.split("\n").forEach((line, i) => {
       if (line.includes("rt-scan:allow")) return;
-      const pair = /"([A-Za-z_]+)":\s*"((?:[^"\\]|\\.)*)"/.exec(line);
+      // `"key": "value"` or the mock's YAML `key: value` / `key: "value"`.
+      const pair = /^\s*(?:- )?"?([A-Za-z_]+)"?:\s*(?:"((?:[^"\\]|\\.)*)"|([^"\s].*?))\s*,?\s*$/.exec(line);
       if (!pair) return;
-      const [, key, raw] = pair;
+      const key = pair[1];
+      const raw = pair[2] ?? pair[3];
       const scheme = /^(Bearer|Basic)\s+(\S+)$/i.exec(raw);
       if (scheme && !placeholder(scheme[2])) {
         out.push(finding(path, i + 1, `${scheme[1].toLowerCase()} credential`, line, scheme[2], "token"));

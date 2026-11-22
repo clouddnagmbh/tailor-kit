@@ -74,8 +74,17 @@ pub fn text_of(bytes: &[u8]) -> Option<&str> {
 pub fn scan(files: &[(&str, &str)]) -> Vec<SecretFinding> {
     let mut out = Vec::new();
     for (path, text) in files {
-        scan_file(path, text, &mut out);
+        scan_file(path, text, &mut |f, _| out.push(f));
     }
+    out
+}
+
+/// [`scan`] with the values each finding masks, in the order of the snippet's masks
+/// (overlapping or touching hits are one value). Only for the secret rescue (`rt_app::rescue`), which
+/// moves them into the secret store: the values never leave the Rust side.
+pub fn scan_values(path: &str, text: &str) -> Vec<(SecretFinding, Vec<String>)> {
+    let mut out = Vec::new();
+    scan_file(path, text, &mut |f, values| out.push((f, values)));
     out
 }
 
@@ -1035,17 +1044,25 @@ fn hint(hit: &Hit) -> String {
     )
 }
 
-/// The line with every hit masked, trimmed and cut for display.
-fn snippet(text: &str, hits: &[Hit]) -> String {
+/// The masked parts of a line: the hits' spans in order, overlapping ones merged.
+fn masked(hits: &[Hit]) -> Vec<Span> {
     let mut spans: Vec<Span> = hits.iter().map(|h| h.span).collect();
     spans.sort_by_key(|s| (s.start, std::cmp::Reverse(s.end)));
+    let mut out: Vec<Span> = Vec::new();
+    for s in spans {
+        match out.last_mut() {
+            Some(last) if s.start < last.end => last.end = last.end.max(s.end),
+            _ => out.push(s),
+        }
+    }
+    out
+}
+
+/// The line with every hit masked, trimmed and cut for display.
+fn snippet(text: &str, hits: &[Hit]) -> String {
     let mut out = String::new();
     let mut at = 0;
-    for s in spans {
-        if s.start < at {
-            at = at.max(s.end);
-            continue;
-        }
+    for s in masked(hits) {
         out.push_str(&text[at..s.start]);
         out.push_str(MASK);
         at = s.end;
@@ -1060,7 +1077,7 @@ fn snippet(text: &str, hits: &[Hit]) -> String {
     }
 }
 
-fn scan_file(path: &str, text: &str, out: &mut Vec<SecretFinding>) {
+fn scan_file(path: &str, text: &str, out: &mut dyn FnMut(SecretFinding, Vec<String>)) {
     let lines: Vec<Line<'_>> = text.split('\n').map(parse_line).collect();
     let mut allow_next = false;
     for (i, line) in lines.iter().enumerate() {
@@ -1102,13 +1119,28 @@ fn scan_file(path: &str, text: &str, out: &mut Vec<SecretFinding>) {
                 ..hits.iter().find(|h| h.variable).expect("checked").clone()
             }
         };
-        out.push(SecretFinding {
-            path: path.to_owned(),
-            line: u32::try_from(i + 1).unwrap_or(u32::MAX),
-            kind: kinds.join(", "),
-            snippet: snippet(line.text, &hits),
-            hint: hint(&first),
-        });
+        // Touching masks (`******`) are one value, as they read in the snippet.
+        let mut spans: Vec<Span> = Vec::new();
+        for s in masked(&hits) {
+            match spans.last_mut() {
+                Some(last) if s.start == last.end => last.end = s.end,
+                _ => spans.push(s),
+            }
+        }
+        let values = spans
+            .into_iter()
+            .map(|s| line.text[s.start..s.end].to_owned())
+            .collect();
+        out(
+            SecretFinding {
+                path: path.to_owned(),
+                line: u32::try_from(i + 1).unwrap_or(u32::MAX),
+                kind: kinds.join(", "),
+                snippet: snippet(line.text, &hits),
+                hint: hint(&first),
+            },
+            values,
+        );
     }
 }
 

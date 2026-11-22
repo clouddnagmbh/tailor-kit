@@ -12,6 +12,10 @@ publish.workspace = true
 base64 = "0.22"
 bytes = "1"
 futures-core = "0.3"
+# OAuth 2.0 (wave 5, strand C): PKCE verifier and state from the OS random source, S256
+# challenge. Both already in the tree (ring, tauri), MIT OR Apache-2.0, pure Rust.
+getrandom = "0.2"
+sha2 = "0.10"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 # Companion protocol (strand G): the `x-rt-head` header and the `/v1/send` envelope.
@@ -36,6 +40,8 @@ tower-service = "0.3"
 
 # Transport (strand A), browser: fetch via web-sys.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# The browser's crypto.getRandomValues for getrandom (OAuth 2.0 PKCE and state).
+getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

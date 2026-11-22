@@ -18,6 +18,9 @@ hmac = "0.12"
 # challenge uses sha2 (below). MIT OR Apache-2.0, pure Rust.
 getrandom = "0.2"
 percent-encoding = "2"
+# Assertions `matches`/`notMatches` (wave 7, strand C): small, no dependencies, MIT OR
+# Apache-2.0, pure Rust (builds for wasm32 and iOS).
+regex-lite = "0.1"
 serde = { version = "1", features = ["derive"] }
 # Companion protocol (strand G): the `x-rt-head` header and the `/v1/send` envelope.
 serde_json = "1"

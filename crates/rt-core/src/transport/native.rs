@@ -27,10 +27,16 @@
 
 mod body;
 mod connector;
+/// Wave 8, strand B.
+mod grpc;
 mod redirect;
+/// Wave 8, strand A.
+mod sse;
 #[cfg(test)]
 mod tests;
 mod tls;
+/// Wave 8, strand A.
+mod ws;
 
 use std::error::Error as StdError;
 use std::sync::{Arc, Mutex};
@@ -235,6 +241,26 @@ impl NativeTransport {
                 body: Box::pin(NativeBody::new(res.into_body(), deadline)),
             });
         }
+    }
+}
+
+/// Sessions (wave 8): WebSocket and SSE strand A, gRPC strand B, each in its own module.
+impl crate::stream::StreamTransport for NativeTransport {
+    fn open<'a>(
+        &'a self,
+        open: crate::stream::StreamOpen,
+    ) -> crate::services::LocalBoxFuture<
+        'a,
+        Result<Box<dyn crate::stream::StreamSession + 'a>, TransportError>,
+    > {
+        use crate::stream::StreamOpen;
+        Box::pin(async move {
+            match open {
+                StreamOpen::WebSocket { .. } => ws::open(self, open).await,
+                StreamOpen::Sse { .. } => sse::open(self, open).await,
+                StreamOpen::Grpc { .. } => grpc::open(self, open).await,
+            }
+        })
     }
 }
 

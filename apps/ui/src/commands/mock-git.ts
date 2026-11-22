@@ -428,6 +428,13 @@ export class MockGit implements GitApi {
     return { oid, files };
   }
 
+  /** Mock helper (not `GitApi`): the request `path` at `rev` as a model, `null` if it is not
+   *  there; for mocks that work on models rather than texts (mock-timeline.ts). */
+  specAt(rev: string, path: string): RequestSpec | null {
+    const spec = this.store.get(this.resolveRev(rev))!.tree.get(path.replace(/^\//, ""));
+    return spec ? structuredClone(spec) : null;
+  }
+
   async show(rev: string, path: string): Promise<string | null> {
     this.calls.push(`show ${rev} ${path}`);
     const spec = this.store.get(this.resolveRev(rev))!.tree.get(path.replace(/^\//, ""));

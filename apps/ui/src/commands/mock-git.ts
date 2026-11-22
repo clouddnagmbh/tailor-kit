@@ -40,14 +40,62 @@ interface Commit {
 
 export const MOCK_REMOTE_URL = "https://git.example.com/acme/demo-api.git";
 export const MOCK_REMOTE_HOST = "git.example.com";
-const START_TIME = 1_790_000_000;
 const CONTEXT = 3;
 
 const err = (message: string) => new BackendError("git", message);
 const clone = <T>(v: T): T => structuredClone(v);
 
-/** A request file's text in the mock: its spec as JSON. */
-export const renderSpec = (spec: RequestSpec) => `${JSON.stringify(spec, null, 2)}\n`;
+const yamlScalar = (v: unknown): string => {
+  if (v === null || v === undefined) return "null";
+  if (typeof v !== "string") return String(v);
+  return v === "" || /^[\s]|[\s]$|[:#{}[\],&*!|>'"%@`]|^(true|false|null|-?\d[\d.]*)$|^- /.test(v) || v.includes("\n")
+    ? JSON.stringify(v)
+    : v;
+};
+
+/** Minimal YAML writer for plain data (objects, arrays, scalars), two-space indent. */
+function yamlLines(v: unknown, indent: string): string[] {
+  const empty = (x: unknown) => (Array.isArray(x) ? x.length === 0 : typeof x === "object" && x !== null && Object.keys(x).length === 0);
+  if (Array.isArray(v)) {
+    return v.flatMap((item) => {
+      if (typeof item !== "object" || item === null) return [`${indent}- ${yamlScalar(item)}`];
+      const [first, ...rest] = yamlLines(item, `${indent}  `);
+      return [`${indent}- ${first.slice(indent.length + 2)}`, ...rest];
+    });
+  }
+  return Object.entries(v as Record<string, unknown>)
+    .filter(([, x]) => x !== undefined)
+    .flatMap(([k, x]) => {
+      if (typeof x === "string" && x.includes("\n")) {
+        // Block scalar, so a multi-line body diffs line by line.
+        return [`${indent}${k}: |${x.endsWith("\n") ? "" : "-"}`, ...x.replace(/\n$/, "").split("\n").map((l) => (l ? `${indent}  ${l}` : ""))];
+      }
+      if (typeof x !== "object" || x === null) return [`${indent}${k}: ${yamlScalar(x)}`];
+      if (empty(x)) return [`${indent}${k}: ${Array.isArray(x) ? "[]" : "{}"}`];
+      return [`${indent}${k}:`, ...yamlLines(x, `${indent}  `)];
+    });
+}
+
+/** A request file's text in the mock: the spec as readable YAML, like an OpenCollection
+ *  request file (`info`, `http`, then what is set), so the Git view shows an ordinary diff. */
+export function renderSpec(spec: RequestSpec): string {
+  const { name, seq, method, url, headers, params, body, auth, vars, settings, scripts, assertions, actions, protocol } = spec;
+  const doc: Record<string, unknown> = {
+    info: { name, type: protocol?.type ?? "http", seq },
+    http: { method, url, headers, params, body, auth },
+    vars,
+    settings,
+    scripts,
+    assertions,
+    actions,
+    protocol,
+  };
+  for (const key of ["vars", "scripts", "assertions", "actions", "protocol"]) {
+    const x = doc[key];
+    if (x === undefined || (Array.isArray(x) && x.length === 0)) delete doc[key];
+  }
+  return `${yamlLines(doc, "").join("\n")}\n`;
+}
 
 const same = (a: RequestSpec | undefined, b: RequestSpec | undefined) =>
   a === b || (a !== undefined && b !== undefined && renderSpec(a) === renderSpec(b));
@@ -131,7 +179,16 @@ export class MockGit implements GitApi {
    *  this object. */
   private started = false;
 
-  constructor(private readonly host?: MockGitHost) {}
+  /** Unix seconds of the first commit: the clock at construction. Later commits follow a minute
+   *  apart, so the order is stable and `ago()` shows plausible times. */
+  private readonly startTime: number;
+
+  constructor(
+    private readonly host?: MockGitHost,
+    clock: () => number = Date.now,
+  ) {
+    this.startTime = Math.floor(clock() / 1000) - 3_600;
+  }
 
   private start(): void {
     if (!this.started) this.scenario("clean");
@@ -215,7 +272,7 @@ export class MockGit implements GitApi {
       oid += h.toString(16).padStart(8, "0");
     }
     oid = oid.slice(0, 40);
-    this.commits.set(oid, { oid, parents, tree, message, author, time: START_TIME + 60 * this.counter });
+    this.commits.set(oid, { oid, parents, tree, message, author, time: this.startTime + 60 * this.counter });
     return oid;
   }
 
@@ -607,6 +664,6 @@ function blank(name: string): RequestSpec {
   };
 }
 
-export function mockGit(host?: MockGitHost): MockGit {
-  return new MockGit(host);
+export function mockGit(host?: MockGitHost, clock?: () => number): MockGit {
+  return new MockGit(host, clock);
 }

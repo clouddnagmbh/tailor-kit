@@ -183,7 +183,7 @@ pub async fn poll<T: Transport>(
     if let Some(token) = body.get("access_token").and_then(Value::as_str) {
         return Ok(DevicePoll::Token(token.to_owned()));
     }
-    let error = redact(&message(&body), &[login.device_code.clone()]);
+    let error = redact(&message(&body), std::slice::from_ref(&login.device_code));
     match body.get("error").and_then(Value::as_str) {
         Some("authorization_pending") => Ok(DevicePoll::Pending),
         Some("slow_down") => Ok(DevicePoll::SlowDown(login.interval + 5)),

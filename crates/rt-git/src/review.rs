@@ -156,8 +156,10 @@ impl Repo {
                     _ => Ok(None),
                 });
             // Only the refspecs added above: the user's other branches stay as they are.
-            let mut options = gix::remote::ref_map::Options::default();
-            options.prefix_from_spec_as_filter_on_remote = true;
+            let options = gix::remote::ref_map::Options {
+                prefix_from_spec_as_filter_on_remote: true,
+                ..Default::default()
+            };
             connection
                 .prepare_fetch(gix::progress::Discard, options)
                 .map_err(gix::Error::from_error)?

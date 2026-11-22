@@ -13,6 +13,8 @@
   --rt-size-small: 12px;
   --rt-radius: 4px;
   --rt-gap: 8px;
+  /* Height of the tab bars (sidebar views, open requests), so their bottom borders line up. */
+  --rt-bar-height: 32px;
 
   --rt-bg: #ffffff;
   --rt-bg-panel: #f6f7f9;

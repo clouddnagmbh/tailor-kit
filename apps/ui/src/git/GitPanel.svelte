@@ -495,7 +495,7 @@
         <h3>Tools</h3>
         <ul data-testid="git-tools">
           {#each tools as t (t.id)}
-            <li><button class="link" data-testid="git-tool-{t.id}" onclick={() => t.run()}>{t.label}</button></li>
+            <li><button class="link" data-testid="git-tool-{t.id}" title={t.label} onclick={() => t.run()}>{t.label}</button></li>
           {/each}
         </ul>
       </section>
@@ -748,6 +748,13 @@
     cursor: pointer;
     font: inherit;
     text-align: left;
+    /* Long labels wrap inside the panel instead of being cut off. */
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .tools li {
+    min-width: 0;
   }
   .link {
     background: none;

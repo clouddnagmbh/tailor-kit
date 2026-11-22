@@ -11,15 +11,19 @@
        to be saved, and the view says so. Afterwards the app re-reads the collection.
      - A command rejected with kind `git-auth` (message: the host) asks for credentials,
        stores them and runs the command again. The first commit (or pull) asks for the author
-       identity if none is set. -->
+       identity if none is set.
+     - Before a commit the secret scanner checks the checked files (`git.scan`, wave 5): with
+       findings nothing is committed and SecretFindings lists them (file, line, hint). A
+       commit the backend refuses with `secrets-found` shows them the same way. -->
 <script lang="ts">
   import { tick, untrack } from "svelte";
 
   import { BackendError, type CollectionInfo } from "../commands/backend";
-  import type { GitBranch, GitCommit, GitFile, GitResolution, GitStatus } from "../commands/types";
+  import type { GitBranch, GitCommit, GitFile, GitResolution, GitStatus, SecretFinding } from "../commands/types";
   import { getApp } from "../state/app.svelte";
   import ConflictView from "./ConflictView.svelte";
   import DiffView from "./DiffView.svelte";
+  import SecretFindings from "./SecretFindings.svelte";
   import {
     ago,
     branchLabel,
@@ -48,6 +52,8 @@
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
   let result = $state<string | null>(null);
+  /** Credentials that blocked the last commit attempt; cleared when files change. */
+  let findings = $state<SecretFinding[]>([]);
   let loadError = $state<string | null>(null);
 
   /** Waiting for the identity, then runs `then`. */
@@ -113,7 +119,10 @@
     void app.loadCount;
     void dirtyKey;
     void app.collection;
-    untrack(() => void refresh());
+    untrack(() => {
+      findings = [];
+      void refresh();
+    });
   });
 
   /** Runs a Git command with progress, error display and the credentials prompt. */
@@ -193,7 +202,17 @@
     withIdentity(() =>
       act("commit", async () => {
         const paths = selected;
-        await git.commit(message, paths);
+        findings = await git.scan(paths);
+        if (findings.length > 0) return;
+        try {
+          await git.commit(message, paths);
+        } catch (e) {
+          if (e instanceof BackendError && e.kind === "secrets-found") {
+            findings = await git.scan(paths);
+            if (findings.length > 0) return;
+          }
+          throw e;
+        }
         message = "";
         result = commitMessage(paths.length);
       }),
@@ -452,6 +471,7 @@
           {busy === "commit" ? "Committing…" : selected.length > 0 ? `Commit ${selected.length} ${selected.length === 1 ? "file" : "files"}` : "Commit"}
         </button>
       </form>
+      {#if findings.length > 0}<SecretFindings {findings} />{/if}
     </section>
 
     {#if commits.length > 0}

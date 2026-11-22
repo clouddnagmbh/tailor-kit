@@ -14,6 +14,7 @@
 // Starts as a repository on `main` with one commit of all requests, in sync with origin.
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
+import { mockRefusal, mockScan } from "./mock-secret-scan";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitIdentity, GitPullResult, GitResolution, GitStatus, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
@@ -344,6 +345,8 @@ export class MockGit implements GitApi {
     if (!message.trim()) throw err("Write a commit message.");
     if (paths.length === 0) throw err("Select at least one file to commit.");
     if (this.conflicts.size > 0) throw err(`Resolve the conflict in ${[...this.conflicts].join(", ")} first.`);
+    const found = this.findings(paths);
+    if (found.length > 0) throw new BackendError("secrets-found", mockRefusal(found));
     const head = this.head();
     const tree = clone(this.headTree());
     for (const p of paths) {
@@ -569,9 +572,20 @@ export class MockGit implements GitApi {
     this.credentials.delete(host);
   }
 
-  /** Wave 5, strand E: the mock's secret scan. Interface commit: finds nothing. */
-  async scan(_paths: string[]): Promise<SecretFinding[]> {
-    return [];
+  /** Wave 5, strand E: the mock's secret scan (`mock-secret-scan.ts`) of the working tree. */
+  async scan(paths: string[]): Promise<SecretFinding[]> {
+    this.calls.push(`scan ${paths.join(",")}`);
+    this.start();
+    return this.findings(paths);
+  }
+
+  private findings(paths: string[]): SecretFinding[] {
+    const files: [string, string][] = [];
+    for (const p of paths) {
+      const spec = this.work.get(p);
+      if (spec) files.push([p, renderSpec(spec)]);
+    }
+    return mockScan(files);
   }
 }
 

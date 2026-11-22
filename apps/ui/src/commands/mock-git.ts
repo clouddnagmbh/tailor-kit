@@ -14,20 +14,7 @@
 // Starts as a repository on `main` with one commit of all requests, in sync with origin.
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
-import type {
-  DiffHunk,
-  DiffLine,
-  GitBranch,
-  GitCommit,
-  GitConflict,
-  GitDiff,
-  GitFile,
-  GitIdentity,
-  GitPullResult,
-  GitResolution,
-  GitStatus,
-  RequestSpec,
-} from "./types";
+import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitIdentity, GitPullResult, GitResolution, GitStatus, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
 export interface MockGitHost {
@@ -580,6 +567,11 @@ export class MockGit implements GitApi {
 
   async deleteCredentials(host: string): Promise<void> {
     this.credentials.delete(host);
+  }
+
+  /** Wave 5, strand E: the mock's secret scan. Interface commit: finds nothing. */
+  async scan(_paths: string[]): Promise<SecretFinding[]> {
+    return [];
   }
 }
 

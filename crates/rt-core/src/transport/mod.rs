@@ -39,6 +39,10 @@ pub struct SendOptions {
     pub timeout: Option<Duration>,
     pub follow_redirects: bool,
     pub max_redirects: u32,
+    /// TLS client certificate (mTLS), chosen per host by `crate::tls::client_identity`.
+    /// Transports that cannot present one (the browser's `fetch`) fail with
+    /// `TransportError::Tls` instead of sending without it. Wave 5, strand D.
+    pub client_identity: Option<ClientIdentity>,
 }
 
 impl Default for SendOptions {
@@ -47,6 +51,32 @@ impl Default for SendOptions {
             timeout: None,
             follow_redirects: true,
             max_redirects: 5,
+            client_identity: None,
+        }
+    }
+}
+
+/// Key material of a TLS client certificate, read from the collection's files. The
+/// passphrase is resolved (it is masked like a secret value wherever it could show).
+#[derive(Clone, PartialEq, Eq)]
+pub enum ClientIdentity {
+    /// PEM certificate chain and private key (PKCS#8, PKCS#1 or SEC1; encrypted PKCS#8 with
+    /// a passphrase).
+    Pem {
+        certificate: Bytes,
+        private_key: Bytes,
+        passphrase: Option<String>,
+    },
+    /// PKCS#12 (`.p12`, `.pfx`) archive.
+    Pkcs12 { archive: Bytes, passphrase: String },
+}
+
+impl std::fmt::Debug for ClientIdentity {
+    // Key material and passphrases never reach logs or error messages.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Pem { .. } => f.write_str("ClientIdentity::Pem(..)"),
+            Self::Pkcs12 { .. } => f.write_str("ClientIdentity::Pkcs12(..)"),
         }
     }
 }

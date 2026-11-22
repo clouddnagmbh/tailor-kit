@@ -1,0 +1,17 @@
+[package]
+name = "rt-git"
+description = "RequestTailor: Git for collections on native targets (gitoxide)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Native only (desktop, CLI, iOS check). The web app runs Git in JavaScript (isomorphic-git),
+# because gitoxide does not build for wasm32. Excluded from the wasm32 build.
+
+[dependencies]
+rt-app = { path = "../rt-app" }
+
+[lints]
+workspace = true

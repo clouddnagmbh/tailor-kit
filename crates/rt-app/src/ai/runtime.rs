@@ -92,11 +92,6 @@ pub fn prepare_what(
     match what {
         AiWhat::Task { task } => {
             let profile = resolve(settings, Some(task.role()))?.clone();
-            if task.is_pending() {
-                return Err(AiError::Unsupported(
-                    "this assistant task arrives with wave 16".into(),
-                ));
-            }
             // The unmasked prompt: `preview` masks it like every call.
             let call = super::prompt_call(task, &ctx(task)?);
             Ok(Prepared {

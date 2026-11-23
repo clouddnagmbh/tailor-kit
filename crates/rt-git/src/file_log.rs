@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
 
-//! `GitApi.fileLog`: the commits that changed one file of the collection, newest first,
-//! following renames and moves like `git log --follow`.
+//! `GitApi.fileLog`: the commits that changed one file, newest first, following renames and
+//! moves like `git log --follow`. A path with a leading `/` names any file of the repository
+//! (wave 15: any regular file can be a rename source, and paths come back with the `/`);
+//! one without it a collection file, as before.
 //!
 //! Following: when the followed path exists in a commit but not in its first parent, the
 //! commit may have renamed it. Among the collection files (`*.yml`) the commit removed, the
@@ -57,8 +59,10 @@ impl Repo {
         let Some(head) = self.head_commit()? else {
             return Ok(Vec::new());
         };
-        // Validates the path (and is the first followed path).
-        self.scope.abs(path)?;
+        // Validates the path (and is the first followed path). A leading `/` names any file of
+        // the repository (wave 15), else a file of the collection.
+        self.history_path(path)?;
+        let repo_wide = path.starts_with('/');
         let walk = self
             .repo
             .rev_walk([head])
@@ -80,7 +84,7 @@ impl Repo {
                 .get(&info.id)
                 .cloned()
                 .unwrap_or_else(|| path.to_owned());
-            let abs: BString = self.scope.abs(&here_path)?;
+            let abs: BString = self.history_path(&here_path)?;
             let here = self.entry_at(info.id, &abs)?.map(|(_, id)| id);
             let parent_id = info.parent_ids.first().copied();
             let parent = match parent_id {
@@ -90,7 +94,12 @@ impl Repo {
             let mut parent_path = here_path.clone();
             let change = match (parent, here) {
                 (None, Some(blob)) => match parent_id {
-                    Some(p) => match self.renamed_from(p, info.id, blob, &here_path)? {
+                    Some(p) => match if repo_wide {
+                        self.rename_source(p, info.id, blob, &abs)?
+                            .map(|from| format!("/{}", from.to_str_lossy()))
+                    } else {
+                        self.renamed_from(p, info.id, blob, &here_path)?
+                    } {
                         Some(from) => {
                             parent_path = from.clone();
                             Some((GitFileChange::Renamed, Some(from)))

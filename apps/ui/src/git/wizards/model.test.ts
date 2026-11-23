@@ -39,6 +39,13 @@ describe("wizard values and actions", () => {
     expect(initialValues("diverged", {}, ctx).choice).toBe("merge");
     expect(initialValues("diverged", { choice: "theirs" }, ctx).choice).toBe("theirs");
     expect(initialValues("detached", {}, ctx)).toMatchObject({ choice: "branch", target: "main" });
+    // The graph's context menus (strand F) use these presets.
+    expect(initialValues("publish", { branch: "main" }, ctx).name).toBe("main");
+    expect(initialValues("delete-branch", { branch: "main" }, ctx).name).toBe("main");
+    expect(initialValues("reset", { target: "abc1234", mode: "discard" }, ctx)).toMatchObject({ target: "abc1234", mode: "discard" });
+    expect(initialValues("switch", { target: "main" }, ctx).target).toBe("main");
+    expect(initialValues("cherry-pick", { commit: "abc1234" }, ctx).commit).toBe("abc1234");
+    expect(initialValues("create-tag", { target: "abc1234" }, ctx).target).toBe("abc1234");
   });
 
   it("builds the action only when everything required is there", () => {

@@ -41,7 +41,8 @@ export function initialValues(kind: GitWizardKind, preset: Record<string, unknow
   const str = (k: string, fallback = "") => (typeof preset[k] === "string" ? (preset[k] as string) : fallback);
   const locals = ctx.refs.filter((r) => r.kind === "local" && !r.current);
   const values: WizardValues = {
-    name: str("name"),
+    // `branch` is accepted as an alias of `name` (publish, delete-branch from the graph).
+    name: str("name", str("branch")),
     target: str("target", str("start", kind === "create-branch" || kind === "create-tag" ? "HEAD" : "")),
     from: str("from", kind === "rename-branch" ? (ctx.current ?? "") : ""),
     url: str("url"),

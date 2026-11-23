@@ -144,7 +144,7 @@
   }
   .lanes {
     display: block;
-    overflow: visible;
+    overflow: hidden;
     padding-left: var(--rt-space-3);
   }
   path {
@@ -214,8 +214,9 @@
   .sha {
     font-family: var(--rt-font-mono);
   }
-  @container graph (max-width: 760px) {
-    .name {
+  @container graph-list (max-width: 620px) {
+    .name,
+    .sha {
       display: none;
     }
   }

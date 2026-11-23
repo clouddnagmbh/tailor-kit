@@ -81,6 +81,11 @@
   font: var(--rt-font-body);
 }
 
+/* The box draws the focus ring; base.css `:focus-visible` would add a second one inside it. */
+.rt-field-control:focus-visible {
+  outline: none;
+}
+
 .rt-field-box.sm .rt-field-control {
   font-size: var(--rt-text-small);
 }

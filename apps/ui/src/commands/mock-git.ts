@@ -18,7 +18,8 @@ import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitGraph } from "./mock-git-graph";
-import { stubGitHistory, stubGitIndex, stubGitWorking } from "./wave15-stubs";
+import { stubGitIndex, stubGitWorking } from "./wave15-stubs";
+import { mockGitHistory } from "./mock-git-history";
 import { mockGitPlumbing } from "./mock-git-plumbing";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
@@ -638,7 +639,7 @@ export class MockGit implements GitApi {
   // Wave 15 (interface): placeholders until strands B (`mock-git-files.ts`), C
   // (`mock-git-history.ts`), D (`mock-git-plumbing.ts`) and F (`mock-git-index.ts`).
   private wave15Working = stubGitWorking();
-  private wave15History = stubGitHistory();
+  private wave15History = mockGitHistory(this);
   private wave15Plumbing = mockGitPlumbing(this);
   private wave15Index = stubGitIndex();
   workingCopy: GitApi["workingCopy"] = () => this.wave15Working.workingCopy();
@@ -675,6 +676,10 @@ export class MockGit implements GitApi {
 
   async fileLog(path: string, limit: number): Promise<GitFileCommit[]> {
     this.calls.push(`fileLog ${path}`);
+    // A leading `/` is relative to the repository (here: the demo collection), as in the shells
+    // (wave 15): any file, with the `/` kept in the answer.
+    const slash = path.startsWith("/");
+    path = path.replace(/^\//, "");
     const head = this.head();
     if (!head) return [];
     const out: GitFileCommit[] = [];
@@ -685,7 +690,7 @@ export class MockGit implements GitApi {
       const here = c.tree.get(path);
       const before = c.parents[0] ? this.store.get(c.parents[0])!.tree.get(path) : undefined;
       const change = !before && here ? "added" : before && !here ? "deleted" : !same(before, here) ? "modified" : null;
-      if (change) out.push({ commit: this.toCommit(oid), path, change });
+      if (change) out.push({ commit: this.toCommit(oid), path: slash ? `/${path}` : path, change });
     }
     return out;
   }

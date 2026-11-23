@@ -366,7 +366,7 @@
     <EmptyState icon="commit" title="No commits yet" text="Commit your first change and it appears here, with every branch and tag that follows." data-testid="graph-empty" />
   {:else}
     <div class="body">
-      <div class="list-pane" style:--graph-w="{lanes * LANE + 6}px">
+      <div class="list-pane" style:--graph-w="{Math.max(52, lanes * LANE + 6)}px">
         <div class="columns" aria-hidden="true">
           <span>Graph</span><span>Message</span><span class="c-author">Author</span><span class="c-date">Date</span><span class="c-sha">Commit</span>
         </div>
@@ -543,14 +543,22 @@
     font: var(--rt-font-caption);
     font-family: var(--rt-font-mono);
   }
-  @container graph-list (max-width: 620px) {
+  @container graph-list (max-width: 680px) {
     .columns,
     .graph-list {
       --author-w: 18px;
+      --date-w: 96px;
+    }
+    .c-author {
+      visibility: hidden;
+    }
+  }
+  @container graph-list (max-width: 520px) {
+    .columns,
+    .graph-list {
       --date-w: 84px;
       --sha-w: 0px;
     }
-    .c-author,
     .c-sha {
       visibility: hidden;
     }

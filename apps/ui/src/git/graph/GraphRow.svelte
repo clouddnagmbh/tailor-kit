@@ -214,8 +214,12 @@
   .sha {
     font-family: var(--rt-font-mono);
   }
-  @container graph-list (max-width: 620px) {
-    .name,
+  @container graph-list (max-width: 680px) {
+    .name {
+      display: none;
+    }
+  }
+  @container graph-list (max-width: 520px) {
     .sha {
       display: none;
     }

@@ -49,7 +49,7 @@
   data-kind={ref.kind}
   use:tooltip={{ text: help, placement: "bottom" }}
 >
-  <Chip
+  <span class="chip"><Chip
     label={ref.kind === "head" ? "HEAD" : ref.name}
     {icon}
     tone={ref.current && ref.kind === "local" ? "accent" : tone}
@@ -57,7 +57,7 @@
     {size}
     caret={Boolean(trigger)}
     {...trigger ?? {}}
-  />
+  /></span>
   {#if label.tracking}
     <span class="tracking" data-testid="graph-ref-tracking" aria-label="also {label.tracking.name}"><Icon name="sync" size="sm" /></span>
   {/if}
@@ -72,10 +72,14 @@
 <style>
   .ref {
     display: inline-flex;
+    flex: none;
     align-items: center;
     gap: var(--rt-space-1);
+  }
+  .chip {
+    display: inline-flex;
     min-width: 0;
-    max-width: 100%;
+    max-width: 180px;
   }
   .tracking {
     display: inline-flex;

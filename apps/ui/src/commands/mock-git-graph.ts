@@ -82,6 +82,11 @@ function refsOf(data: ReturnType<MockGit["graphData"]> & GraphDataExtra): { refs
 
 function fromRepo(git: MockGit): GraphSource {
   const data = git.graphData() as ReturnType<MockGit["graphData"]> & GraphDataExtra;
+  // `scenario("none")`: no branch, no HEAD, nothing to show; the native and web backends fail
+  // the same way outside a repository.
+  if (data.current === null && !data.detached && data.branches.length === 0) {
+    throw new BackendError("git", "The collection is not in a Git repository.");
+  }
   const { refs, head, detached } = refsOf(data);
   // In the mock a commit's author is a display name; derive a stable address for the avatar.
   const commits = dateOrder(

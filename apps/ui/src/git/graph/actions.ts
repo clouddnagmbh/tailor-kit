@@ -2,7 +2,7 @@
 // Copyright 2026 The RequestTailor Authors
 
 // Wave 14, strand F: runs what a graph menu entry stands for (`model.ts` `GraphAction`): a
-// wizard of strand G (`openGitWizard`, the graph reloads afterwards), a Git view (compare,
+// wizard of strand G (`openGitWizard`, the graph reloads when it closes), a Git view (compare,
 // diff), copying an id or a name, or selecting a commit; and turns the menus into `Menu`
 // entries.
 
@@ -25,8 +25,9 @@ export interface ActionHost {
 export async function runAction(host: ActionHost, action: GraphAction): Promise<void> {
   switch (action.kind) {
     case "wizard": {
-      const result = await openGitWizard(host.app, action.request);
-      if (result) host.reload();
+      await openGitWizard(host.app, action.request);
+      // Closed with or without a result: what the wizard did may have moved refs.
+      host.reload();
       return;
     }
     case "view":

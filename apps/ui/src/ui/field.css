@@ -1,0 +1,108 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 The RequestTailor Authors */
+
+/* Shared look of TextField, TextArea and Select: the label above, the control box, hint and
+   error text below. Imported by those components only. */
+
+.rt-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-space-2);
+  min-width: 0;
+}
+
+.rt-field-label {
+  color: var(--rt-fg);
+  font: var(--rt-weight-medium) var(--rt-text-small) / var(--rt-leading-small) var(--rt-font-ui);
+}
+
+.rt-field-box {
+  --field-h: var(--rt-control-md);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--rt-space-3);
+  min-height: var(--field-h);
+  box-sizing: border-box;
+  padding: 0 var(--rt-space-4);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-radius-md);
+  background: var(--rt-surface-2);
+  color: var(--rt-fg);
+  transition:
+    border-color var(--rt-dur-fast) var(--rt-ease),
+    box-shadow var(--rt-dur-fast) var(--rt-ease);
+}
+
+.rt-field-box.sm {
+  --field-h: var(--rt-control-sm);
+  padding: 0 var(--rt-space-3);
+}
+
+.rt-field-box.lg {
+  --field-h: var(--rt-control-lg);
+}
+
+.rt-field-box:hover {
+  border-color: color-mix(in srgb, var(--rt-border-strong) 60%, var(--rt-fg-subtle));
+}
+
+.rt-field-box:focus-within {
+  border-color: var(--rt-border-focus);
+  box-shadow: var(--rt-focus-ring);
+}
+
+.rt-field-box.invalid {
+  border-color: var(--rt-danger);
+}
+
+.rt-field-box.invalid:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rt-danger) 25%, transparent);
+}
+
+.rt-field-box.disabled {
+  opacity: 0.55;
+  background: var(--rt-surface-sunken);
+}
+
+.rt-field-box > .rt-icon {
+  color: var(--rt-fg-subtle);
+}
+
+.rt-field-control {
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--field-h) - 2px);
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: var(--rt-font-body);
+}
+
+.rt-field-box.sm .rt-field-control {
+  font-size: var(--rt-text-small);
+}
+
+.rt-field-control.mono {
+  font-family: var(--rt-font-mono);
+  font-size: var(--rt-text-small);
+}
+
+.rt-field-control::placeholder {
+  color: var(--rt-fg-subtle);
+  opacity: 1;
+}
+
+.rt-field-hint {
+  margin: 0;
+  color: var(--rt-fg-muted);
+  font: var(--rt-font-small);
+}
+
+.rt-field-error {
+  margin: 0;
+  color: var(--rt-danger);
+  font: var(--rt-font-small);
+}

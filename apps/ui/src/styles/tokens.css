@@ -1,147 +1,373 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 The RequestTailor Authors */
 
-/* Design tokens. Components use only these variables, never raw colours, so light and dark
-   themes work everywhere. Names are interface (working rule 1); values belong to strand A.
-   Theme: `data-theme="light" | "dark"` on <html>; without it, the OS preference applies. */
+/* Design tokens v2 (wave 14). Components use only these variables, never raw colours or sizes,
+   so light and dark themes work everywhere. Names are interface (working rule 1); every name of
+   v1 still works. When to use which token: apps/ui/src/ui/README.md.
+
+   Theme: `data-theme="light" | "dark"` on <html>; without it, the OS preference applies. Any
+   element with `data-theme` themes its subtree too (the gallery shows both side by side; floating
+   layers copy the attribute of their anchor). The dark palette appears twice (OS preference and
+   attribute); `tokens.test.ts` keeps both copies identical and checks WCAG AA contrast. */
+
+/* ── Theme-independent scales ─────────────────────────────────────────────────────────────── */
 
 :root {
-  color-scheme: light dark;
-  --rt-font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --rt-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --rt-size: 13px;
-  --rt-size-small: 12px;
-  --rt-radius: 4px;
-  --rt-gap: 8px;
+  --rt-font-ui:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue",
+    sans-serif;
+  --rt-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  /* Spacing: padding, gaps and margins come from this scale only. */
+  --rt-space-1: 2px;
+  --rt-space-2: 4px;
+  --rt-space-3: 6px;
+  --rt-space-4: 8px;
+  --rt-space-5: 12px;
+  --rt-space-6: 16px;
+  --rt-space-7: 24px;
+  --rt-space-8: 32px;
+
+  /* Radius: sm for badges and small controls, md for controls and menus, lg for cards and
+     dialogs, pill for chips and switches. */
+  --rt-radius-sm: 4px;
+  --rt-radius-md: 6px;
+  --rt-radius-lg: 10px;
+  --rt-radius-pill: 999px;
+
+  /* Type scale. `--rt-font-<step>` is a `font` shorthand (weight size/line-height family). */
+  --rt-text-caption: 11px;
+  --rt-text-small: 12px;
+  --rt-text-body: 13px;
+  --rt-text-title: 14px;
+  --rt-text-heading: 18px;
+  --rt-leading-caption: 14px;
+  --rt-leading-small: 16px;
+  --rt-leading-body: 18px;
+  --rt-leading-title: 20px;
+  --rt-leading-heading: 24px;
+  --rt-weight-regular: 400;
+  --rt-weight-medium: 500;
+  --rt-weight-semibold: 600;
+  --rt-weight-bold: 700;
+  --rt-tracking-tight: -0.011em;
+  --rt-tracking-caps: 0.04em;
+  --rt-font-caption: var(--rt-weight-medium) var(--rt-text-caption) / var(--rt-leading-caption) var(--rt-font-ui);
+  --rt-font-small: var(--rt-weight-regular) var(--rt-text-small) / var(--rt-leading-small) var(--rt-font-ui);
+  --rt-font-body: var(--rt-weight-regular) var(--rt-text-body) / var(--rt-leading-body) var(--rt-font-ui);
+  --rt-font-title: var(--rt-weight-semibold) var(--rt-text-title) / var(--rt-leading-title) var(--rt-font-ui);
+  --rt-font-heading: var(--rt-weight-semibold) var(--rt-text-heading) / var(--rt-leading-heading) var(--rt-font-ui);
+
+  /* Control heights (buttons, fields, selects, segmented controls). */
+  --rt-control-sm: 24px;
+  --rt-control-md: 28px;
+  --rt-control-lg: 32px;
+
+  /* Icons (Lucide, apps/ui/src/ui/Icon.svelte). The stroke is in the 24-unit icon grid. */
+  --rt-icon-sm: 14px;
+  --rt-icon-md: 16px;
+  --rt-icon-lg: 20px;
+  --rt-icon-stroke: 1.75;
+
+  /* Motion. Reduced motion sets the durations to zero (below). */
+  --rt-ease: cubic-bezier(0.2, 0, 0, 1);
+  --rt-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --rt-dur-fast: 120ms;
+  --rt-dur-normal: 200ms;
+
+  /* Focus ring: `outline` for buttons and links, `--rt-focus-ring` (box-shadow) for fields. */
+  --rt-focus-width: 2px;
+  --rt-focus-offset: 2px;
+
+  /* Layers. Dialogs sit above the app, menus and tooltips above dialogs. */
+  --rt-z-dialog: 50;
+  --rt-z-popover: 70;
+  --rt-z-tooltip: 90;
+
+  /* v1 names. */
+  --rt-size: var(--rt-text-body);
+  --rt-size-small: var(--rt-text-small);
+  --rt-radius: var(--rt-radius-md);
+  --rt-gap: var(--rt-space-4);
   /* Height of the tab bars (sidebar views, open requests), so their bottom borders line up. */
   --rt-bar-height: 32px;
   /* Left and right inset of sidebar content (headers, tree rows, the view bar). */
   --rt-side-inset: 12px;
-
-  --rt-bg: #ffffff;
-  --rt-bg-panel: #f6f7f9;
-  --rt-bg-hover: #eceef2;
-  --rt-bg-selected: #e1e8f5;
-  --rt-fg: #1d2129;
-  --rt-fg-muted: #626a78;
-  --rt-border: #d9dce1;
-  --rt-accent: #2f62d0;
-  --rt-accent-fg: #ffffff;
-  --rt-ok: #1f8a4c;
-  --rt-warn: #a86400;
-  --rt-danger: #c4312b;
-  /* Variable highlighting by state (strand B). */
-  --rt-var-resolved: #1f8a4c;
-  --rt-var-secret: #8a4fd0;
-  --rt-var-unresolved: #c4312b;
-  /* Shell (strand A). */
-  --rt-focus: #2f62d0;
-  --rt-bg-overlay: rgb(15 18 24 / 0.28);
-  --rt-shadow: 0 12px 32px rgb(15 18 24 / 0.18), 0 2px 6px rgb(15 18 24 / 0.08);
-  --rt-method-get: #1f8a4c;
-  --rt-method-post: #a86400;
-  --rt-method-put: #2f62d0;
-  --rt-method-patch: #8a4fd0;
-  --rt-method-delete: #c4312b;
-  --rt-method-other: #626a78;
-  /* Wave 14: lanes of the commit graph (cycled) and the diff backgrounds of the Git views. */
-  --rt-lane-1: #2f62d0;
-  --rt-lane-2: #1f8a4c;
-  --rt-lane-3: #a86400;
-  --rt-lane-4: #8a4fd0;
-  --rt-lane-5: #c4312b;
-  --rt-lane-6: #0f8a8a;
-  --rt-lane-7: #b8409a;
-  --rt-lane-8: #5c6b00;
-  --rt-diff-add-bg: rgb(31 138 76 / 0.12);
-  --rt-diff-del-bg: rgb(196 49 43 / 0.1);
-  --rt-diff-add-word: rgb(31 138 76 / 0.3);
-  --rt-diff-del-word: rgb(196 49 43 / 0.26);
 }
+
+/* ── Light palette ────────────────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces: 1 the canvas, 2 raised inside it (cards, fields), 3 floating (menus, dialogs),
+     sunken for tracks and wells. `bg-*` are the v1 names, still the right ones for rows. */
+  --rt-surface-1: #ffffff;
+  --rt-surface-2: #ffffff;
+  --rt-surface-3: #ffffff;
+  --rt-surface-sunken: #f2f3f5;
+  --rt-bg: #ffffff;
+  --rt-bg-panel: #f7f7f8;
+  --rt-bg-hover: #eeeff1;
+  --rt-bg-active: #e6e7ea;
+  --rt-bg-selected: #e9eefc;
+  --rt-bg-overlay: rgb(17 19 24 / 0.32);
+
+  /* Text: fg for content, muted for secondary text, subtle for placeholders and hints. */
+  --rt-fg: #18191d;
+  --rt-fg-muted: #5e636e;
+  --rt-fg-subtle: #6c717b;
+  --rt-fg-on-solid: #ffffff;
+
+  /* Borders: border for separators and cards, strong for control outlines. */
+  --rt-border: #e4e5e9;
+  --rt-border-strong: #d0d3d9;
+
+  /* Accent: `accent` for text, links, focus and selection marks; `accent-solid` for filled
+     controls (primary buttons, checked boxes); `accent-subtle` for selected rows and chips. */
+  --rt-accent: #3e63dd;
+  --rt-accent-hover: #3457cf;
+  --rt-accent-fg: #ffffff;
+  --rt-accent-solid: #3e63dd;
+  --rt-accent-solid-hover: #3457cf;
+  --rt-accent-solid-fg: #ffffff;
+  --rt-accent-subtle: #edf1fd;
+  --rt-accent-subtle-fg: #2f4bbd;
+
+  --rt-ok: #18804a;
+  --rt-warn: #9a5800;
+  --rt-danger: #c9302c;
+  --rt-danger-solid: #c9302c;
+  --rt-danger-solid-hover: #b32925;
+
+  /* Semantic tints (banners, badges, inline notes): background, text, border. */
+  --rt-info-bg: #eef3ff;
+  --rt-info-fg: #2346b8;
+  --rt-info-border: #cbd7fb;
+  --rt-ok-bg: #ebf7ef;
+  --rt-ok-fg: #17703c;
+  --rt-ok-border: #bfe3cb;
+  --rt-warn-bg: #fdf5e6;
+  --rt-warn-fg: #8a5200;
+  --rt-warn-border: #f0d6a4;
+  --rt-danger-bg: #fdeeed;
+  --rt-danger-fg: #b42620;
+  --rt-danger-border: #f4c5c2;
+
+  --rt-focus: #3e63dd;
+
+  /* Elevation: 1 cards and raised controls, 2 menus and popovers, 3 dialogs. */
+  --rt-elev-1: 0 1px 2px rgb(16 18 27 / 0.06);
+  --rt-elev-2: 0 2px 4px -1px rgb(16 18 27 / 0.06), 0 12px 32px -6px rgb(16 18 27 / 0.2);
+  --rt-elev-3: 0 4px 10px -2px rgb(16 18 27 / 0.08), 0 28px 64px -16px rgb(16 18 27 / 0.32);
+
+  --rt-tooltip-bg: #1d1f24;
+  --rt-tooltip-fg: #f3f4f6;
+  --rt-switch-off: #cfd2d8;
+  --rt-skeleton: #eceef1;
+  --rt-skeleton-shine: #f7f8f9;
+  --rt-scrollbar: #c9ccd2;
+  --rt-scrollbar-hover: #a6aab3;
+
+  /* Variable highlighting by state. */
+  --rt-var-resolved: #18804a;
+  --rt-var-secret: #7c45c8;
+  --rt-var-unresolved: #c9302c;
+  --rt-method-get: #18804a;
+  --rt-method-post: #9a5800;
+  --rt-method-put: #3e63dd;
+  --rt-method-patch: #7c45c8;
+  --rt-method-delete: #c9302c;
+  --rt-method-other: #5e636e;
+  /* Lanes of the commit graph (cycled; also the avatar colours) and the diff backgrounds. */
+  --rt-lane-1: #3e63dd;
+  --rt-lane-2: #18804a;
+  --rt-lane-3: #b06a00;
+  --rt-lane-4: #7c45c8;
+  --rt-lane-5: #c9302c;
+  --rt-lane-6: #0f7f86;
+  --rt-lane-7: #b03a92;
+  --rt-lane-8: #5c6b00;
+  --rt-diff-add-bg: rgb(24 128 74 / 0.1);
+  --rt-diff-del-bg: rgb(201 48 44 / 0.08);
+  --rt-diff-add-word: rgb(24 128 74 / 0.26);
+  --rt-diff-del-word: rgb(201 48 44 / 0.22);
+}
+
+/* ── Dark palette: layered greys, never pure black; accents tuned for dark ────────────────── */
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --rt-bg: #17191d;
-    --rt-bg-panel: #1e2126;
-    --rt-bg-hover: #282c33;
-    --rt-bg-selected: #233453;
-    --rt-fg: #e3e6eb;
-    --rt-fg-muted: #9aa2af;
-    --rt-border: #343943;
-    --rt-accent: #6b97f5;
-    --rt-accent-fg: #0d1117;
+    color-scheme: dark;
+    --rt-surface-1: #18191c;
+    --rt-surface-2: #1e1f23;
+    --rt-surface-3: #232429;
+    --rt-surface-sunken: #121315;
+    --rt-bg: #18191c;
+    --rt-bg-panel: #131416;
+    --rt-bg-hover: #232428;
+    --rt-bg-active: #2b2c31;
+    --rt-bg-selected: #232c48;
+    --rt-bg-overlay: rgb(0 0 0 / 0.55);
+    --rt-fg: #ededf0;
+    --rt-fg-muted: #9ea3ad;
+    --rt-fg-subtle: #858a95;
+    --rt-fg-on-solid: #ffffff;
+    --rt-border: #27282d;
+    --rt-border-strong: #36383e;
+    --rt-accent: #8b9dff;
+    --rt-accent-hover: #a2b1ff;
+    --rt-accent-fg: #0e1020;
+    --rt-accent-solid: #5266eb;
+    --rt-accent-solid-hover: #5f73f2;
+    --rt-accent-solid-fg: #ffffff;
+    --rt-accent-subtle: #1f2645;
+    --rt-accent-subtle-fg: #aab8ff;
     --rt-ok: #4cc27f;
-    --rt-warn: #e0a440;
-    --rt-danger: #f07069;
+    --rt-warn: #e7a94a;
+    --rt-danger: #f2756d;
+    --rt-danger-solid: #d83a34;
+    --rt-danger-solid-hover: #e5463f;
+    --rt-info-bg: #1b2238;
+    --rt-info-fg: #a3b5ff;
+    --rt-info-border: #2e3a63;
+    --rt-ok-bg: #14261c;
+    --rt-ok-fg: #6fd49a;
+    --rt-ok-border: #22472f;
+    --rt-warn-bg: #2a2114;
+    --rt-warn-fg: #f0bd62;
+    --rt-warn-border: #4d3a1a;
+    --rt-danger-bg: #2d191a;
+    --rt-danger-fg: #ff8f87;
+    --rt-danger-border: #5a2a28;
+    --rt-focus: #8b9dff;
+    --rt-elev-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --rt-elev-2: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 2px 6px rgb(0 0 0 / 0.3), 0 12px 32px -6px rgb(0 0 0 / 0.55);
+    --rt-elev-3: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 4px 12px rgb(0 0 0 / 0.35), 0 32px 72px -16px rgb(0 0 0 / 0.75);
+    --rt-tooltip-bg: #2e3036;
+    --rt-tooltip-fg: #f3f4f6;
+    --rt-switch-off: #3d3f46;
+    --rt-skeleton: #232428;
+    --rt-skeleton-shine: #2c2d32;
+    --rt-scrollbar: #3a3c42;
+    --rt-scrollbar-hover: #50535a;
     --rt-var-resolved: #4cc27f;
-    --rt-var-secret: #b98af0;
-    --rt-var-unresolved: #f07069;
-    --rt-focus: #6b97f5;
-    --rt-bg-overlay: rgb(0 0 0 / 0.5);
-    --rt-shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+    --rt-var-secret: #c29bf5;
+    --rt-var-unresolved: #f2756d;
     --rt-method-get: #4cc27f;
-    --rt-method-post: #e0a440;
-    --rt-method-put: #6b97f5;
-    --rt-method-patch: #b98af0;
-    --rt-method-delete: #f07069;
-    --rt-method-other: #9aa2af;
-    --rt-lane-1: #6b97f5;
+    --rt-method-post: #e7a94a;
+    --rt-method-put: #8b9dff;
+    --rt-method-patch: #c29bf5;
+    --rt-method-delete: #f2756d;
+    --rt-method-other: #9ea3ad;
+    --rt-lane-1: #8b9dff;
     --rt-lane-2: #4cc27f;
-    --rt-lane-3: #e0a440;
-    --rt-lane-4: #b98af0;
-    --rt-lane-5: #f07069;
+    --rt-lane-3: #e7a94a;
+    --rt-lane-4: #c29bf5;
+    --rt-lane-5: #f2756d;
     --rt-lane-6: #4cc9c9;
-    --rt-lane-7: #e882cf;
+    --rt-lane-7: #ec86d2;
     --rt-lane-8: #b7c94a;
-    --rt-diff-add-bg: rgb(76 194 127 / 0.14);
-    --rt-diff-del-bg: rgb(240 112 105 / 0.13);
-    --rt-diff-add-word: rgb(76 194 127 / 0.34);
-    --rt-diff-del-word: rgb(240 112 105 / 0.32);
+    --rt-diff-add-bg: rgb(76 194 127 / 0.13);
+    --rt-diff-del-bg: rgb(242 117 109 / 0.12);
+    --rt-diff-add-word: rgb(76 194 127 / 0.32);
+    --rt-diff-del-word: rgb(242 117 109 / 0.3);
   }
 }
 
-:root[data-theme="light"] {
-  color-scheme: light;
+[data-theme="dark"] {
+  color-scheme: dark;
+  --rt-surface-1: #18191c;
+  --rt-surface-2: #1e1f23;
+  --rt-surface-3: #232429;
+  --rt-surface-sunken: #121315;
+  --rt-bg: #18191c;
+  --rt-bg-panel: #131416;
+  --rt-bg-hover: #232428;
+  --rt-bg-active: #2b2c31;
+  --rt-bg-selected: #232c48;
+  --rt-bg-overlay: rgb(0 0 0 / 0.55);
+  --rt-fg: #ededf0;
+  --rt-fg-muted: #9ea3ad;
+  --rt-fg-subtle: #858a95;
+  --rt-fg-on-solid: #ffffff;
+  --rt-border: #27282d;
+  --rt-border-strong: #36383e;
+  --rt-accent: #8b9dff;
+  --rt-accent-hover: #a2b1ff;
+  --rt-accent-fg: #0e1020;
+  --rt-accent-solid: #5266eb;
+  --rt-accent-solid-hover: #5f73f2;
+  --rt-accent-solid-fg: #ffffff;
+  --rt-accent-subtle: #1f2645;
+  --rt-accent-subtle-fg: #aab8ff;
+  --rt-ok: #4cc27f;
+  --rt-warn: #e7a94a;
+  --rt-danger: #f2756d;
+  --rt-danger-solid: #d83a34;
+  --rt-danger-solid-hover: #e5463f;
+  --rt-info-bg: #1b2238;
+  --rt-info-fg: #a3b5ff;
+  --rt-info-border: #2e3a63;
+  --rt-ok-bg: #14261c;
+  --rt-ok-fg: #6fd49a;
+  --rt-ok-border: #22472f;
+  --rt-warn-bg: #2a2114;
+  --rt-warn-fg: #f0bd62;
+  --rt-warn-border: #4d3a1a;
+  --rt-danger-bg: #2d191a;
+  --rt-danger-fg: #ff8f87;
+  --rt-danger-border: #5a2a28;
+  --rt-focus: #8b9dff;
+  --rt-elev-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --rt-elev-2: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 2px 6px rgb(0 0 0 / 0.3), 0 12px 32px -6px rgb(0 0 0 / 0.55);
+  --rt-elev-3: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 4px 12px rgb(0 0 0 / 0.35), 0 32px 72px -16px rgb(0 0 0 / 0.75);
+  --rt-tooltip-bg: #2e3036;
+  --rt-tooltip-fg: #f3f4f6;
+  --rt-switch-off: #3d3f46;
+  --rt-skeleton: #232428;
+  --rt-skeleton-shine: #2c2d32;
+  --rt-scrollbar: #3a3c42;
+  --rt-scrollbar-hover: #50535a;
+  --rt-var-resolved: #4cc27f;
+  --rt-var-secret: #c29bf5;
+  --rt-var-unresolved: #f2756d;
+  --rt-method-get: #4cc27f;
+  --rt-method-post: #e7a94a;
+  --rt-method-put: #8b9dff;
+  --rt-method-patch: #c29bf5;
+  --rt-method-delete: #f2756d;
+  --rt-method-other: #9ea3ad;
+  --rt-lane-1: #8b9dff;
+  --rt-lane-2: #4cc27f;
+  --rt-lane-3: #e7a94a;
+  --rt-lane-4: #c29bf5;
+  --rt-lane-5: #f2756d;
+  --rt-lane-6: #4cc9c9;
+  --rt-lane-7: #ec86d2;
+  --rt-lane-8: #b7c94a;
+  --rt-diff-add-bg: rgb(76 194 127 / 0.13);
+  --rt-diff-del-bg: rgb(242 117 109 / 0.12);
+  --rt-diff-add-word: rgb(76 194 127 / 0.32);
+  --rt-diff-del-word: rgb(242 117 109 / 0.3);
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --rt-bg: #17191d;
-  --rt-bg-panel: #1e2126;
-  --rt-bg-hover: #282c33;
-  --rt-bg-selected: #233453;
-  --rt-fg: #e3e6eb;
-  --rt-fg-muted: #9aa2af;
-  --rt-border: #343943;
-  --rt-accent: #6b97f5;
-  --rt-accent-fg: #0d1117;
-  --rt-ok: #4cc27f;
-  --rt-warn: #e0a440;
-  --rt-danger: #f07069;
-  --rt-var-resolved: #4cc27f;
-  --rt-var-secret: #b98af0;
-  --rt-var-unresolved: #f07069;
-  --rt-focus: #6b97f5;
-  --rt-bg-overlay: rgb(0 0 0 / 0.5);
-  --rt-shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
-  --rt-method-get: #4cc27f;
-  --rt-method-post: #e0a440;
-  --rt-method-put: #6b97f5;
-  --rt-method-patch: #b98af0;
-  --rt-method-delete: #f07069;
-  --rt-method-other: #9aa2af;
-  --rt-lane-1: #6b97f5;
-  --rt-lane-2: #4cc27f;
-  --rt-lane-3: #e0a440;
-  --rt-lane-4: #b98af0;
-  --rt-lane-5: #f07069;
-  --rt-lane-6: #4cc9c9;
-  --rt-lane-7: #e882cf;
-  --rt-lane-8: #b7c94a;
-  --rt-diff-add-bg: rgb(76 194 127 / 0.14);
-  --rt-diff-del-bg: rgb(240 112 105 / 0.13);
-  --rt-diff-add-word: rgb(76 194 127 / 0.34);
-  --rt-diff-del-word: rgb(240 112 105 / 0.32);
+/* ── Derived tokens: declared on every themed element, so they follow a scoped theme ──────── */
+
+:root,
+[data-theme] {
+  --rt-focus-ring: 0 0 0 3px color-mix(in srgb, var(--rt-focus) 30%, transparent);
+  --rt-border-focus: var(--rt-focus);
+  /* v1 names. */
+  --rt-shadow: var(--rt-elev-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --rt-dur-fast: 0ms;
+    --rt-dur-normal: 0ms;
+  }
 }
 
 html,

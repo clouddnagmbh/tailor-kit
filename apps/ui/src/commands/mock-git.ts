@@ -18,7 +18,8 @@ import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitGraph } from "./mock-git-graph";
-import { stubGitHistory, stubGitIndex, stubGitPlumbing, stubGitWorking } from "./wave15-stubs";
+import { stubGitHistory, stubGitIndex, stubGitWorking } from "./wave15-stubs";
+import { mockGitPlumbing } from "./mock-git-plumbing";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
@@ -638,7 +639,7 @@ export class MockGit implements GitApi {
   // (`mock-git-history.ts`), D (`mock-git-plumbing.ts`) and F (`mock-git-index.ts`).
   private wave15Working = stubGitWorking();
   private wave15History = stubGitHistory();
-  private wave15Plumbing = stubGitPlumbing();
+  private wave15Plumbing = mockGitPlumbing(this);
   private wave15Index = stubGitIndex();
   workingCopy: GitApi["workingCopy"] = () => this.wave15Working.workingCopy();
   fileTree: GitApi["fileTree"] = (rev, dir) => this.wave15Working.fileTree(rev, dir);

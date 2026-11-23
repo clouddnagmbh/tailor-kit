@@ -75,7 +75,7 @@ export interface MockJournalEntry {
 }
 
 /** The members of `MockGit` this module uses (mock-git.ts declares them). */
-interface Core {
+export interface Core {
   store: Map<string, Commit>;
   branchesMap: Map<string, string | null>;
   current: string | null;
@@ -125,6 +125,12 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const slash = (p: string) => (p.startsWith("/") ? p : `/${p}`);
 const unslash = (p: string) => p.replace(/^\//, "");
 const subjectOf = (c: Commit) => c.message.split("\n")[0];
+
+/** Selects repository paths: a file, or a folder with everything under it; no paths: all. */
+function selection(paths: string[]): (p: string) => boolean {
+  const roots = paths.map((x) => unslash(x).replace(/\/+$/, "")).filter((x) => x !== "");
+  return (p) => roots.length === 0 || roots.some((r) => p === r || p.startsWith(`${r}/`));
+}
 
 /** One file of a three-way merge, field by field for requests. */
 interface FileMerge {
@@ -487,11 +493,17 @@ export function mockGitActions(git: MockGit): MockGitActions {
         return p;
       }
       case "stash": {
-        const files = c.files();
-        stop(files.length === 0 ? block("nothing-to-do", "There are no changes to park.") : null);
+        const paths = action.paths ?? [];
+        const sel = selection(paths);
+        const files = c.files().filter((f) => sel(f.path));
+        stop(files.length === 0 ? block("nothing-to-do", paths.length === 0 ? "There are no changes to park." : "None of these files has changes to park.") : null);
         stop(await unsaved());
         stop(inProgress());
-        p.steps.push(`Parks ${plural(files.length, "change")} and makes your files match the last commit. Bring them back any time.`);
+        p.steps.push(
+          paths.length === 0
+            ? `Parks ${plural(files.length, "change")} and makes your files match the last commit. Bring them back any time.`
+            : `Parks ${plural(files.length, "change")} and makes these files match the last commit; your other changes stay. Bring them back any time.`,
+        );
         p.refs.push({ name: "refs/stash", before: c.stashList[0]?.oid ?? null, after: "" });
         p.files = files.map((f) => slash(f.path));
         return p;
@@ -602,6 +614,124 @@ export function mockGitActions(git: MockGit): MockGitActions {
         p.destructive = true;
         stop(await unsaved());
         stop(hit.some((f) => f.state === "conflicted") ? block("in-progress", "Resolve the conflicts first.") : null);
+        return p;
+      }
+      case "amend": {
+        needBranch();
+        if (!head || !cur) return p;
+        stop(inProgress());
+        const paths = action.paths ?? [];
+        if (paths.length > 0) stop(await unsaved());
+        const commit = c.store.get(head)!;
+        if (action.message !== undefined && !action.message.trim()) return { ...p, blocked: block("invalid-name", "The commit message is empty.") };
+        if ([...c.fetched.values()].some((t) => c.ancestors(t).has(head))) {
+          return { ...p, blocked: block("published", "The last commit is already on the server, so changing it would rewrite history others may have. Make a new commit instead.") };
+        }
+        const sel = selection(paths);
+        const files = paths.length > 0 ? c.files().filter((f) => f.state !== "conflicted" && sel(f.path)) : [];
+        const message = action.message?.trim();
+        const newMessage = message && message !== commit.message.trim() ? message : null;
+        if (files.length === 0 && !newMessage) {
+          return {
+            ...p,
+            undoable: false,
+            blocked: p.blocked ?? block("nothing-to-do", paths.length === 0 ? "There is nothing to change: give a new message or choose files." : "Nothing changed in these files since the last commit."),
+          };
+        }
+        const what: string[] = [];
+        if (newMessage) what.push(`the message "${newMessage.split("\n")[0]}"`);
+        if (files.length > 0) what.push(`the current content of ${plural(files.length, "file")}`);
+        p.steps.push(`Replaces the last commit ${short(head)} ("${subjectOf(commit)}") on ${cur} with a new one that has ${what.join(" and ")}. Its author and place in history stay.`);
+        p.steps.push("Your files do not change. The backup keeps the old commit for Undo.");
+        p.files = files.map((f) => slash(f.path));
+        p.refs.push({ name: branchRef(cur), before: head, after: null });
+        p.backup = true;
+        return p;
+      }
+      case "abort": {
+        if (!c.mergeHead && c.conflicts.size === 0) return { ...p, undoable: false, blocked: block("nothing-to-do", "Nothing is in progress that could be stopped.") };
+        const files = c.files();
+        p.steps.push(`Stops the ${c.mergeKind ?? "merge"} and puts your files back the way they were before it started. Your branch does not move.`);
+        if (files.length > 0) {
+          p.steps.push(`The changes in ${plural(files.length, "file")} are taken out of your working files.`);
+          p.warnings = ["Undo brings your files back as plain changes; it cannot resume the operation."];
+          p.destructive = true;
+        }
+        p.files = files.map((f) => slash(f.path));
+        p.backup = true;
+        stop(await unsaved());
+        return p;
+      }
+      case "restore-files": {
+        if (action.paths.length === 0) return { ...p, blocked: block("nothing-to-do", "Choose the files to restore.") };
+        const at = resolve(action.rev);
+        if (!at) return { ...p, blocked: block("not-found", `There is no commit "${action.rev}".`) };
+        const want = c.store.get(at)!.tree;
+        const sel = selection(action.paths);
+        const hits = [...new Set([...want.keys(), ...c.work.keys()])].filter((x) => sel(x) && !same(want.get(x), c.work.get(x))).sort();
+        if (hits.length === 0) return { ...p, undoable: false, blocked: block("nothing-to-do", "These files are the same already.") };
+        const deleted = hits.filter((x) => !want.has(x)).length;
+        const changed = new Set(c.files().map((f) => f.path));
+        const replaced = hits.filter((x) => changed.has(x)).length;
+        p.steps.push(`Makes ${plural(hits.length, "file")} the way ${hits.length === 1 ? "it is" : "they are"} ${short(at)} ("${subjectOf(c.store.get(at)!)}").`);
+        if (deleted > 0) p.steps.push(`${plural(deleted, "file")} did not exist there and ${deleted === 1 ? "is" : "are"} deleted.`);
+        if (replaced > 0) {
+          p.warnings = [`${plural(replaced, "file has", "files have")} uncommitted changes. They are replaced; the backup keeps them for Undo.`];
+          p.destructive = true;
+        }
+        p.steps.push("Your branch and its commits do not move.");
+        p.files = hits.map(slash);
+        p.backup = true;
+        stop(await unsaved());
+        stop(inProgress());
+        return p;
+      }
+      case "restore-branch": {
+        const problem = refNameProblem(action.name);
+        if (problem) return { ...p, blocked: block("invalid-name", problem) };
+        const to = resolve(action.target);
+        if (!to) return { ...p, blocked: block("not-found", `There is no commit "${action.target}".`) };
+        if (cur === action.name) return { ...p, blocked: block("current-branch", `${action.name} is the branch you are on. Use Reset to move it.`) };
+        const old = c.branchesMap.get(action.name) ?? null;
+        if (old === to) return { ...p, undoable: false, blocked: block("nothing-to-do", `${action.name} is there already.`) };
+        const named = `${short(to)} ("${subjectOf(c.store.get(to)!)}")`;
+        if (old === null) p.steps.push(`Creates the branch ${action.name} again at ${named}.`);
+        else {
+          p.steps.push(`Moves ${action.name} to ${named}.`);
+          const leaving = [...c.ancestors(old)].filter((o) => !c.ancestors(to).has(o)).length;
+          if (leaving > 0) p.warnings = [`${plural(leaving, "commit leaves", "commits leave")} ${action.name}. The backup keeps ${leaving === 1 ? "it" : "them"} for Undo.`];
+          p.backup = true;
+        }
+        p.refs.push({ name: branchRef(action.name), before: old, after: to });
+        return p;
+      }
+      case "rewrite": {
+        const old = c.branchesMap.get(action.branch) ?? null;
+        if (!old) return { ...p, blocked: block("not-found", `There is no branch "${action.branch}".`) };
+        const to = resolve(action.tip);
+        if (!to) return { ...p, blocked: block("not-found", `The new tip "${action.tip}" does not exist.`) };
+        if (to === old) return { ...p, undoable: false, blocked: block("nothing-to-do", `${action.branch} would not change.`) };
+        const keep = c.ancestors(to);
+        const leaving = [...c.ancestors(old)].filter((o) => !keep.has(o));
+        const coming = [...keep].filter((o) => !c.ancestors(old).has(o));
+        const onServer = new Set<string>();
+        for (const t of c.fetched.values()) for (const a of c.ancestors(t)) onServer.add(a);
+        const published = leaving.filter((o) => onServer.has(o)).length;
+        if (published > 0) {
+          stop(block("published", `${plural(published, "commit")} you would replace ${published === 1 ? "is" : "are"} on the server already. Rewriting history others may have is not done from here.`));
+        }
+        const summary = action.summary.trim().replace(/\.$/, "");
+        if (summary) p.steps.push(`${summary}.`);
+        p.steps.push(`Replaces ${plural(leaving.length, "commit")} on ${action.branch} with ${coming.length}; ${action.branch} then points at ${short(to)} ("${subjectOf(c.store.get(to)!)}").`);
+        p.steps.push("The backup keeps the old commits for Undo.");
+        p.refs.push({ name: branchRef(action.branch), before: old, after: to });
+        p.backup = true;
+        if (cur === action.branch) {
+          p.files = diffPaths(c.store.get(old)!.tree, c.store.get(to)!.tree);
+          stop(await unsaved());
+          stop(inProgress());
+          stop(localChanges("rewrite this branch"));
+        }
         return p;
       }
       case "create-tag": {
@@ -810,11 +940,16 @@ export function mockGitActions(git: MockGit): MockGitActions {
         return { message: `${action.name} now points to ${action.url.trim()}.`, reload: false };
       }
       case "stash": {
-        const files = c.files().map((f) => f.path);
+        const sel = selection(action.paths ?? []);
+        const files = c.files().map((f) => f.path).filter(sel);
         const message = action.message?.trim() || `Parked on ${cur ?? "HEAD"}`;
-        const oid = c.newCommit(head ? [head] : [], clone(c.work), message, "RequestTailor");
+        const whole = (action.paths ?? []).length === 0;
+        const tree = whole ? clone(c.work) : clone(c.headTree());
+        if (!whole) for (const f of files) (c.work.has(f) ? tree.set(f, clone(c.work.get(f)!)) : tree.delete(f));
+        const oid = c.newCommit(head ? [head] : [], tree, message, "RequestTailor");
         c.stashList.unshift({ oid, message, time: t, branch: cur, files });
-        c.moveWork(clone(c.work), c.headTree());
+        if (whole) c.moveWork(clone(c.work), c.headTree());
+        else for (const f of files) c.writeWork(f, c.headTree().get(f));
         return { message: `Parked ${plural(files.length, "change")}.`, reload: true };
       }
       case "unstash": {
@@ -870,6 +1005,50 @@ export function mockGitActions(git: MockGit): MockGitActions {
         const headTree = c.headTree();
         for (const f of p.files ?? []) c.writeWork(unslash(f), headTree.get(unslash(f)));
         return { message: `Discarded the changes to ${plural((p.files ?? []).length, "file")}.`, reload: true };
+      }
+      case "amend": {
+        const commit = c.store.get(head!)!;
+        const sel = selection(action.paths ?? []);
+        const tree = clone(commit.tree);
+        if ((action.paths ?? []).length > 0) {
+          for (const f of c.files()) if (f.state !== "conflicted" && sel(f.path)) (c.work.has(f.path) ? tree.set(f.path, clone(c.work.get(f.path)!)) : tree.delete(f.path));
+        }
+        const text = action.message?.trim() || commit.message;
+        backupRef(cur!, head, t, backups);
+        c.branchesMap.set(cur!, c.newCommit(commit.parents, tree, text, commit.author));
+        return { message: `Replaced the last commit on ${cur} with "${text.split("\n")[0]}".`, reload: false };
+      }
+      case "abort": {
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        c.moveWork(clone(c.work), c.headTree());
+        c.mergeHead = null;
+        c.mergeKind = null;
+        c.mergeMessage = null;
+        c.mergeBaseOid = null;
+        c.conflicts.clear();
+        return { message: "Stopped it and went back to where it started.", reload: true };
+      }
+      case "restore-files": {
+        const at = c.resolveRev(action.rev);
+        const want = c.store.get(at)!.tree;
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        for (const f of p.files ?? []) c.writeWork(unslash(f), want.get(unslash(f)));
+        return { message: `Restored ${plural((p.files ?? []).length, "file")} from ${short(at)}.`, reload: true };
+      }
+      case "restore-branch": {
+        const to = c.resolveRev(action.target);
+        backupRef(action.name, c.branchesMap.get(action.name) ?? null, t, backups);
+        c.branchesMap.set(action.name, to);
+        return { message: `${action.name} points at ${short(to)} again.`, reload: false };
+      }
+      case "rewrite": {
+        const old = c.branchesMap.get(action.branch)!;
+        const to = c.resolveRev(action.tip);
+        backupRef(action.branch, old, t, backups);
+        if (cur === action.branch) c.moveWork(clone(c.store.get(old)!.tree), c.store.get(to)!.tree);
+        c.branchesMap.set(action.branch, to);
+        const summary = action.summary.trim().replace(/\.$/, "");
+        return { message: summary ? `${summary}.` : `Rewrote ${action.branch}.`, reload: cur === action.branch && (p.files ?? []).length > 0 };
       }
       case "create-tag": {
         const target = c.resolveRev(action.target);

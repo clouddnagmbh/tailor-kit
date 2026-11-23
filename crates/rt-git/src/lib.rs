@@ -95,8 +95,11 @@
 //! blame, history search and reflog, strand D the new actions and the plumbing (`pick`,
 //! `write_tree`, `write_commit`), strand F the index operations and signing.
 
+/// Wave 15, strand D: amend, abort, restore and rewrite actions, text conflict result.
+mod abort;
 /// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
 mod actions;
+mod amend;
 mod branch_actions;
 mod cherry_pick;
 pub mod credentials;
@@ -114,9 +117,12 @@ mod graph;
 mod merge;
 mod net;
 mod pack;
+mod plumbing;
 mod remote;
 mod remotes_admin;
 mod repo;
+mod resolve_text;
+mod restore;
 mod revert;
 /// Wave 12, strand E: fetching a PR head for review.
 pub mod review;
@@ -124,6 +130,7 @@ pub mod review;
 mod revisions;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
+mod rewrite_branch;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
 pub mod sign;
 mod stash;

@@ -9,6 +9,7 @@
   import type { GitConflict, GitResolution, MergeState } from "../commands/types";
   import MergeFields from "../merge/MergeFields.svelte";
   import { getApp } from "../state/app.svelte";
+  import { getGitViews } from "./views.svelte";
 
   let {
     path,
@@ -22,6 +23,7 @@
     onclose: () => void;
   } = $props();
   const app = getApp();
+  const views = getGitViews();
 
   let conflict = $state<GitConflict | null>(null);
   let error = $state<string | null>(null);
@@ -105,6 +107,16 @@
         <pre data-testid="git-conflict-theirs">{conflict.theirs ?? "(deleted on their side)"}</pre>
       </section>
     </div>
+    <p class="hint">
+      Or
+      <button
+        data-testid="git-resolve-by-hand"
+        onclick={() => {
+          views.open({ kind: "text-merge", path });
+          onclose();
+        }}>resolve it line by line</button
+      >, with the original next to both versions.
+    </p>
   {/if}
 </dialog>
 

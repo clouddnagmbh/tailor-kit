@@ -182,11 +182,12 @@ impl Repo {
 
     // ---- stash -----------------------------------------------------------------------
 
-    pub(crate) fn plan_stash(&self, cx: &Ctx, mut p: GitPlan) -> Result<GitPlan> {
+    pub(crate) fn plan_stash(&self, cx: &Ctx, mut p: GitPlan, paths: &[String]) -> Result<GitPlan> {
+        let sel = self.selection(paths)?;
         let files: Vec<String> = cx
             .changes()?
             .iter()
-            .filter(|f| f.state != GitFileState::Conflicted)
+            .filter(|f| f.state != GitFileState::Conflicted && sel.matches(f.path.as_bytes()))
             .map(|f| format!("/{}", f.path))
             .collect();
         p.stop(cx.in_progress()?);
@@ -199,14 +200,25 @@ impl Repo {
         if files.is_empty() {
             p.stop(Some(block(
                 GitBlockReason::NothingToDo,
-                "There are no changes to park.",
+                if paths.is_empty() {
+                    "There are no changes to park."
+                } else {
+                    "None of these files has changes to park."
+                },
             )));
         }
         p.stop(cx.unsaved());
-        p.steps.push(format!(
-            "Parks {} and makes your files match the last commit. Bring them back any time.",
-            plural_s(files.len(), "change")
-        ));
+        p.steps.push(if paths.is_empty() {
+            format!(
+                "Parks {} and makes your files match the last commit. Bring them back any time.",
+                plural_s(files.len(), "change")
+            )
+        } else {
+            format!(
+                "Parks {} and makes these files match the last commit; your other changes stay. Bring them back any time.",
+                plural_s(files.len(), "change")
+            )
+        });
         p.refs.push(GitRefMove {
             name: STASH.into(),
             before: self.ref_value(STASH)?.map(|id| id.to_string()),
@@ -216,20 +228,32 @@ impl Repo {
         Ok(p)
     }
 
-    pub(crate) fn run_stash(&self, cx: &Ctx, message: Option<&str>) -> Result<Done> {
+    pub(crate) fn run_stash(
+        &self,
+        cx: &Ctx,
+        message: Option<&str>,
+        paths: &[String],
+    ) -> Result<Done> {
         let head = cx
             .head
             .ok_or_else(|| fail("Make the first commit first."))?;
         let whole = &cx.whole;
         let label = cx.cur.clone().unwrap_or_else(|| "(no branch)".into());
         let identity = self.config_identity();
-        let changes = cx.changes()?;
+        let sel = self.selection(paths)?;
+        let changes: Vec<_> = cx
+            .changes()?
+            .iter()
+            .filter(|f| sel.matches(f.path.as_bytes()))
+            .collect();
         let tracked: Vec<_> = changes
             .iter()
+            .copied()
             .filter(|f| f.state != GitFileState::Untracked)
             .collect();
         let untracked: Vec<_> = changes
             .iter()
+            .copied()
             .filter(|f| f.state == GitFileState::Untracked)
             .collect();
         let count = tracked.len() + untracked.len();

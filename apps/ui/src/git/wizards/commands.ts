@@ -24,6 +24,8 @@ const PALETTE_WIZARDS: GitWizardKind[] = [
   "publish",
   "fetch",
   "stash",
+  "amend",
+  "abort",
   "unstash",
   "drop-stash",
   "revert",

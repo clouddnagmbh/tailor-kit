@@ -109,11 +109,13 @@ pub mod http;
 pub mod identity;
 pub mod local;
 
+mod blob;
 mod branch;
 mod changelog_commits;
 mod commit;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
+mod file_tree;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
 mod history_search;
@@ -144,6 +146,7 @@ mod tags;
 mod tree_commit;
 mod undo;
 mod util;
+mod working_copy;
 mod worktree;
 
 pub use actions::ActionOptions;

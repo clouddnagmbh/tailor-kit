@@ -808,6 +808,7 @@
     <div class="changes" data-testid="git-changes">
       <Section title="Changes" count={files.length > 0 ? files.length : undefined}>
         {#snippet actions()}
+          <IconButton icon="commit" size="sm" label="All changes in the repository" data-testid="git-all-changes" onclick={() => views.open({ kind: "changes" })} />
           {#if files.length > 0}
             <IconButton icon="compare" size="sm" label="Show all changes by field" data-testid="git-semantic-diff" onclick={() => views.open({ kind: "diff", scope: { kind: "working" } })} />
           {/if}

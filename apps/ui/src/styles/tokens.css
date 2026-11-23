@@ -15,6 +15,8 @@
   --rt-gap: 8px;
   /* Height of the tab bars (sidebar views, open requests), so their bottom borders line up. */
   --rt-bar-height: 32px;
+  /* Left and right inset of sidebar content (headers, tree rows, the view bar). */
+  --rt-side-inset: 12px;
 
   --rt-bg: #ffffff;
   --rt-bg-panel: #f6f7f9;

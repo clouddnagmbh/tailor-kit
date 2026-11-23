@@ -532,7 +532,7 @@
       icon: "undo",
       danger: true,
       disabled: files.length === 0,
-      run: () => wizard("discard", { paths: selected.map((p) => `/${p}`) }),
+      run: () => wizard("discard", { paths: selected }),
     },
   ]);
 

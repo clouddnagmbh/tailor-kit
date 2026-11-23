@@ -22,7 +22,7 @@ export interface GitWizardRequest {
    *  rename-branch `{ from }`, delete-branch `{ name | branch }`, publish `{ name | branch, remote? }`,
    *  cherry-pick and revert `{ commit }`, reset `{ target, mode?: "keep-changes" | "discard" }`,
    *  create-tag `{ target, name?, message? }`, delete-tag and push-tag `{ name }`,
-   *  discard `{ paths }` (repo-relative with a leading `/`), unstash and drop-stash `{ index }`,
+   *  discard `{ paths }` (relative to the collection, or to the repository with a leading `/`), unstash and drop-stash `{ index }`,
    *  diverged `{ choice: "merge" | "theirs" }`, detached `{ choice: "branch" | "back" }`. */
   preset?: Record<string, unknown>;
 }

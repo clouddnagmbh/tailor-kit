@@ -175,8 +175,8 @@ pub enum GitAction {
         target: String,
         mode: GitResetMode,
     },
-    /// Throw away unsaved-in-Git changes of these files (repository-relative, leading `/`);
-    /// empty: all.
+    /// Throw away unsaved-in-Git changes of these files (repository-relative with a leading
+    /// `/`, or relative to the collection without one); empty: all.
     Discard {
         paths: Vec<String>,
     },

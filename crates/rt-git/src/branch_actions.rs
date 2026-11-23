@@ -912,14 +912,19 @@ impl Repo {
     // ---- discard -------------------------------------------------------------------------
 
     fn discard_hits(&self, cx: &Ctx, paths: &[String]) -> Result<Vec<(String, GitFileState)>> {
-        let wanted: Vec<&str> = paths
+        // A leading `/`: relative to the repository; otherwise relative to the collection
+        // (the Git panel lists the collection's files).
+        let wanted = paths
             .iter()
-            .map(|p| p.strip_prefix('/').unwrap_or(p))
-            .collect();
+            .map(|p| match p.strip_prefix('/') {
+                Some(rest) => Ok(rest.to_owned()),
+                None => self.scope.abs(p).map(|b| b.to_string()),
+            })
+            .collect::<Result<Vec<String>>>()?;
         Ok(cx
             .changes()?
             .iter()
-            .filter(|f| wanted.is_empty() || wanted.contains(&f.path.as_str()))
+            .filter(|f| wanted.is_empty() || wanted.contains(&f.path))
             .map(|f| (f.path.clone(), f.state))
             .collect())
     }

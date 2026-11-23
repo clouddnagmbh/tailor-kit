@@ -120,6 +120,13 @@
       0 0 0 1px var(--rt-accent),
       var(--rt-elev-1);
   }
+  /* Hover must not hide the selection; it only lifts the card a little more. */
+  .selected.interactive:hover {
+    border-color: var(--rt-accent);
+    box-shadow:
+      0 0 0 1px var(--rt-accent),
+      var(--rt-elev-2);
+  }
   header {
     display: flex;
     align-items: flex-start;

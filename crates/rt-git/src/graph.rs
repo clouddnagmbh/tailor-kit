@@ -136,9 +136,7 @@ impl Repo {
                 message: None,
             });
         }
-        out.sort_by(|a, b| {
-            (kind_order(a.kind), &a.name).cmp(&(kind_order(b.kind), &b.name))
-        });
+        out.sort_by(|a, b| (kind_order(a.kind), &a.name).cmp(&(kind_order(b.kind), &b.name)));
         Ok(out)
     }
 
@@ -150,7 +148,13 @@ impl Repo {
         }
         let tag = object.into_tag();
         let decoded = tag.decode().ok()?;
-        let first = decoded.message.lines().next()?.to_str_lossy().trim().to_owned();
+        let first = decoded
+            .message
+            .lines()
+            .next()?
+            .to_str_lossy()
+            .trim()
+            .to_owned();
         (!first.is_empty()).then_some(first)
     }
 
@@ -212,7 +216,10 @@ impl Repo {
         let order = self.date_order(&tips)?;
         let mut labels: HashMap<&str, Vec<String>> = HashMap::new();
         for r in &refs {
-            labels.entry(r.target.as_str()).or_default().push(r.full.clone());
+            labels
+                .entry(r.target.as_str())
+                .or_default()
+                .push(r.full.clone());
         }
         let skip = query.skip as usize;
         let end = skip.saturating_add(query.limit as usize).min(order.len());

@@ -69,6 +69,7 @@
     EmptyState,
     Icon,
     IconButton,
+    Progress,
     Section,
     Spinner,
     SplitButton,
@@ -738,6 +739,9 @@
             >
           </div>
         {/if}
+        {#if busy === "pull" || busy === "push" || busy === "fetch"}
+          <Progress size="sm" label={PROGRESS[busy] ?? "Working…"} data-testid="git-progress-bar" />
+        {/if}
         {#if siblings.length > 0}
           <p class="hint" data-testid="git-siblings">Also in this repository: {siblings.map((c) => c.name).join(", ")}</p>
         {/if}
@@ -828,7 +832,7 @@
                   <span class="file-title">{f.title}</span>
                   {#if f.dir}<span class="file-dir">{f.dir}</span>{/if}
                 </button>
-                <span class="state" data-testid="git-file-state" data-badge={f.badge}><Badge kind="status" value={f.badge} title={f.badgeTitle} /></span>
+                <Badge kind="status" value={f.badge} title={f.badgeTitle} data-testid="git-file-state" />
               </li>
             {/each}
           </ul>
@@ -904,6 +908,7 @@
     >
       <Card padding="sm" icon="pull" title="Clone a repository" description={app.backend.kind === "web" ? "Opens the clone as the collection; pick the folder to clone into." : "Opens the clone as the collection."}>
         <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
+        {#if busy === "clone"}<Progress size="sm" label="Cloning…" />{/if}
         {#snippet footer()}
           <Button size="sm" variant="ghost" type="button" onclick={() => (cloneOpen = false)}>Cancel</Button>
           <Button size="sm" variant="primary" type="submit" data-testid="git-clone" disabled={!cloneUrl.trim() || busy !== null} loading={busy === "clone"}>Clone</Button>
@@ -1146,10 +1151,6 @@
     white-space: nowrap;
     color: var(--rt-fg-subtle);
     font: var(--rt-font-small);
-  }
-  .state {
-    display: inline-flex;
-    flex: none;
   }
   .commit {
     display: flex;

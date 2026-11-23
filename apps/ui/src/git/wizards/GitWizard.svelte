@@ -16,7 +16,7 @@
   import { BackendError } from "../../commands/backend";
   import type { GitAction, GitActionResult, GitCommit, GitPlan, GitRef, GitRemote, GitStash, GitStatus, GitUndoEntry } from "../../commands/types";
   import type { ExtensionDialogProps } from "../../extensions";
-  import { Badge, Banner, Button, Card, Checkbox, Chip, DialogFooter, EmptyState, Icon, Select, Spinner, TextField, type SelectOption } from "../../ui";
+  import { Badge, Banner, Button, Card, Checkbox, Chip, DialogFooter, EmptyState, Icon, Progress, Select, Spinner, TextField, type SelectOption } from "../../ui";
   import CloneFields from "../CloneFields.svelte";
   import { GLOSSARY, type GitTerm } from "../glossary";
   import { getGitViews, type GitViews } from "../views.svelte";
@@ -652,6 +652,9 @@
       </form>
     {/if}
 
+    {#if busy}
+      <Progress size="sm" label={kind === "clone" ? "Cloning…" : plan?.network ? "Talking to the server…" : "Working…"} data-testid="git-wizard-progress" />
+    {/if}
     {#if error}<div data-testid="git-wizard-error"><Banner tone="danger">{error}</Banner></div>{/if}
 
     {#if step === "confirm" && plan}

@@ -86,10 +86,7 @@
       </div>
       <h3 class="whole">Or keep one whole version</h3>
     {:else}
-      <p class="hint">
-        Both sides changed this file. Keep one version, or
-        <button data-testid="git-resolve-by-hand" onclick={() => { views.open({ kind: "text-merge", path }); onclose(); }}>resolve it line by line</button>.
-      </p>
+      <p class="hint">Both sides changed this file. Keep one version; you can edit it afterwards.</p>
       {#if blocked}<p class="warn" role="status">{blocked}</p>{/if}
     {/if}
     <div class="sides">
@@ -110,6 +107,16 @@
         <pre data-testid="git-conflict-theirs">{conflict.theirs ?? "(deleted on their side)"}</pre>
       </section>
     </div>
+    <p class="hint">
+      Or
+      <button
+        data-testid="git-resolve-by-hand"
+        onclick={() => {
+          views.open({ kind: "text-merge", path });
+          onclose();
+        }}>resolve it line by line</button
+      >, with the original next to both versions.
+    </p>
   {/if}
 </dialog>
 

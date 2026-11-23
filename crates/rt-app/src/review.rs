@@ -176,6 +176,21 @@ pub struct ReviewSubmission {
     pub body: String,
 }
 
+/// Wave 15: a pull request (merge request) to open from a branch that is on the remote.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewPullRequest {
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+    /// The branch with the changes, as named on the remote (`feature/login`).
+    pub head: String,
+    /// The branch to merge into (`main`).
+    pub base: String,
+    /// Open as a draft where the host has drafts.
+    #[serde(default)]
+    pub draft: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CiState {
@@ -255,6 +270,19 @@ pub trait ReviewProvider {
     ) -> LocalBoxFuture<'a, Result<(), ReviewError>>;
     fn ci<'a>(&'a self, pull: &'a PullRequest)
     -> LocalBoxFuture<'a, Result<CiStatus, ReviewError>>;
+    /// Wave 15: opens a pull request from a branch that is already on the remote. Strand E
+    /// implements it for the built-in hosts.
+    fn create<'a>(
+        &'a self,
+        pull: &'a NewPullRequest,
+    ) -> LocalBoxFuture<'a, Result<PullRequest, ReviewError>> {
+        let _ = pull;
+        Box::pin(async {
+            Err(ReviewError::Host(
+                "opening pull requests is not implemented yet (wave 15, strand E)".into(),
+            ))
+        })
+    }
 }
 
 /// The review repository for a remote URL (`https://github.com/acme/orders.git`,

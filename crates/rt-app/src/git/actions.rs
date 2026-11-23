@@ -22,8 +22,10 @@
 //! - Merge, cherry-pick and revert merge semantically where a file is a collection file
 //!   (wave 12, `rt_format::merge`) and line by line everywhere else; conflicts end in the
 //!   wave-12 conflict views (`MergeApi`, `GitApi.conflict`/`resolve`).
-//! - No force push and no history rewrite of published commits from the app (interactive rebase
-//!   comes with wave 15). A diverged branch offers merge or "take theirs" (reset with backup).
+//! - No force push and no history rewrite of published commits from the app. A diverged branch
+//!   offers merge or "take theirs" (reset with backup). Since wave 15, [`GitAction::Amend`] and
+//!   [`GitAction::Rewrite`] change unpublished history only: a commit they would replace that is
+//!   on a remote-tracking branch blocks them ([`GitBlockReason::Published`]).
 //! - Generic: nothing assumes the repository is a collection. Paths are repository-relative with
 //!   a leading `/`. New actions are new variants (wave 15 adds more), so the UI must ignore
 //!   unknown [`GitPlan`] fields and treat an unknown action as unsupported.
@@ -152,6 +154,9 @@ pub enum GitAction {
     Stash {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         message: Option<String>,
+        /// Since wave 15: park only these files (repository-relative, leading `/`); empty: all.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        paths: Vec<String>,
     },
     /// Apply a parked change; `keep`: leave it in the list.
     Unstash {
@@ -194,6 +199,46 @@ pub enum GitAction {
         name: String,
         remote: String,
     },
+
+    // ---- Wave 15 (Git client). Additive: the UI treats variants it does not know as
+    // unsupported. Strand D implements them in every shell.
+    /// Replace the last commit of the current branch: with `message` (`None`: keep it) and the
+    /// current content of `paths` (repository-relative, leading `/`; empty: only the message),
+    /// or, with `staged`, with what the index holds. Refused when that commit is published.
+    Amend {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        paths: Vec<String>,
+        #[serde(default)]
+        staged: bool,
+    },
+    /// Stop the merge, cherry-pick or revert in progress (or a rebase started elsewhere) and go
+    /// back to where it started, like `git merge --abort`.
+    Abort,
+    /// Point a branch that is not checked out (also a deleted one) at `target` again, e.g. an
+    /// earlier position from the reflog or a backup ref. The checked-out branch: [`Self::Reset`].
+    RestoreBranch {
+        name: String,
+        target: String,
+    },
+    /// Make `paths` in the working tree what they are at `rev` ("restore this file from that
+    /// commit"); a path missing at `rev` is deleted.
+    RestoreFiles {
+        rev: String,
+        paths: Vec<String>,
+    },
+    /// Point `branch` at `tip`, a commit built from the old ones with `GitApi.pick`,
+    /// `writeTree` and `writeCommit` (a history editor's result). The plan lists the commits it
+    /// leaves behind and those it brings; refused when one it leaves behind is published, or
+    /// when `tip` does not exist. The checked-out branch also updates the working tree (refused
+    /// with local changes in the way). `summary`: what was done, plain words, for the plan and
+    /// the undo entry.
+    Rewrite {
+        branch: String,
+        tip: String,
+        summary: String,
+    },
 }
 
 /// Why an action cannot run now. The UI explains each in plain words and offers the way out.
@@ -229,6 +274,8 @@ pub enum GitBlockReason {
     Network,
     /// Not possible in this shell (e.g. stdio-only remotes in the browser).
     Unsupported,
+    /// Since wave 15: it would replace commits that are already on a remote (history of others).
+    Published,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -232,6 +232,8 @@ impl Repo {
                 parents: parents.iter().map(ToString::to_string).collect(),
                 email,
                 refs,
+                // Wave 15 interface: strand F reads the `gpgsig` header.
+                signed: false,
             });
         }
         Ok(GitGraphPage {

@@ -8,7 +8,7 @@
 
 import { getContext, setContext } from "svelte";
 
-import type { DiffScope } from "../commands/types";
+import type { DiffScope, GitHistoryQuery } from "../commands/types";
 
 export type GitView =
   /** Strand A: `diff/SemanticDiffView.svelte`. */
@@ -29,7 +29,28 @@ export type GitView =
   | { kind: "rescue" }
   /** Wave 14, strand F: `graph/GraphView.svelte`, the commit graph of the whole repository
    *  (`select`: a commit id or full ref name to select and scroll to). */
-  | { kind: "graph"; select?: string };
+  | { kind: "graph"; select?: string }
+  // Wave 15 (interface): the Git client for any repository; paths repository-relative with a
+  // leading `/`.
+  /** Strand B: `changes/ChangesView.svelte`, the working copy of the active repository. */
+  | { kind: "changes" }
+  /** Strand B: `files/FileView.svelte`, a file at `rev` (absent: the working tree), images and
+   *  binary files included. */
+  | { kind: "file"; path: string; rev?: string }
+  /** Strand C: `history/FileHistoryView.svelte`, every commit that changed `path`. */
+  | { kind: "file-history"; path: string }
+  /** Strand C: `history/BlameView.svelte`. */
+  | { kind: "blame"; path: string; rev?: string }
+  /** Strand C: `history/SearchView.svelte`, searching messages, authors, paths and content. */
+  | { kind: "search"; query?: Partial<GitHistoryQuery> }
+  /** Strand C: `history/ReflogView.svelte` (`name` absent: `HEAD`), bringing back lost work. */
+  | { kind: "reflog"; name?: string }
+  /** Strand D: `conflict/TextMergeView.svelte`, the 3-way view of a conflicted file that is not
+   *  a collection file. */
+  | { kind: "text-merge"; path: string }
+  /** Strand E: `extension/ExtensionGitView.svelte`, an extension's view
+   *  (`AppExtension.gitViews`, `id` `<extension>/<view>`). */
+  | { kind: "extension"; id: string; props?: Record<string, unknown> };
 
 export class GitViews {
   current = $state<GitView | null>(null);

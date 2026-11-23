@@ -532,6 +532,11 @@ impl Repo {
             } => self.plan_create_tag(p, name, target, message.as_deref()),
             GitAction::DeleteTag { name } => self.plan_delete_tag(p, name),
             GitAction::PushTag { name, remote } => self.plan_push_tag(p, name, remote),
+            GitAction::Amend { .. }
+            | GitAction::Abort
+            | GitAction::RestoreBranch { .. }
+            | GitAction::RestoreFiles { .. }
+            | GitAction::Rewrite { .. } => Ok(not_yet(p)),
         }
     }
 
@@ -560,7 +565,7 @@ impl Repo {
             GitAction::RemoveRemote { name } => self.run_remove_remote(name),
             GitAction::RenameRemote { from, to } => self.run_rename_remote(from, to),
             GitAction::SetRemoteUrl { name, url } => self.run_set_remote_url(name, url),
-            GitAction::Stash { message } => self.run_stash(cx, message.as_deref()),
+            GitAction::Stash { message, .. } => self.run_stash(cx, message.as_deref()),
             GitAction::Unstash { index, keep } => self.run_unstash(cx, run, *index, *keep),
             GitAction::DropStash { index } => self.run_drop_stash(run, *index),
             GitAction::Revert { commit } => self.run_pick(cx, run, commit, false),
@@ -574,6 +579,11 @@ impl Repo {
             } => self.run_create_tag(run, name, target, message.as_deref()),
             GitAction::DeleteTag { name } => self.run_delete_tag(run, name),
             GitAction::PushTag { name, remote } => self.run_push_tag(run, name, remote),
+            GitAction::Amend { .. }
+            | GitAction::Abort
+            | GitAction::RestoreBranch { .. }
+            | GitAction::RestoreFiles { .. }
+            | GitAction::Rewrite { .. } => Err(AppError::Unsupported(NOT_YET.into())),
         }
     }
 
@@ -757,7 +767,23 @@ pub(crate) fn action_tag(action: &GitAction) -> &'static str {
         GitAction::CreateTag { .. } => "create-tag",
         GitAction::DeleteTag { .. } => "delete-tag",
         GitAction::PushTag { .. } => "push-tag",
+        GitAction::Amend { .. } => "amend",
+        GitAction::Abort => "abort",
+        GitAction::RestoreBranch { .. } => "restore-branch",
+        GitAction::RestoreFiles { .. } => "restore-files",
+        GitAction::Rewrite { .. } => "rewrite",
     }
+}
+
+/// Wave 15 interface: actions strand D implements; until then their plans are blocked.
+const NOT_YET: &str = "This Git action is not implemented yet (wave 15, strand D).";
+
+fn not_yet(mut p: GitPlan) -> GitPlan {
+    p.blocked = Some(rt_app::git::actions::GitBlock {
+        reason: rt_app::git::actions::GitBlockReason::Unsupported,
+        message: NOT_YET.into(),
+    });
+    p
 }
 
 /// Whether the action may change working files (undo then restores them).

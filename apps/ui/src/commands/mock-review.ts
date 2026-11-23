@@ -14,6 +14,7 @@
 //   deeper check, a header added to `List users` and a new `Ping` request. Comments, verdicts
 //   and the CI status are kept in memory.
 
+import { stubCreatePull } from "./wave15-stubs";
 import { BackendError, type ReviewApi } from "./backend";
 import { MOCK_REMOTE_HOST } from "./mock-git";
 import type { MockWave12Host } from "./mock-wave12";
@@ -244,5 +245,7 @@ export function mockReview(host: MockWave12Host): ReviewApi {
         ],
       };
     },
+    // Wave 15 (interface): strand E.
+    create: stubCreatePull,
   };
 }

@@ -23,7 +23,9 @@ export interface GitWizardRequest {
    *  cherry-pick and revert `{ commit }`, reset `{ target, mode?: "keep-changes" | "discard" }`,
    *  create-tag `{ target, name?, message? }`, delete-tag and push-tag `{ name }`,
    *  discard `{ paths }` (relative to the collection, or to the repository with a leading `/`), unstash and drop-stash `{ index }`,
-   *  diverged `{ choice: "merge" | "theirs" }`, detached `{ choice: "branch" | "back" }`. */
+   *  diverged `{ choice: "merge" | "theirs" }`, detached `{ choice: "branch" | "back" }`.
+   *  Wave 15 (strand D): amend `{ message?, paths? }`, restore-branch `{ name, target? }`,
+   *  restore-files `{ rev, paths }`; rewrite `{ branch, tip, summary }` (from history editors). */
   preset?: Record<string, unknown>;
 }
 
@@ -51,6 +53,12 @@ const TITLES: Record<GitWizardKind, string> = {
   "create-tag": "New tag",
   "delete-tag": "Delete tag",
   "push-tag": "Publish tag",
+  // Wave 15 (strand D).
+  amend: "Change last commit",
+  abort: "Stop the merge",
+  "restore-branch": "Bring back a branch",
+  "restore-files": "Restore files",
+  rewrite: "Rewrite history",
   diverged: "Branches went apart",
   detached: "Not on a branch",
   clone: "Clone repository",

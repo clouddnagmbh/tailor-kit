@@ -14,6 +14,7 @@
 // Starts as a repository on `main` with one commit of all requests, in sync with origin.
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
+import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions } from "./mock-git-actions";
 import { mockGitGraph } from "./mock-git-graph";
@@ -729,16 +730,31 @@ export class MockGit implements GitApi {
     this.remote = null;
   }
 
+  /** What the "Choose folder…" picker returns; `undefined` removes the picker (browser-like). */
+  pickRepository: (() => Promise<string | null>) | undefined = async () => {
+    this.calls.push("pickRepository");
+    return this.picked;
+  };
+
+  /** The folder the mock picker "chooses" (`null`: cancelled). */
+  picked: string | null = "/Users/demo/origin/api-tests.git";
+
   async clone(url: string): Promise<CollectionInfo | null> {
     this.calls.push(`clone ${url}`);
     this.start();
-    let host: string;
-    try {
-      host = new URL(url.trim()).host;
-    } catch {
-      throw err("Enter an HTTPS URL of the repository (SSH needs the desktop app).");
+    if (looksLocal(url)) {
+      // Like the desktop shell: any path is accepted. Without `pickRepository` the mock
+      // behaves like the browser, which cannot read paths.
+      if (!this.pickRepository) throw err(LOCAL_CLONE_UNSUPPORTED);
+    } else {
+      let host: string;
+      try {
+        host = new URL(url.trim()).host;
+      } catch {
+        throw err("Enter an HTTPS URL of the repository (SSH needs the desktop app).");
+      }
+      this.requireAuthFor(host);
     }
-    this.requireAuthFor(host);
     this.scenario("clean");
     return this.host ? this.host.openCollection() : { id: "mock-clone", name: "Clone", location: url };
   }

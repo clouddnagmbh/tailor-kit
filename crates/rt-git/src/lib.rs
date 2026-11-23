@@ -104,7 +104,7 @@ mod util;
 mod worktree;
 
 pub use credentials::{CredentialSource, Credentials, NoCredentials, StoreCredentials};
-pub use remote::clone;
+pub use remote::{clone, clone_with_home, expand_home};
 pub use repo::{Options, Repo, global_identity, init};
 pub use tree_commit::TreeFile;
 pub use util::canonical;

@@ -24,6 +24,7 @@
   import type { GitBranch, GitCommit, GitFile, GitResolution, GitStatus, SecretFinding } from "../commands/types";
   import { getApp } from "../state/app.svelte";
   import { gitApiCommands } from "./api-commands";
+  import CloneFields from "./CloneFields.svelte";
   import ConflictView from "./ConflictView.svelte";
   import DiffView from "./DiffView.svelte";
   import SecretFindings from "./SecretFindings.svelte";
@@ -533,11 +534,8 @@
         if (cloneUrl.trim()) void clone();
       }}
     >
-      <label>
-        Clone a repository
-        <input data-testid="git-clone-url" type="url" placeholder="https://github.com/acme/api-tests.git" bind:value={cloneUrl} />
-      </label>
-      <p class="hint">Opens the clone as the collection{app.backend.kind === "web" ? "; pick the folder to clone into" : ""}.</p>
+      <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
+      {#if app.backend.kind === "web"}<p class="hint">Opens the clone as the collection; pick the folder to clone into.</p>{/if}
       <button data-testid="git-clone" type="submit" disabled={!cloneUrl.trim() || busy !== null}>
         {busy === "clone" ? "Cloning…" : "Clone"}
       </button>

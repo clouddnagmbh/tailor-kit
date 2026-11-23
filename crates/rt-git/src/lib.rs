@@ -71,12 +71,26 @@
 //! `rt merge-driver`), `file_log.rs` strand D, `review.rs` strand E, `rewrite.rs` strand G;
 //! `revisions.rs` is interface.
 //!
+//! # Git actions (wave 14)
+//!
+//! [`Repo::plan`], [`Repo::apply`], [`Repo::undo`], [`Repo::last_action`], [`Repo::remotes`]
+//! and [`Repo::stashes`] back the Git wizards (`rt_app::git::actions`). They work on the whole
+//! repository (paths with a leading `/`), write backup refs and an action journal before
+//! anything moves, and merge, cherry-pick and revert with the pull's merge, generalised to
+//! every collection of the repository (`merge.rs`). Owners: wave 14, strand G (`actions.rs`,
+//! `branch_actions.rs`, `stash.rs`, `undo.rs`, `cherry_pick.rs`, `revert.rs`, `tags.rs`,
+//! `remotes_admin.rs`).
+//!
 //! # Commits without a checkout (wave 13)
 //!
 //! [`Repo::commit_to_branch`] writes files onto a (new) branch: the branch's or a start
 //! revision's tree with the files written or removed. Only that branch ref moves; the work
 //! tree, the index and `HEAD` stay as they are, and the checked-out branch is refused.
 
+/// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
+mod actions;
+mod branch_actions;
+mod cherry_pick;
 pub mod credentials;
 pub mod http;
 pub mod identity;
@@ -90,19 +104,25 @@ mod merge;
 mod net;
 mod pack;
 mod remote;
+mod remotes_admin;
 mod repo;
+mod revert;
 /// Wave 12, strand E: fetching a PR head for review.
 pub mod review;
 /// Wave 12 interface: reading revisions without a checkout.
 mod revisions;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
+mod stash;
 mod status;
+mod tags;
 /// Committing files onto a branch without a checkout (since wave 13).
 mod tree_commit;
+mod undo;
 mod util;
 mod worktree;
 
+pub use actions::ActionOptions;
 pub use credentials::{CredentialSource, Credentials, NoCredentials, StoreCredentials};
 pub use remote::{clone, clone_with_home, expand_home};
 pub use repo::{Options, Repo, global_identity, init};

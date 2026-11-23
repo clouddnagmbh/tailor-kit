@@ -238,7 +238,10 @@ pub struct GitBlock {
     pub message: String,
 }
 
-/// A ref the action creates, moves or deletes (`None`: does not exist before / after).
+/// A ref the action creates, moves or deletes (`None`: does not exist before / after). In a
+/// [`GitPlan`], `after: Some("")` means "a new commit the action creates" (a merge commit, a
+/// cherry-pick, a revert, a pull, a stash), whose id is not known before it runs; journal
+/// entries ([`GitUndoEntry::refs`]) always carry the real ids.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GitRefMove {
     /// Full name (`refs/heads/x`, `refs/tags/v1`, `HEAD`).

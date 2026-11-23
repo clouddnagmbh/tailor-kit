@@ -87,7 +87,7 @@ impl Repo {
                         .map(|path| GitFile { path, state })
                 })
                 .collect(),
-            merging: self.merge_head()?.is_some(),
+            merging: self.underway()?.is_some(),
         })
     }
 

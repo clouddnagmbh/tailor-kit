@@ -11,6 +11,14 @@ use rt_app::git::GitIdentity;
 
 use crate::util::{Context, Result, Scope, canonical, fail};
 
+/// A merge, cherry-pick or revert that stopped on conflicts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Underway {
+    Merge,
+    CherryPick,
+    Revert,
+}
+
 /// How repositories are opened.
 #[derive(Debug, Clone, Default)]
 pub struct Options {
@@ -208,8 +216,82 @@ impl Repo {
         }
     }
 
+    /// What is half done: a merge (`MERGE_HEAD`), a cherry-pick (`CHERRY_PICK_HEAD`) or a
+    /// revert (`REVERT_HEAD`) that stopped on conflicts. The two latter conclude with a commit
+    /// that has one parent.
+    pub(crate) fn underway(&self) -> Result<Option<Underway>> {
+        if self.merge_head()?.is_some() {
+            return Ok(Some(Underway::Merge));
+        }
+        for (file, kind) in [
+            ("CHERRY_PICK_HEAD", Underway::CherryPick),
+            ("REVERT_HEAD", Underway::Revert),
+        ] {
+            if self.git_dir().join(file).is_file() {
+                return Ok(Some(kind));
+            }
+        }
+        Ok(None)
+    }
+
+    /// A repository path from a path of the API: collection-relative, or repository-relative
+    /// with a leading `/` (the wave-12 convention).
+    pub(crate) fn repo_path(&self, path: &str) -> Result<BString> {
+        match path.strip_prefix('/') {
+            Some(rest) => Scope::new(BString::default()).abs(rest),
+            None => self.scope.abs(path),
+        }
+    }
+
+    /// The API form of a repository path: collection-relative inside the collection,
+    /// repository-relative with a leading `/` outside it.
+    pub(crate) fn api_path(&self, path: &gix::bstr::BStr) -> String {
+        self.scope
+            .rel(path)
+            .unwrap_or_else(|| format!("/{}", path.to_str_lossy()))
+    }
+
+    /// The same repository seen from its work tree root: no collection scope, every file.
+    /// Git actions (wave 14) work on the whole repository.
+    pub(crate) fn whole(&self) -> Result<Self> {
+        let repo = gix::open_opts(&self.workdir, self.options.open())
+            .ctx("cannot open the Git repository")?;
+        Ok(Self {
+            repo,
+            workdir: self.workdir.clone(),
+            root: self.workdir.clone(),
+            scope: Scope::new(BString::default()),
+            options: self.options.clone(),
+        })
+    }
+
+    /// The text of the repository's own `.git/config` (empty if there is none).
+    pub(crate) fn config_text(&self) -> Result<String> {
+        match std::fs::read_to_string(self.repo.common_dir().join("config")) {
+            Ok(text) => Ok(text),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+            Err(e) => Err(fail(format!(
+                "cannot read the repository configuration: {e}"
+            ))),
+        }
+    }
+
+    /// Writes `.git/config` back as `text` (undo of a configuration change).
+    pub(crate) fn write_config_text(&self, text: &str) -> Result<()> {
+        let dir = self.repo.common_dir();
+        let tmp = dir.join("config.rt-tmp");
+        std::fs::write(&tmp, text).ctx("cannot write the repository configuration")?;
+        std::fs::rename(&tmp, dir.join("config")).ctx("cannot write the repository configuration")
+    }
+
     pub(crate) fn clear_merge_state(&self) -> Result<()> {
-        for name in ["MERGE_HEAD", "MERGE_MSG", "MERGE_MODE"] {
+        for name in [
+            "MERGE_HEAD",
+            "MERGE_MSG",
+            "MERGE_MODE",
+            "CHERRY_PICK_HEAD",
+            "REVERT_HEAD",
+        ] {
             match std::fs::remove_file(self.git_dir().join(name)) {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

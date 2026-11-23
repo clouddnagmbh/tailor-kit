@@ -83,6 +83,44 @@ impl Repo {
         }
     }
 
+    /// Sets `remote_ref` on `remote` to `new` (a commit, or an annotated tag object), sending
+    /// what the remote lacks. Fast-forward only for branches; a ref that exists with another
+    /// value is refused for tags.
+    pub(crate) fn push_ref(
+        &self,
+        remote: &str,
+        new: ObjectId,
+        remote_ref: &str,
+        creds: &dyn CredentialSource,
+    ) -> Result<()> {
+        match self.remote_endpoint(remote, true)? {
+            Endpoint::Local(path) => {
+                crate::local::push(&self.repo, &path, &self.options, new, remote_ref)
+            }
+            Endpoint::Http(target) => {
+                crate::http::push(&self.repo, &target, creds, new, remote_ref)
+            }
+        }
+    }
+
+    /// What `remote_ref` is on `remote` when that can be known without the network (a
+    /// repository on this machine): `Some(None)` it does not exist there, `None` unknown.
+    pub(crate) fn remote_ref_offline(
+        &self,
+        remote: &str,
+        remote_ref: &str,
+    ) -> Option<Option<ObjectId>> {
+        let Ok(Endpoint::Local(path)) = self.remote_endpoint(remote, true) else {
+            return None;
+        };
+        let other = crate::local::open(&path, &self.options).ok()?;
+        let found = other.try_find_reference(remote_ref).ok()?;
+        Some(found.and_then(|r| match r.target() {
+            gix::refs::TargetRef::Object(id) => Some(id.to_owned()),
+            gix::refs::TargetRef::Symbolic(_) => None,
+        }))
+    }
+
     /// Pushes the current branch to its upstream; without one to `origin/<branch>`, which
     /// then becomes the upstream. Fast-forward only.
     pub fn push(&self, creds: &dyn CredentialSource) -> Result<()> {
@@ -92,7 +130,7 @@ impl Repo {
         let head = self
             .head_commit()?
             .ok_or_else(|| fail("nothing to push: commit something first"))?;
-        if self.merge_head()?.is_some() {
+        if self.underway()?.is_some() {
             return Err(fail("finish the merge (resolve and commit) before pushing"));
         }
         let (upstream, new_upstream) = match self.upstream()? {
@@ -136,7 +174,7 @@ impl Repo {
         creds: &dyn CredentialSource,
         fallback: Option<&GitIdentity>,
     ) -> Result<GitPullResult> {
-        if self.merge_head()?.is_some() {
+        if self.underway()?.is_some() {
             return Err(fail(
                 "finish the merge (resolve and commit) before pulling again",
             ));

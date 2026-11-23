@@ -69,9 +69,11 @@ impl Repo {
         if message.is_empty() {
             return Err(fail("the commit message is empty"));
         }
-        let merging = self.merge_head()?;
+        // A merge, cherry-pick or revert that stopped on conflicts; only a merge adds a parent.
+        let underway = self.underway()?.is_some();
+        let merge_parent = self.merge_head()?;
         let mut index = self.load_index()?;
-        if merging.is_some() {
+        if underway {
             // A conflicted file that is committed counts as resolved with its working-tree
             // content (like `git add`); all others must be resolved first.
             let selected = paths
@@ -92,7 +94,7 @@ impl Repo {
         let head = self.head_commit()?;
         let head_tree = self.head_tree()?;
 
-        let base = if merging.is_some() {
+        let base = if underway {
             self.tree_from_index(&index)?
         } else {
             head_tree
@@ -131,13 +133,13 @@ impl Repo {
             }
         }
         let tree = editor.write().ctx("cannot write the tree")?.detach();
-        if merging.is_none() && tree == head_tree {
+        if !underway && tree == head_tree {
             return Err(fail("nothing to commit: the selected files are unchanged"));
         }
         let signature = signature(&identity);
         let mut time = gix::date::parse::TimeBuf::default();
         let sig = signature.to_ref(&mut time);
-        let parents: Vec<ObjectId> = head.into_iter().chain(merging).collect();
+        let parents: Vec<ObjectId> = head.into_iter().chain(merge_parent).collect();
         let id = self
             .repo
             .commit_as(sig, sig, "HEAD", message, tree, parents)
@@ -161,7 +163,7 @@ impl Repo {
             }
         }
         self.write_index(&mut index)?;
-        if merging.is_some() {
+        if underway {
             self.clear_merge_state()?;
         }
         describe(&self.repo, id)

@@ -79,6 +79,13 @@ import Variable from "@lucide/svelte/icons/variable";
 import Workflow from "@lucide/svelte/icons/workflow";
 import X from "@lucide/svelte/icons/x";
 import Zap from "@lucide/svelte/icons/zap";
+import Link from "@lucide/svelte/icons/link";
+import Upload from "@lucide/svelte/icons/upload";
+import FileBraces from "@lucide/svelte/icons/file-braces";
+import WandSparkles from "@lucide/svelte/icons/wand-sparkles";
+import Calendar from "@lucide/svelte/icons/calendar";
+import ShieldCheck from "@lucide/svelte/icons/shield-check";
+import Braces from "@lucide/svelte/icons/braces";
 
 /** Every semantic icon name, grouped: the "New…" set (`NEW_ICONS`), Git, then general UI. */
 export const ICONS = {
@@ -158,6 +165,14 @@ export const ICONS = {
   user: User,
   code: Code,
   variable: Variable,
+  // OpenAPI wizard
+  link: Link,
+  upload: Upload,
+  spec: FileBraces,
+  generate: WandSparkles,
+  calendar: Calendar,
+  "spec-ok": ShieldCheck,
+  json: Braces,
 } satisfies Record<string, Component<Record<string, unknown>>>;
 
 export type IconName = keyof typeof ICONS;

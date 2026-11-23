@@ -16,7 +16,7 @@
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
 import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
-import { mockGitActions } from "./mock-git-actions";
+import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitGraph } from "./mock-git-graph";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
@@ -40,6 +40,19 @@ interface Commit {
   author: string;
   time: number;
 }
+
+export type MockGitScenario =
+  | "none"
+  | "clean"
+  | "conflict"
+  | "empty"
+  | "no-remote"
+  | "unpublished"
+  | "ahead"
+  | "behind"
+  | "diverged"
+  | "detached"
+  | "showcase";
 
 export const MOCK_REMOTE_URL = "https://git.example.com/acme/demo-api.git";
 export const MOCK_REMOTE_HOST = "git.example.com";
@@ -164,12 +177,27 @@ export class MockGit implements GitApi {
   private store = new Map<string, Commit>();
   private branchesMap = new Map<string, string | null>();
   private current: string | null = "main";
+  /** The commit `HEAD` points to while it is on no branch (`current` is then `null`). */
+  private detachedAt: string | null = null;
+  /** Tags: name → commit, and the message of annotated ones. */
+  private tagsMap = new Map<string, { oid: string; message: string | null }>();
   private tracking = new Set<string>();
   /** `refs/remotes/origin/*` as last fetched. */
   private fetched = new Map<string, string>();
   /** The server's branches. */
   private remote: Map<string, string> | null = new Map();
   private mergeHead: string | null = null;
+  // Wave 14 (strand G, used by mock-git-actions.ts): what the merge in progress is, the base of
+  // a pick/revert and its commit message; remotes by name; tags on the server; parked changes;
+  // the action journal and the backup refs.
+  private mergeKind: "merge" | "cherry-pick" | "revert" | null = null;
+  private mergeBaseOid: string | null = null;
+  private mergeMessage: string | null = null;
+  private remoteUrls = new Map<string, string>();
+  private remoteTags = new Set<string>();
+  private stashList: MockStash[] = [];
+  private journal: MockJournalEntry[] = [];
+  private backups = new Map<string, string>();
   private conflicts = new Set<string>();
   private counter = 0;
   private who: GitIdentity | null = null;
@@ -205,16 +233,29 @@ export class MockGit implements GitApi {
 
   /** Resets to a known state. `none`: not a repository. `clean`: one commit, in sync with
    *  origin. `conflict`: a local and a remote commit both change `health.yml`, so the next
-   *  pull stops with a conflict. */
-  scenario(name: "none" | "clean" | "conflict"): void {
+   *  pull stops with a conflict. Wave 14 (the Git panel's states): `empty` (a repository
+   *  without commits), `no-remote`, `unpublished` (a remote, the branch not on it), `ahead`,
+   *  `behind` (fetched already), `diverged`, `detached` (HEAD on the first commit) and
+   *  `showcase` (branches, a merge, a tag, ahead by 2 and three changed files). */
+  scenario(name: MockGitScenario): void {
     this.started = true;
     this.store.clear();
     this.branchesMap.clear();
+    this.tagsMap.clear();
+    this.detachedAt = null;
     this.tracking.clear();
     this.fetched.clear();
     this.mergeHead = null;
+    this.mergeKind = null;
+    this.mergeBaseOid = null;
+    this.mergeMessage = null;
     this.conflicts.clear();
     this.counter = 0;
+    this.remoteUrls.clear();
+    this.remoteTags.clear();
+    this.stashList = [];
+    this.journal = [];
+    this.backups.clear();
     if (!this.host && this.own.size === 0) {
       this.own.set("health.yml", { ...blank("Health"), url: "{{baseUrl}}/health" });
     }
@@ -229,6 +270,7 @@ export class MockGit implements GitApi {
     const first = this.newCommit([], clone(this.work), "Initial collection", "Demo Author");
     this.branchesMap.set("main", first);
     this.remote = new Map([["main", first]]);
+    this.remoteUrls.set("origin", MOCK_REMOTE_URL);
     this.fetched.set("main", first);
     this.tracking.add("main");
     if (name === "conflict") {
@@ -241,6 +283,102 @@ export class MockGit implements GitApi {
       tree.set(path, clone(ours));
       this.branchesMap.set("main", this.newCommit([first], tree, "Local change to health", "Demo Author"));
     }
+    this.wave14Scenario(name, first);
+  }
+
+  /** The wave-14 scenarios on top of `clean` (`first`: its commit). */
+  private wave14Scenario(name: MockGitScenario, first: string): void {
+    const base = (path: string) => this.work.get(path) ?? blank(path);
+    const edit = (path: string, change: Partial<RequestSpec>) => ({ [path]: { ...base(path), ...change } });
+    switch (name) {
+      case "empty":
+        this.store.clear();
+        this.branchesMap.clear();
+        this.remote = null;
+        this.remoteUrls.clear();
+        this.fetched.clear();
+        this.tracking.clear();
+        return;
+      case "no-remote":
+        this.remote = null;
+        this.remoteUrls.clear();
+        this.fetched.clear();
+        this.tracking.clear();
+        return;
+      case "unpublished":
+        this.branchesMap.set("feature/login", first);
+        this.current = "feature/login";
+        return;
+      case "ahead":
+        this.localCommit(edit("health.yml", { url: "{{baseUrl}}/healthz" }), "Use the new health URL", "Ada Lovelace");
+        return;
+      case "behind":
+        this.remoteCommit(edit("health.yml", { url: "{{baseUrl}}/health/v2" }), "Health check v2");
+        this.remoteCommit(edit("users/list-users.yml", { url: "{{baseUrl}}/users?page=1&size=20" }), "Page size for users");
+        this.fetched.set("main", this.remote!.get("main")!);
+        return;
+      case "diverged":
+        this.localCommit(edit("health.yml", { url: "{{baseUrl}}/healthz" }), "Use the new health URL", "Ada Lovelace");
+        this.remoteCommit(edit("users/list-users.yml", { url: "{{baseUrl}}/users?page=1&size=20" }), "Page size for users");
+        this.fetched.set("main", this.remote!.get("main")!);
+        return;
+      case "detached":
+        this.localCommit(edit("health.yml", { url: "{{baseUrl}}/healthz" }), "Use the new health URL", "Ada Lovelace");
+        this.remote!.set("main", this.branchesMap.get("main")!);
+        this.fetched.set("main", this.branchesMap.get("main")!);
+        this.current = null;
+        this.detachedAt = first;
+        this.moveWork(this.store.get(this.branchesMap.get("main")!)!.tree, this.store.get(first)!.tree);
+        return;
+      case "showcase": {
+        const users = this.localCommit(
+          edit("users/create-user.yml", { headers: [{ name: "Content-Type", value: "application/json", enabled: true }] }),
+          "Send JSON when creating users",
+          "Grace Hopper",
+        );
+        this.branchesMap.set("feature/auth", users);
+        this.current = "feature/auth";
+        this.localCommit(edit("users/list-users.yml", { auth: { type: "bearer", token: "{{token}}" } }), "Bearer token for listing users", "Linus Torvalds");
+        const auth = this.localCommit(edit("users/create-user.yml", { url: "{{baseUrl}}/v2/users" }), "Move user creation to v2", "Linus Torvalds");
+        this.current = "main";
+        this.moveWork(this.store.get(auth)!.tree, this.store.get(users)!.tree);
+        this.localCommit(edit("health.yml", { url: "{{baseUrl}}/healthz" }), "Use the new health URL", "Ada Lovelace");
+        const mainTip = this.branchesMap.get("main")!;
+        const merged = clone(this.store.get(mainTip)!.tree);
+        for (const [p, spec] of this.store.get(auth)!.tree) if (!same(this.store.get(users)!.tree.get(p), spec)) merged.set(p, clone(spec));
+        const merge = this.newCommit([mainTip, auth], merged, "Merge feature/auth into main", "Ada Lovelace");
+        this.branchesMap.set("main", merge);
+        this.moveWork(this.store.get(mainTip)!.tree, merged);
+        this.tagsMap.set("v1.0", { oid: merge, message: "First release" });
+        this.remote!.set("main", merge);
+        this.remote!.set("feature/auth", auth);
+        this.fetched.set("main", merge);
+        this.fetched.set("feature/auth", auth);
+        this.localCommit(edit("users/list-users.yml", { url: "{{baseUrl}}/users?page=1&size=50" }), "Bigger pages for users", "Ada Lovelace");
+        this.localCommit(edit("demo/large.yml", { name: "Large response (100 MB)" }), "Clearer name for the large response", "Grace Hopper");
+        // Three changes in the working tree: modified, new, deleted.
+        this.writeWork("health.yml", { ...base("health.yml"), method: "HEAD" });
+        this.writeWork("users/delete-user.yml", { ...blank("Delete user"), method: "DELETE", url: "{{baseUrl}}/users/{{id}}" });
+        this.writeWork("demo/blocked.yml", undefined);
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /** A commit of `files` on the current branch, written to the working tree too. */
+  private localCommit(files: Record<string, RequestSpec | null>, message: string, author: string): string {
+    const parent = this.head();
+    const tree: Tree = parent ? clone(this.store.get(parent)!.tree) : new Map();
+    for (const [p, spec] of Object.entries(files)) {
+      if (spec) tree.set(p, clone(spec));
+      else tree.delete(p);
+      this.writeWork(p, spec ?? undefined);
+    }
+    const oid = this.newCommit(parent ? [parent] : [], tree, message, author);
+    this.branchesMap.set(this.current!, oid);
+    return oid;
   }
 
   /** A commit on the remote's `branch` (another person's push). `null` deletes a file. */
@@ -280,7 +418,7 @@ export class MockGit implements GitApi {
   }
 
   private head(): string | null {
-    return this.current ? (this.branchesMap.get(this.current) ?? null) : null;
+    return this.current ? (this.branchesMap.get(this.current) ?? null) : this.detachedAt;
   }
 
   private headTree(): Tree {
@@ -323,6 +461,11 @@ export class MockGit implements GitApi {
 
   private requireRepo(): void {
     if (!this.isRepo) throw err("The collection is not in a Git repository.");
+  }
+
+  /** Unsaved edits in the app (none without a host). */
+  private async dirtyFiles(): Promise<string[]> {
+    return this.host ? this.host.dirty() : [];
   }
 
   private async requireSaved(what: string): Promise<void> {
@@ -377,6 +520,7 @@ export class MockGit implements GitApi {
     if (name === "HEAD") oid = this.head();
     else if (this.branchesMap.has(name)) oid = this.branchesMap.get(name) ?? null;
     else if (name.startsWith("origin/")) oid = this.fetched.get(name.slice("origin/".length)) ?? null;
+    else if (this.tagsMap.has(name)) oid = this.tagsMap.get(name)!.oid;
     else if (/^[0-9a-f]{4,40}$/.test(name)) {
       const hits = [...this.store.keys()].filter((o) => o.startsWith(name));
       oid = hits.length === 1 ? hits[0] : null;
@@ -453,6 +597,9 @@ export class MockGit implements GitApi {
     branches: { name: string; oid: string | null }[];
     remote: { name: string; oid: string }[];
     current: string | null;
+    /** Additive (wave 14, strand G): tags and the detached `HEAD`. */
+    tags: { name: string; oid: string; message: string | null }[];
+    detached: string | null;
   } {
     this.start();
     return {
@@ -466,6 +613,8 @@ export class MockGit implements GitApi {
       branches: [...this.branchesMap].map(([name, oid]) => ({ name, oid })),
       remote: [...this.fetched].map(([name, oid]) => ({ name: `origin/${name}`, oid })),
       current: this.current,
+      tags: [...this.tagsMap].map(([name, t]) => ({ name, ...t })),
+      detached: this.detachedAt,
     };
   }
 
@@ -487,7 +636,7 @@ export class MockGit implements GitApi {
   mergeCommits(): { ours: string; theirs: string; base: string | null } | null {
     const ours = this.head();
     if (!this.mergeHead || !ours) return null;
-    return { ours, theirs: this.mergeHead, base: this.baseOf(ours, this.mergeHead) };
+    return { ours, theirs: this.mergeHead, base: this.mergeKind && this.mergeKind !== "merge" ? this.mergeBaseOid : this.baseOf(ours, this.mergeHead) };
   }
 
   async show(rev: string, path: string): Promise<string | null> {
@@ -559,10 +708,14 @@ export class MockGit implements GitApi {
     const unchanged =
       tree.size === this.headTree().size && [...tree].every(([p, s]) => same(s, this.headTree().get(p)));
     if (unchanged && !this.mergeHead) throw err("The selected files have no changes to commit.");
-    const parents = [...(head ? [head] : []), ...(this.mergeHead ? [this.mergeHead] : [])];
+    const twoParents = this.mergeHead && (this.mergeKind ?? "merge") === "merge";
+    const parents = [...(head ? [head] : []), ...(twoParents ? [this.mergeHead!] : [])];
     const oid = this.newCommit(parents, tree, message, this.who.name);
     this.branchesMap.set(this.current!, oid);
     this.mergeHead = null;
+    this.mergeKind = null;
+    this.mergeBaseOid = null;
+    this.mergeMessage = null;
     return this.toCommit(oid);
   }
 
@@ -609,6 +762,7 @@ export class MockGit implements GitApi {
     this.guardLocal(this.headTree(), to, "switch branches");
     this.moveWork(this.headTree(), to);
     this.current = name;
+    this.detachedAt = null;
   }
 
   async createBranch(name: string, checkout: boolean): Promise<void> {
@@ -623,7 +777,10 @@ export class MockGit implements GitApi {
     const head = this.head();
     if (!head && !checkout) throw err("Commit something first: a new repository has no commit to branch from.");
     if (head) this.branchesMap.set(n, head);
-    if (checkout) this.current = n;
+    if (checkout) {
+      this.current = n;
+      this.detachedAt = null;
+    }
   }
 
   async push(): Promise<void> {
@@ -702,7 +859,7 @@ export class MockGit implements GitApi {
     this.start();
     if (!this.mergeHead) throw err("No merge is in progress.");
     const ours = this.head()!;
-    const b = this.baseOf(ours, this.mergeHead);
+    const b = this.mergeKind && this.mergeKind !== "merge" ? this.mergeBaseOid : this.baseOf(ours, this.mergeHead);
     const text = (oid: string | null) => {
       const spec = oid ? this.store.get(oid)!.tree.get(path) : undefined;
       return spec ? renderSpec(spec) : null;
@@ -728,6 +885,7 @@ export class MockGit implements GitApi {
     this.current = "main";
     this.branchesMap.clear();
     this.remote = null;
+    this.remoteUrls.clear();
   }
 
   /** What the "Choose folder…" picker returns; `undefined` removes the picker (browser-like). */

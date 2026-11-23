@@ -14,7 +14,10 @@ use rt_app::git::actions::GitBlockReason;
 use wizard::*;
 
 fn have_git() -> bool {
-    std::process::Command::new("git").arg("--version").output().is_ok()
+    std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_ok()
 }
 
 #[test]
@@ -27,7 +30,13 @@ fn amends_the_message_and_keeps_parents_and_author() {
     let p = plan(&f.repo(), &action);
     assert!(p.blocked.is_none(), "{:?}", p.blocked);
     assert!(p.backup && p.undoable && !p.destructive);
-    assert!(p.steps.iter().any(|s| s.contains("second") && s.contains("secnd")), "{:?}", p.steps);
+    assert!(
+        p.steps
+            .iter()
+            .any(|s| s.contains("second") && s.contains("secnd")),
+        "{:?}",
+        p.steps
+    );
     assert_eq!(p.refs.len(), 1);
     assert_eq!(p.refs[0].name, "refs/heads/main");
     assert_eq!(p.refs[0].before.as_deref(), Some(old.as_str()));
@@ -42,7 +51,10 @@ fn amends_the_message_and_keeps_parents_and_author() {
     assert!(!r.reload);
     assert_eq!(entry.action, "amend");
     assert_eq!(entry.backups.len(), 1);
-    assert_eq!(ref_id(f.dir(), &entry.backups[0]).as_deref(), Some(old.as_str()));
+    assert_eq!(
+        ref_id(f.dir(), &entry.backups[0]).as_deref(),
+        Some(old.as_str())
+    );
     let after = f.repo().commit_info("HEAD").unwrap();
     assert_ne!(after.oid, old);
     assert_eq!(after.message.trim(), "second");
@@ -61,7 +73,10 @@ fn amends_the_current_content_of_the_files_named_only() {
     let f = fixture("amend-files");
     f.commit("second", &[("notes.txt", "two\n")]);
     f.write("notes.txt", "three\n");
-    f.write("users/get.yml", &request("POST", "https://api.test/users/1"));
+    f.write(
+        "users/get.yml",
+        &request("POST", "https://api.test/users/1"),
+    );
     f.write("loose.txt", "untracked\n");
     let action = act(r#"{"action":"amend","paths":["/notes.txt","/loose.txt"]}"#);
     let p = plan(&f.repo(), &action);
@@ -71,15 +86,28 @@ fn amends_the_current_content_of_the_files_named_only() {
     let entry = r.undo.unwrap();
     let info = f.repo().commit_info("HEAD").unwrap();
     assert_eq!(info.message.trim(), "second", "the message stays");
-    assert_eq!(f.repo().show("HEAD", "/notes.txt").unwrap().as_deref(), Some("three\n"));
-    assert_eq!(f.repo().show("HEAD", "/loose.txt").unwrap().as_deref(), Some("untracked\n"));
+    assert_eq!(
+        f.repo().show("HEAD", "/notes.txt").unwrap().as_deref(),
+        Some("three\n")
+    );
+    assert_eq!(
+        f.repo().show("HEAD", "/loose.txt").unwrap().as_deref(),
+        Some("untracked\n")
+    );
     assert_eq!(
         f.repo().show("HEAD", "/users/get.yml").unwrap().unwrap(),
         request("GET", "https://api.test/users/1"),
         "files not named stay as they were committed"
     );
     // The rest still shows as a change; the files are untouched.
-    let left: Vec<String> = f.repo().status().unwrap().files.iter().map(|x| x.path.clone()).collect();
+    let left: Vec<String> = f
+        .repo()
+        .status()
+        .unwrap()
+        .files
+        .iter()
+        .map(|x| x.path.clone())
+        .collect();
     assert_eq!(left, vec!["users/get.yml".to_owned()]);
     assert_eq!(f.read("notes.txt"), "three\n");
     if have_git() {
@@ -98,11 +126,17 @@ fn amends_what_the_index_holds() {
     let f = fixture("amend-staged");
     f.commit("second", &[("notes.txt", "two\n")]);
     f.write("notes.txt", "staged\n");
-    f.write("users/get.yml", &request("POST", "https://api.test/users/1"));
+    f.write(
+        "users/get.yml",
+        &request("POST", "https://api.test/users/1"),
+    );
     git(f.dir(), &["add", "notes.txt"]).unwrap();
     let staged_tree = git(f.dir(), &["write-tree"]).unwrap();
     apply(&f.repo(), &act(r#"{"action":"amend","staged":true}"#));
-    assert_eq!(f.repo().commit_info("HEAD").unwrap().tree, staged_tree.trim());
+    assert_eq!(
+        f.repo().commit_info("HEAD").unwrap().tree,
+        staged_tree.trim()
+    );
     let out = git(f.dir(), &["status", "--porcelain"]).unwrap();
     assert_eq!(out.trim(), "M users/get.yml");
 }
@@ -126,7 +160,12 @@ fn refuses_published_commits_and_what_cannot_run() {
     // Unsaved edits matter only when files are taken from disk.
     assert!(f.repo().plan(&a, true).unwrap().blocked.is_none());
     assert_eq!(
-        f.repo().plan(&act(r#"{"action":"amend","paths":["/notes.txt"]}"#), true).unwrap().blocked.unwrap().reason,
+        f.repo()
+            .plan(&act(r#"{"action":"amend","paths":["/notes.txt"]}"#), true)
+            .unwrap()
+            .blocked
+            .unwrap()
+            .reason,
         GitBlockReason::UnsavedChanges
     );
     // Nothing to change.
@@ -139,7 +178,10 @@ fn refuses_published_commits_and_what_cannot_run() {
         Some(GitBlockReason::NothingToDo)
     );
     assert_eq!(
-        reason(&f.repo(), &act(r#"{"action":"amend","paths":["/notes.txt"]}"#)),
+        reason(
+            &f.repo(),
+            &act(r#"{"action":"amend","paths":["/notes.txt"]}"#)
+        ),
         Some(GitBlockReason::NothingToDo)
     );
     assert_eq!(

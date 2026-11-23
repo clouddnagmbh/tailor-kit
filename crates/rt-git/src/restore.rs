@@ -50,14 +50,23 @@ impl Repo {
     // ---- restore files ---------------------------------------------------------------------
 
     /// What restoring `paths` from `rev` changes: path and whether it is deleted.
-    fn restore_hits(&self, cx: &Ctx, rev: ObjectId, paths: &[String]) -> Result<Vec<(String, bool)>> {
+    fn restore_hits(
+        &self,
+        cx: &Ctx,
+        rev: ObjectId,
+        paths: &[String],
+    ) -> Result<Vec<(String, bool)>> {
         let sel = self.selection(paths)?;
         let at = flatten(&self.repo, self.commit_tree(rev)?)?;
         let now = crate::undo::snapshot_tree(&cx.whole)?;
         let now = flatten(&self.repo, now)?;
         let mut out = Vec::new();
         for (path, blob) in &at {
-            if sel.matches(path.as_slice()) && now.get(path).is_none_or(|n| !crate::worktree::same(*n, *blob)) {
+            if sel.matches(path.as_slice())
+                && now
+                    .get(path)
+                    .is_none_or(|n| !crate::worktree::same(*n, *blob))
+            {
                 out.push((path.to_str_lossy().into_owned(), false));
             }
         }
@@ -98,9 +107,13 @@ impl Repo {
             )));
         }
         let deleted = hits.iter().filter(|(_, d)| *d).count();
-        let changed: Vec<_> = hits.iter().filter(|(path, _)| {
-            cx.changes().is_ok_and(|c| c.iter().any(|f| &f.path == path))
-        }).collect();
+        let changed: Vec<_> = hits
+            .iter()
+            .filter(|(path, _)| {
+                cx.changes()
+                    .is_ok_and(|c| c.iter().any(|f| &f.path == path))
+            })
+            .collect();
         p.steps.push(format!(
             "Makes {} the way {} {}.",
             plural_s(hits.len(), "file"),
@@ -130,12 +143,7 @@ impl Repo {
         Ok(p)
     }
 
-    pub(crate) fn run_restore_files(
-        &self,
-        cx: &Ctx,
-        rev: &str,
-        paths: &[String],
-    ) -> Result<Done> {
+    pub(crate) fn run_restore_files(&self, cx: &Ctx, rev: &str, paths: &[String]) -> Result<Done> {
         let at = self.resolve_rev(rev)?;
         let hits = self.restore_hits(cx, at, paths)?;
         let now = crate::undo::snapshot_tree(&cx.whole)?;
@@ -145,11 +153,7 @@ impl Repo {
             let key = BString::from(path.as_str());
             match flat.get(&key) {
                 Some(blob) if !deleted => editor
-                    .upsert(
-                        key.as_bstr(),
-                        crate::commit::entry_kind(blob.mode),
-                        blob.id,
-                    )
+                    .upsert(key.as_bstr(), crate::commit::entry_kind(blob.mode), blob.id)
                     .ctx("cannot build the tree")?,
                 _ => editor.remove(key.as_bstr()).ctx("cannot build the tree")?,
             };
@@ -205,8 +209,7 @@ impl Repo {
                 self.named(to)
             )),
             Some(old) => {
-                p.steps
-                    .push(format!("Moves {name} to {}.", self.named(to)));
+                p.steps.push(format!("Moves {name} to {}.", self.named(to)));
                 let leaving = self.count_hidden(old, &[to])?;
                 if leaving > 0 {
                     p.warnings.push(format!(

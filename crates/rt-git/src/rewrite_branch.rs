@@ -60,7 +60,8 @@ impl Repo {
             )));
         }
         if !summary.trim().is_empty() {
-            p.steps.push(format!("{}.", summary.trim().trim_end_matches('.')));
+            p.steps
+                .push(format!("{}.", summary.trim().trim_end_matches('.')));
         }
         p.steps.push(format!(
             "Replaces {} on {branch} with {}; {branch} then points at {}.",
@@ -115,7 +116,10 @@ impl Repo {
         let new_tree = self.commit_tree(new)?;
         let new_flat = flatten(&self.repo, new_tree)?;
         let now_flat = flatten(&self.repo, now)?;
-        let mut editor = self.repo.edit_tree(new_tree).map_err(|e| fail(format!("cannot build the tree: {e}")))?;
+        let mut editor = self
+            .repo
+            .edit_tree(new_tree)
+            .map_err(|e| fail(format!("cannot build the tree: {e}")))?;
         for f in cx.changes()? {
             let path = BString::from(f.path.as_str());
             if f.state == GitFileState::Untracked

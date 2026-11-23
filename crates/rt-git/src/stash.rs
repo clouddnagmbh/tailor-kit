@@ -182,12 +182,7 @@ impl Repo {
 
     // ---- stash -----------------------------------------------------------------------
 
-    pub(crate) fn plan_stash(
-        &self,
-        cx: &Ctx,
-        mut p: GitPlan,
-        paths: &[String],
-    ) -> Result<GitPlan> {
+    pub(crate) fn plan_stash(&self, cx: &Ctx, mut p: GitPlan, paths: &[String]) -> Result<GitPlan> {
         let sel = self.selection(paths)?;
         let files: Vec<String> = cx
             .changes()?

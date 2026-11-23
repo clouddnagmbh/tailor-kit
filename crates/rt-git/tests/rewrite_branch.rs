@@ -28,7 +28,10 @@ fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
 }
 
 fn have_git() -> bool {
-    std::process::Command::new("git").arg("--version").output().is_ok()
+    std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_ok()
 }
 
 /// Branch `feature` (checked out) with three commits on top of `main`'s "init":
@@ -40,8 +43,17 @@ fn feature(name: &str) -> (Fixture, [String; 3]) {
         &act(r#"{"action":"create-branch","name":"feature","start":"HEAD","switch":true}"#),
     );
     let c1 = f.commit("c1", &[("notes.txt", &NOTES.replacen("one", "ONE", 1))]);
-    let c2 = f.commit("c2", &[("users/new.yml", &request("GET", "https://api.test/new"))]);
-    let c3 = f.commit("c3", &[("notes.txt", &NOTES.replacen("one", "ONE", 1).replacen("ten", "TEN", 1))]);
+    let c2 = f.commit(
+        "c2",
+        &[("users/new.yml", &request("GET", "https://api.test/new"))],
+    );
+    let c3 = f.commit(
+        "c3",
+        &[(
+            "notes.txt",
+            &NOTES.replacen("one", "ONE", 1).replacen("ten", "TEN", 1),
+        )],
+    );
     (f, [c1, c2, c3])
 }
 
@@ -74,7 +86,12 @@ fn drops_a_commit_with_pick_and_rewrite_like_git_would() {
     let repo = f.repo();
     // Replay c3 onto c1: c2 is gone.
     let picked = repo
-        .pick(&GitPickRequest { onto: c1.clone(), commit: c3.clone(), revert: false, mainline: None })
+        .pick(&GitPickRequest {
+            onto: c1.clone(),
+            commit: c3.clone(),
+            revert: false,
+            mainline: None,
+        })
         .unwrap();
     assert!(picked.clean);
     let new3 = rebuilt(&f, &picked.tree, &c1, "c3\n", &c3);
@@ -83,8 +100,18 @@ fn drops_a_commit_with_pick_and_rewrite_like_git_would() {
     let p = plan(&f.repo(), &action);
     assert!(p.blocked.is_none(), "{:?}", p.blocked);
     assert!(p.backup && p.undoable);
-    assert!(p.steps.iter().any(|s| s.contains("Dropped c2")), "{:?}", p.steps);
-    assert!(p.steps.iter().any(|s| s.contains("Replaces 2 commits on feature with 1")), "{:?}", p.steps);
+    assert!(
+        p.steps.iter().any(|s| s.contains("Dropped c2")),
+        "{:?}",
+        p.steps
+    );
+    assert!(
+        p.steps
+            .iter()
+            .any(|s| s.contains("Replaces 2 commits on feature with 1")),
+        "{:?}",
+        p.steps
+    );
     assert_eq!(p.files, paths(&["/users/new.yml"]));
     assert_eq!(p.refs.len(), 1);
     assert_eq!(p.refs[0].before.as_deref(), Some(c3.as_str()));
@@ -98,10 +125,21 @@ fn drops_a_commit_with_pick_and_rewrite_like_git_would() {
     assert!(r.reload);
     assert_eq!(r.message, "Dropped c2.");
     let entry = r.undo.unwrap();
-    assert_eq!(entry.backups.len(), 1, "one backup for the whole rewrite: {:?}", entry.backups);
-    assert_eq!(ref_id(f.dir(), &entry.backups[0]).as_deref(), Some(c3.as_str()));
+    assert_eq!(
+        entry.backups.len(),
+        1,
+        "one backup for the whole rewrite: {:?}",
+        entry.backups
+    );
+    assert_eq!(
+        ref_id(f.dir(), &entry.backups[0]).as_deref(),
+        Some(c3.as_str())
+    );
     assert_eq!(f.repo().rev_parse("feature").unwrap(), new3);
-    assert_eq!(f.repo().status().unwrap().branch.as_deref(), Some("feature"));
+    assert_eq!(
+        f.repo().status().unwrap().branch.as_deref(),
+        Some("feature")
+    );
     assert!(!f.exists("users/new.yml"), "the working files follow");
     assert!(f.repo().status().unwrap().files.is_empty());
     f.repo().undo(&entry.id, false).unwrap();
@@ -120,11 +158,18 @@ fn drops_a_commit_with_pick_and_rewrite_like_git_would() {
                 .env("HOME", twin.path())
                 .output()
                 .unwrap();
-            assert!(o.status.success(), "{args:?}: {}", String::from_utf8_lossy(&o.stderr));
+            assert!(
+                o.status.success(),
+                "{args:?}: {}",
+                String::from_utf8_lossy(&o.stderr)
+            );
             String::from_utf8_lossy(&o.stdout).into_owned()
         };
         g(&["rebase", "--onto", &c1, &c2, "feature"]);
-        assert_eq!(g(&["rev-parse", "HEAD^{tree}"]).trim(), f.repo().commit_info(&new3).unwrap().tree);
+        assert_eq!(
+            g(&["rev-parse", "HEAD^{tree}"]).trim(),
+            f.repo().commit_info(&new3).unwrap().tree
+        );
     }
 }
 
@@ -136,14 +181,23 @@ fn squashes_three_commits_into_one() {
     let squashed = rebuilt(&f, &info.tree, &base, "everything\n", &c3);
     let before = state(f.dir());
     let r = apply(&f.repo(), &rewrite("feature", &squashed));
-    assert_eq!(f.read("notes.txt"), NOTES.replacen("one", "ONE", 1).replacen("ten", "TEN", 1));
+    assert_eq!(
+        f.read("notes.txt"),
+        NOTES.replacen("one", "ONE", 1).replacen("ten", "TEN", 1)
+    );
     assert!(f.exists("users/new.yml"), "same tree: same files");
     assert!(f.repo().status().unwrap().files.is_empty());
     assert_eq!(f.repo().commit_info("feature").unwrap().parents, vec![base]);
     f.repo().undo(&r.undo.unwrap().id, false).unwrap();
     assert_eq!(state(f.dir()), before);
     let p = plan(&f.repo(), &rewrite("feature", &squashed));
-    assert!(p.steps.iter().any(|s| s.contains("Replaces 3 commits on feature with 1")), "{:?}", p.steps);
+    assert!(
+        p.steps
+            .iter()
+            .any(|s| s.contains("Replaces 3 commits on feature with 1")),
+        "{:?}",
+        p.steps
+    );
 }
 
 #[test]
@@ -154,7 +208,13 @@ fn rewrites_a_branch_that_is_not_checked_out_without_touching_files() {
     let a = rewrite("feature", &c1);
     let p = plan(&f.repo(), &a);
     assert!(p.files.is_empty());
-    assert!(p.steps.iter().any(|s| s.contains("Replaces 2 commits on feature with 0")), "{:?}", p.steps);
+    assert!(
+        p.steps
+            .iter()
+            .any(|s| s.contains("Replaces 2 commits on feature with 0")),
+        "{:?}",
+        p.steps
+    );
     let r = apply(&f.repo(), &a);
     assert!(!r.reload);
     assert_eq!(f.repo().rev_parse("feature").unwrap(), c1);
@@ -167,14 +227,21 @@ fn rewrites_a_branch_that_is_not_checked_out_without_touching_files() {
 fn refuses_to_replace_commits_that_are_on_the_remote() {
     let (f, [c1, _, c3]) = feature("rewrite-published");
     // c1 and c2 go to the server; c3 stays local.
-    apply(&f.repo(), &act(r#"{"action":"publish","branch":"feature","remote":"origin"}"#));
+    apply(
+        &f.repo(),
+        &act(r#"{"action":"publish","branch":"feature","remote":"origin"}"#),
+    );
     let tip_before = f.repo().rev_parse("feature").unwrap();
     // c3 is published too now: refused.
     let b = plan(&f.repo(), &rewrite("feature", &c1)).blocked.unwrap();
     assert_eq!(b.reason, GitBlockReason::Published);
     assert!(b.message.contains("server"), "{}", b.message);
     let before = raw_state(f.dir());
-    assert!(f.repo().apply(&rewrite("feature", &c1), &options(false)).is_err());
+    assert!(
+        f.repo()
+            .apply(&rewrite("feature", &c1), &options(false))
+            .is_err()
+    );
     assert_eq!(raw_state(f.dir()), before);
     assert_eq!(f.repo().rev_parse("feature").unwrap(), tip_before);
 
@@ -184,21 +251,36 @@ fn refuses_to_replace_commits_that_are_on_the_remote() {
     let reword = rebuilt(&f, &info.tree, &c3, "c4 reworded\n", &c4);
     assert_eq!(reason(&f.repo(), &rewrite("feature", &reword)), None);
     apply(&f.repo(), &rewrite("feature", &reword));
-    assert_eq!(f.repo().commit_info("feature").unwrap().message.trim(), "c4 reworded");
+    assert_eq!(
+        f.repo().commit_info("feature").unwrap().message.trim(),
+        "c4 reworded"
+    );
 }
 
 #[test]
 fn refuses_what_cannot_run() {
     let (f, [c1, _, c3]) = feature("rewrite-blocked");
     for (json, want) in [
-        (r#"{"action":"rewrite","branch":"nope","tip":"HEAD","summary":""}"#.to_owned(), GitBlockReason::NotFound),
-        (r#"{"action":"rewrite","branch":"feature","tip":"deadbeef","summary":""}"#.to_owned(), GitBlockReason::NotFound),
-        (format!(r#"{{"action":"rewrite","branch":"feature","tip":"{c3}","summary":""}}"#), GitBlockReason::NothingToDo),
+        (
+            r#"{"action":"rewrite","branch":"nope","tip":"HEAD","summary":""}"#.to_owned(),
+            GitBlockReason::NotFound,
+        ),
+        (
+            r#"{"action":"rewrite","branch":"feature","tip":"deadbeef","summary":""}"#.to_owned(),
+            GitBlockReason::NotFound,
+        ),
+        (
+            format!(r#"{{"action":"rewrite","branch":"feature","tip":"{c3}","summary":""}}"#),
+            GitBlockReason::NothingToDo,
+        ),
     ] {
         assert_eq!(reason(&f.repo(), &act(&json)), Some(want), "{json}");
     }
     let a = rewrite("feature", &c1);
-    assert_eq!(f.repo().plan(&a, true).unwrap().blocked.unwrap().reason, GitBlockReason::UnsavedChanges);
+    assert_eq!(
+        f.repo().plan(&a, true).unwrap().blocked.unwrap().reason,
+        GitBlockReason::UnsavedChanges
+    );
     f.write("notes.txt", "local edit\n");
     assert_eq!(reason(&f.repo(), &a), Some(GitBlockReason::LocalChanges));
     // The branch that is not checked out does not care about the files.
@@ -222,7 +304,13 @@ fn keeps_untracked_files_and_the_author_of_rebuilt_commits() {
     let (f, [c1, _, c3]) = feature("rewrite-untracked");
     f.write("loose.txt", "untracked\n");
     let info = f.repo().commit_info(&c3).unwrap();
-    let a = rebuilt(&f, &f.repo().commit_info(&c1).unwrap().tree, &f.repo().rev_parse("main").unwrap(), "squash\n", &c3);
+    let a = rebuilt(
+        &f,
+        &f.repo().commit_info(&c1).unwrap().tree,
+        &f.repo().rev_parse("main").unwrap(),
+        "squash\n",
+        &c3,
+    );
     apply(&f.repo(), &rewrite("feature", &a));
     assert_eq!(f.read("loose.txt"), "untracked\n");
     let now = f.repo().commit_info("feature").unwrap();
@@ -237,7 +325,10 @@ fn fast_forward_to_a_descendant_is_accepted_even_when_published() {
     apply(&f.repo(), &act(r#"{"action":"switch","target":"main"}"#));
     // feature is rewound to c1, then moved forward to c3 again: nothing is dropped.
     apply(&f.repo(), &rewrite("feature", &c1));
-    apply(&f.repo(), &act(r#"{"action":"publish","branch":"feature","remote":"origin"}"#));
+    apply(
+        &f.repo(),
+        &act(r#"{"action":"publish","branch":"feature","remote":"origin"}"#),
+    );
     let p = plan(&f.repo(), &rewrite("feature", &c3));
     assert!(p.blocked.is_none(), "{:?}", p.blocked);
     apply(&f.repo(), &rewrite("feature", &c3));
@@ -265,7 +356,13 @@ fn cherry_pick_takes_a_commit_that_only_exists_as_an_object() {
     let a = act(&format!(r#"{{"action":"cherry-pick","commit":"{loose}"}}"#));
     assert_eq!(reason(&f.repo(), &a), None);
     apply(&f.repo(), &a);
-    assert!(f.repo().commit_info("HEAD").unwrap().message.contains("loose"));
+    assert!(
+        f.repo()
+            .commit_info("HEAD")
+            .unwrap()
+            .message
+            .contains("loose")
+    );
 }
 
 #[test]

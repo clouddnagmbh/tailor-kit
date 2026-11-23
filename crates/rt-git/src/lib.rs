@@ -95,10 +95,10 @@
 //! blame, history search and reflog, strand D the new actions and the plumbing (`pick`,
 //! `write_tree`, `write_commit`), strand F the index operations and signing.
 
-/// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
-mod actions;
 /// Wave 15, strand D: amend, abort, restore and rewrite actions, text conflict result.
 mod abort;
+/// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
+mod actions;
 mod amend;
 mod branch_actions;
 mod cherry_pick;
@@ -115,9 +115,9 @@ mod file_log;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
 mod merge;
-mod plumbing;
 mod net;
 mod pack;
+mod plumbing;
 mod remote;
 mod remotes_admin;
 mod repo;
@@ -128,9 +128,9 @@ mod revert;
 pub mod review;
 /// Wave 12 interface: reading revisions without a checkout.
 mod revisions;
-mod rewrite_branch;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
+mod rewrite_branch;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
 pub mod sign;
 mod stash;

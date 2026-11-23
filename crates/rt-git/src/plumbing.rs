@@ -127,8 +127,15 @@ impl Repo {
         let current = flatten(&self.repo, base)?;
         for file in &write.files {
             let rel = file.path.strip_prefix('/').unwrap_or(&file.path);
-            if rel.is_empty() || rel.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
-                return Err(fail(format!("{:?} is not a path in the repository", file.path)));
+            if rel.is_empty()
+                || rel
+                    .split('/')
+                    .any(|p| p.is_empty() || p == "." || p == "..")
+            {
+                return Err(fail(format!(
+                    "{:?} is not a path in the repository",
+                    file.path
+                )));
             }
             let path = BString::from(rel);
             let existing = current.get(&path).map(|b| b.mode);

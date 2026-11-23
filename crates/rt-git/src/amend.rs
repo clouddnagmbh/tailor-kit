@@ -94,7 +94,12 @@ impl Repo {
             p.stop(cx.unsaved());
         }
         let commit = self.repo.find_commit(head).ctx("cannot read a commit")?;
-        let old_message = commit.decode().ctx("cannot read a commit")?.message.to_str_lossy().into_owned();
+        let old_message = commit
+            .decode()
+            .ctx("cannot read a commit")?
+            .message
+            .to_str_lossy()
+            .into_owned();
         if let Some(m) = message
             && m.trim().is_empty()
         {
@@ -111,7 +116,9 @@ impl Repo {
             )));
         }
         let content = self.amend_tree(cx, paths, staged)?;
-        let new_message = message.map(|m| m.trim()).filter(|m| *m != old_message.trim());
+        let new_message = message
+            .map(|m| m.trim())
+            .filter(|m| *m != old_message.trim());
         if content.is_none() && new_message.is_none() {
             p.undoable = false;
             return Ok(p.blocked_by(block(
@@ -125,10 +132,16 @@ impl Repo {
         }
         let mut what = Vec::new();
         if let Some(m) = new_message {
-            what.push(format!("the message \"{}\"", m.lines().next().unwrap_or("")));
+            what.push(format!(
+                "the message \"{}\"",
+                m.lines().next().unwrap_or("")
+            ));
         }
         if let Some((_, files)) = &content {
-            what.push(format!("the current content of {}", plural_s(files.len(), "file")));
+            what.push(format!(
+                "the current content of {}",
+                plural_s(files.len(), "file")
+            ));
         }
         p.steps.push(format!(
             "Replaces the last commit {} on {cur} with a new one that has {}. Its author and place in history stay.",

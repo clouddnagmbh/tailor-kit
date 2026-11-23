@@ -10,10 +10,14 @@
     /** Accessible name and tooltip for icon-only options. */
     title?: string;
     disabled?: boolean;
+    /** Rendered as `data-testid` on this segment's button. */
+    testid?: string;
   }
 </script>
 
 <script lang="ts">
+  import type { HTMLAttributes } from "svelte/elements";
+
   import Icon from "./Icon.svelte";
   import { rove } from "./roving";
   import { tooltip } from "./tooltip";
@@ -24,12 +28,15 @@
     label,
     size = "md",
     onchange,
-  }: {
+    class: className = "",
+    ...rest
+  }: Omit<HTMLAttributes<HTMLDivElement>, "class" | "onchange" | "children"> & {
     options: SegmentOption[];
     value: string;
     label: string;
     size?: "sm" | "md";
     onchange?: (value: string) => void;
+    class?: string;
   } = $props();
 
   const buttons: HTMLButtonElement[] = $state([]);
@@ -58,11 +65,12 @@
   }
 </script>
 
-<div class="rt-segmented {size}" role="radiogroup" aria-label={label} tabindex="-1" {onkeydown}>
+<div {...rest} class="rt-segmented {size} {className}" role="radiogroup" aria-label={label} tabindex="-1" {onkeydown}>
   {#each options as o, i (o.value)}
     <button
       bind:this={buttons[i]}
       type="button"
+      data-testid={o.testid}
       role="radio"
       aria-checked={value === o.value}
       aria-label={o.label ? undefined : o.title}

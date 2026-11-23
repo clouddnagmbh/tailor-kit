@@ -30,13 +30,14 @@ Distributions import the same names from `@requesttailor/ui`.
 | A setting that applies at once | `Switch` | |
 | A choice submitted later, multi-select | `Checkbox` | `indeterminate` for "some". |
 | Text input | `TextField`, `TextArea` | Code and bodies stay in CodeMirror. |
-| Counts, Git status, methods, "Pro" | `Badge` | `kind="count" | "status" | "method" | "label"`. |
+| Counts, Git status, methods, "Pro" | `Badge` | `kind="count" | "status" | "method" | "label"`; `status` with `long` shows the word. |
 | Filters, refs, environments | `Chip` | `caret` as a Dropdown trigger, `onremove` for filters. |
 | A titled group in a panel | `Section` | `collapsible` for long sidebars. |
 | A raised block or a choice tile | `Card` | `onclick` makes it a tile (no `actions` then). |
 | A note across a view | `Banner` | info, ok, warn, danger; `dismissible`. |
 | Nothing to show yet | `EmptyState` | Icon, what is missing, one sentence, ≤ 2 actions. |
 | Waiting, shape unknown / known | `Spinner` / `Skeleton` | Buttons have `loading`. |
+| Progress of a long task | `Progress` | `value`/`max` or indeterminate; `label` required (aria). |
 | A shortcut | `Kbd keys="Mod+Enter"` | Mod is ⌘ on macOS, Ctrl elsewhere. |
 | A person | `Avatar name="…"` | Initials, stable colour, never remote images. |
 | A hint on hover/focus | `use:tooltip={"Text"}` or `Tooltip` | Not for essential information. |
@@ -76,6 +77,8 @@ Distributions import the same names from `@requesttailor/ui`.
 - Do use plain words ("Park changes", "Bring in changes") with the Git glossary.
 - Don't style `<button>` yourself or add colours in hex; if a token is missing,
   add it to `tokens.css` (both palettes; the test checks contrast).
+- Do pass `data-testid` and `aria-*` straight to `Badge`, `Card`, `Banner`, `EmptyState` and
+  `SegmentedControl` (a `class` adds to theirs); a `SegmentOption` takes `testid`.
 - Don't nest interactive elements (no buttons in a clickable `Card`).
 - Don't change a feature component's look while touching it for something else;
   move it to the primitives on purpose.

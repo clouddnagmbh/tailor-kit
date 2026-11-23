@@ -6,6 +6,8 @@
      - `kind="method"`: an HTTP method (GET, POST, …), also GRPC, WS, GQL;
      - `kind="label"` (default): a word such as "Pro", "New", "Beta", in a `tone`. -->
 <script lang="ts">
+  import type { HTMLAttributes } from "svelte/elements";
+
   type Tone = "neutral" | "accent" | "info" | "ok" | "warn" | "danger";
 
   let {
@@ -15,7 +17,10 @@
     max = 99,
     solid = false,
     title,
-  }: {
+    long = false,
+    class: className = "",
+    ...rest
+  }: Omit<HTMLAttributes<HTMLSpanElement>, "class" | "title" | "children"> & {
     kind?: "count" | "status" | "method" | "label";
     value: string | number;
     tone?: Tone;
@@ -23,6 +28,9 @@
     /** Filled background (counts on a tab, "Pro" on a tile). */
     solid?: boolean;
     title?: string;
+    /** `kind="status"`: the word ("Added") instead of the letter. */
+    long?: boolean;
+    class?: string;
   } = $props();
 
   const STATUS: Record<string, [Tone, string]> = {
@@ -35,8 +43,14 @@
   };
   const METHODS = ["get", "post", "put", "patch", "delete"];
 
-  const text = $derived(kind === "count" && typeof value === "number" && value > max ? `${max}+` : String(value));
   const status = $derived(kind === "status" ? (STATUS[String(value).toUpperCase()] ?? ["neutral", String(value)]) : null);
+  const text = $derived(
+    status && long
+      ? status[1]
+      : kind === "count" && typeof value === "number" && value > max
+        ? `${max}+`
+        : String(value),
+  );
   const effectiveTone = $derived(status ? status[0] : tone);
   const method = $derived(
     kind === "method" ? (METHODS.includes(String(value).toLowerCase()) ? String(value).toLowerCase() : "other") : null,
@@ -44,11 +58,13 @@
 </script>
 
 {#if method}
-  <span class="rt-badge method m-{method}" title={title ?? text}>{text.toUpperCase()}</span>
+  <span {...rest} class="rt-badge method m-{method} {className}" title={title ?? text}>{text.toUpperCase()}</span>
 {:else}
   <span
-    class="rt-badge {kind} t-{effectiveTone}"
+    {...rest}
+    class="rt-badge {kind} t-{effectiveTone} {className}"
     class:solid
+    class:long={status && long}
     title={title ?? status?.[1]}
     aria-label={status ? status[1] : undefined}>{text}</span
   >
@@ -78,6 +94,11 @@
     width: 18px;
     padding: 0;
     font-family: var(--rt-font-mono);
+  }
+  .status.long {
+    width: auto;
+    padding: 0 var(--rt-space-3);
+    font-family: var(--rt-font-ui);
   }
   .t-neutral {
     background: var(--rt-surface-sunken);

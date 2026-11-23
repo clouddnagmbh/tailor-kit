@@ -4,6 +4,7 @@
      button. Danger is announced (role="alert"), the rest politely (role="status"). -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
 
   import Icon from "./Icon.svelte";
   import type { IconName } from "./icons";
@@ -17,7 +18,9 @@
     ondismiss,
     actions,
     children,
-  }: {
+    class: className = "",
+    ...rest
+  }: Omit<HTMLAttributes<HTMLDivElement>, "class" | "title" | "children"> & {
     tone?: "info" | "ok" | "warn" | "danger";
     title?: string;
     icon?: IconName | (string & {});
@@ -26,6 +29,7 @@
     ondismiss?: () => void;
     actions?: Snippet;
     children?: Snippet;
+    class?: string;
   } = $props();
 
   const ICON = { info: "info", ok: "success", warn: "warning", danger: "error" } as const;
@@ -33,7 +37,7 @@
 </script>
 
 {#if !hidden}
-  <div class="rt-banner {tone}" role={tone === "danger" ? "alert" : "status"}>
+  <div {...rest} class="rt-banner {tone} {className}" role={tone === "danger" ? "alert" : "status"}>
     <Icon name={icon ?? ICON[tone]} class="lead" />
     <div class="content">
       {#if title}<div class="title">{title}</div>{/if}

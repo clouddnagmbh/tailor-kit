@@ -4,6 +4,7 @@
      sentence on why or what to do, and at most two actions. Never a bare "No data". -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
 
   import Icon from "./Icon.svelte";
   import type { IconName } from "./icons";
@@ -15,17 +16,20 @@
     size = "md",
     actions,
     children,
-  }: {
+    class: className = "",
+    ...rest
+  }: Omit<HTMLAttributes<HTMLDivElement>, "class" | "title" | "children"> & {
     icon?: IconName | (string & {});
     title: string;
     text?: string;
     size?: "sm" | "md";
     actions?: Snippet;
     children?: Snippet;
+    class?: string;
   } = $props();
 </script>
 
-<div class="rt-empty {size}">
+<div {...rest} class="rt-empty {size} {className}">
   {#if icon}
     <div class="icon"><Icon name={icon} size="lg" /></div>
   {/if}

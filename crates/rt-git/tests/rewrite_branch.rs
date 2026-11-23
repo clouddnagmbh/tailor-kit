@@ -230,3 +230,49 @@ fn keeps_untracked_files_and_the_author_of_rebuilt_commits() {
     assert_eq!(sig, &info.author);
     assert_ne!(now.committer.time, 0);
 }
+
+#[test]
+fn fast_forward_to_a_descendant_is_accepted_even_when_published() {
+    let (f, [c1, _, c3]) = feature("rewrite-ff");
+    apply(&f.repo(), &act(r#"{"action":"switch","target":"main"}"#));
+    // feature is rewound to c1, then moved forward to c3 again: nothing is dropped.
+    apply(&f.repo(), &rewrite("feature", &c1));
+    apply(&f.repo(), &act(r#"{"action":"publish","branch":"feature","remote":"origin"}"#));
+    let p = plan(&f.repo(), &rewrite("feature", &c3));
+    assert!(p.blocked.is_none(), "{:?}", p.blocked);
+    apply(&f.repo(), &rewrite("feature", &c3));
+    assert_eq!(f.repo().rev_parse("feature").unwrap(), c3);
+}
+
+#[test]
+fn cherry_pick_takes_a_commit_that_only_exists_as_an_object() {
+    let (f, [c1, _, c3]) = feature("pick-loose");
+    apply(&f.repo(), &act(r#"{"action":"switch","target":"main"}"#));
+    let tree = f.repo().commit_info(&c3).unwrap().tree;
+    let loose = f
+        .repo()
+        .write_commit(
+            &GitCommitWrite {
+                tree,
+                parents: vec![c1.clone()],
+                message: "loose\n".into(),
+                author: None,
+                committer: None,
+            },
+            None,
+        )
+        .unwrap();
+    let a = act(&format!(r#"{{"action":"cherry-pick","commit":"{loose}"}}"#));
+    assert_eq!(reason(&f.repo(), &a), None);
+    apply(&f.repo(), &a);
+    assert!(f.repo().commit_info("HEAD").unwrap().message.contains("loose"));
+}
+
+#[test]
+fn file_diff_without_from_on_a_root_commit_shows_the_whole_file() {
+    let f = fixture("diff-root");
+    let root = f.repo().rev_parse("HEAD").unwrap();
+    let d = f.repo().file_diff(None, Some(&root), "/notes.txt").unwrap();
+    assert!(!d.binary);
+    assert!(!d.hunks.is_empty());
+}

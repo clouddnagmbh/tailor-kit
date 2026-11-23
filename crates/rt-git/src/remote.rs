@@ -228,17 +228,120 @@ pub fn repo_name(url: &str) -> Result<String> {
     Ok(name.to_owned())
 }
 
+/// The user's home folder (`HOME`, on Windows `USERPROFILE`).
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|h| !h.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|h| !h.is_empty()))
+        .map(PathBuf::from)
+}
+
+/// Expands a leading `~` or `~/` (also `file://~/…`) against `home`; anything else is
+/// returned unchanged.
+pub fn expand_home(url: &str, home: Option<&Path>) -> Result<String> {
+    let (prefix, rest) = match url.strip_prefix("file://") {
+        Some(r) if r.starts_with('~') => ("file://", r),
+        _ => ("", url),
+    };
+    let tail = if rest == "~" {
+        ""
+    } else if let Some(t) = rest.strip_prefix("~/").or_else(|| rest.strip_prefix("~\\")) {
+        t
+    } else {
+        return Ok(url.to_owned());
+    };
+    let home = home.ok_or_else(|| fail("cannot find your home folder to expand \"~\""))?;
+    let full = if tail.is_empty() {
+        home.to_path_buf()
+    } else {
+        home.join(tail)
+    }
+    .to_string_lossy()
+    .replace('\\', "/");
+    Ok(if prefix.is_empty() {
+        full
+    } else {
+        format!("{prefix}{full}")
+    })
+}
+
+/// Whether `url` names a remote on the network rather than a path on this machine.
+fn is_network(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("file://") {
+        return false;
+    }
+    if lower.contains("://") {
+        return true;
+    }
+    // scp-like `git@host:path`: a colon before any slash, not a Windows drive (`C:\`).
+    match (url.find(':'), url.find(['/', '\\'])) {
+        (Some(c), slash) => c > 1 && slash.is_none_or(|s| c < s),
+        _ => false,
+    }
+}
+
 /// Clones `url` into `<parent>/<repository name>` and checks out the remote's default
-/// branch. Refuses if that folder exists and is not empty. Returns the new folder.
+/// branch. `url` is an HTTPS URL or a repository on this machine: an absolute path, `~/…`,
+/// `file://…`, or a relative path (to `parent`, else to the home folder); a bare repository
+/// or the folder of a normal one. Refuses if the target folder exists and is not empty.
+/// Returns the new folder.
 pub fn clone(
     url: &str,
     parent: &Path,
     creds: &dyn CredentialSource,
     options: &Options,
 ) -> Result<PathBuf> {
+    clone_with_home(url, parent, home_dir().as_deref(), creds, options)
+}
+
+/// [`clone`] with an explicit home folder (for `~` and relative paths).
+pub fn clone_with_home(
+    url: &str,
+    parent: &Path,
+    home: Option<&Path>,
+    creds: &dyn CredentialSource,
+    options: &Options,
+) -> Result<PathBuf> {
     let url = url.trim();
-    let name = repo_name(url)?;
+    if url.is_empty() {
+        return Err(fail("enter the address or the folder of a repository"));
+    }
     let parent = crate::util::canonical(parent).ctx("cannot open the folder")?;
+    // Validate the source before creating anything.
+    let (url, name) = if is_network(url) {
+        (url.to_owned(), repo_name(url)?)
+    } else {
+        let expanded = expand_home(url, home)?;
+        let Endpoint::Local(path) = endpoint(&expanded, &parent)? else {
+            return Err(fail(format!("cannot read {url:?} as a repository")));
+        };
+        let mut found = crate::util::canonical(&path).ok();
+        if found.is_none()
+            && !Path::new(&expanded).is_absolute()
+            && !url.starts_with("file://")
+            && let Some(home) = home
+        {
+            found = crate::util::canonical(&home.join(&expanded)).ok();
+        }
+        let Some(path) = found else {
+            return Err(fail(format!(
+                "the repository {} does not exist",
+                path.display()
+            )));
+        };
+        // Must be a Git repository: bare, or a working tree.
+        crate::local::open(&path, options)
+            .map_err(|_| fail(format!("{} is not a Git repository", path.display())))?;
+        let named = if path.file_name().is_some_and(|n| n == ".git") {
+            path.parent().unwrap_or(&path)
+        } else {
+            &path
+        };
+        let name = repo_name(&named.to_string_lossy())?;
+        // Forward slashes: Git configuration treats backslashes as escapes.
+        (path.to_string_lossy().replace('\\', "/"), name)
+    };
     let target = parent.join(&name);
     let existed = target.exists();
     if existed {
@@ -252,20 +355,6 @@ pub fn clone(
             )));
         }
     }
-    // Validate the URL before creating anything.
-    let url = match endpoint(url, &parent)? {
-        Endpoint::Local(path) => crate::util::canonical(&path)
-            .map_err(|_| {
-                fail(format!(
-                    "the remote repository {} does not exist",
-                    path.display()
-                ))
-            })?
-            .to_string_lossy()
-            // Forward slashes: Git configuration treats backslashes as escapes.
-            .replace('\\', "/"),
-        Endpoint::Http(_) => url.to_owned(),
-    };
     std::fs::create_dir_all(&target).ctx("cannot create the folder")?;
     let result = clone_into(&url, &target, creds, options);
     if result.is_err() {

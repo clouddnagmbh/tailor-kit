@@ -477,4 +477,37 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn wave_15_actions_round_trip_and_keep_old_json_working() {
+        let cases = [
+            (r#"{"action":"amend","message":"x"}"#, "amend"),
+            (r#"{"action":"amend","paths":["/a.txt"],"staged":false}"#, "amend"),
+            (r#"{"action":"abort"}"#, "abort"),
+            (r#"{"action":"restore-branch","name":"x","target":"HEAD~2"}"#, "restore-branch"),
+            (r#"{"action":"restore-files","rev":"HEAD~1","paths":["/a.txt"]}"#, "restore-files"),
+            (r#"{"action":"rewrite","branch":"b","tip":"abc","summary":"Dropped one"}"#, "rewrite"),
+            (r#"{"action":"stash","message":"m","paths":["/a.txt"]}"#, "stash"),
+        ];
+        for (json, tag) in cases {
+            let a: GitAction = serde_json::from_str(json).unwrap();
+            let back = serde_json::to_value(&a).unwrap();
+            assert_eq!(back["action"], tag, "{json}");
+            assert_eq!(serde_json::from_value::<GitAction>(back).unwrap(), a);
+        }
+        // A stash without paths (waves 14) still parses and serializes without the field.
+        let a: GitAction = serde_json::from_str(r#"{"action":"stash"}"#).unwrap();
+        assert_eq!(
+            a,
+            GitAction::Stash {
+                message: None,
+                paths: Vec::new()
+            }
+        );
+        assert_eq!(serde_json::to_value(&a).unwrap(), serde_json::json!({"action": "stash"}));
+        assert_eq!(
+            serde_json::to_value(GitBlockReason::Published).unwrap(),
+            "published"
+        );
+    }
 }

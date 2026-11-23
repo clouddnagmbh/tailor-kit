@@ -775,3 +775,78 @@ impl Repo {
         self.write_index(&mut index)
     }
 }
+
+impl Repo {
+    /// The merged tree of a computed merge (objects written to the repository it was computed
+    /// on) for `GitApi.pick`: every conflicted path holds our version in it. Also the text
+    /// conflicts (base, ours, theirs) and the paths whose conflicts are not text. Wave 15,
+    /// strand D.
+    pub(crate) fn pick_outcome(
+        &self,
+        mut c: Computed<'_>,
+    ) -> Result<(ObjectId, Vec<GitConflict>, Vec<String>)> {
+        let how = TreatAsUnresolved::git();
+        let mut conflicted: BTreeSet<BString> = BTreeSet::new();
+        for conflict in &c.outcome.conflicts {
+            if conflict.is_unresolved(how) {
+                conflicted.insert(conflict.ours.location().to_owned());
+                conflicted.insert(conflict.theirs.location().to_owned());
+            }
+        }
+        // Files merged on the model are decided by it, not by Git's line merge.
+        for (path, _, fields) in &c.overlay {
+            if *fields {
+                conflicted.insert(path.clone());
+            } else {
+                conflicted.remove(path);
+            }
+        }
+        let tree = c
+            .outcome
+            .tree
+            .write()
+            .ctx("cannot write the merged tree")?
+            .detach();
+        let [base, ours, theirs] = &c.flats;
+        let tree = if conflicted.is_empty() {
+            tree
+        } else {
+            let mut editor = self.repo.edit_tree(tree).ctx("cannot build the tree")?;
+            for p in &conflicted {
+                match ours.get(p) {
+                    Some(blob) => editor
+                        .upsert(p.as_bstr(), crate::commit::entry_kind(blob.mode), blob.id)
+                        .ctx("cannot build the tree")?,
+                    None => editor.remove(p.as_bstr()).ctx("cannot build the tree")?,
+                };
+            }
+            editor.write().ctx("cannot write the tree")?.detach()
+        };
+        let mut texts = Vec::new();
+        let mut other = Vec::new();
+        for p in &conflicted {
+            let path = format!("/{}", p.to_str_lossy());
+            let side = |flat: &Flat| -> Result<Option<Option<String>>> {
+                match flat.get(p) {
+                    None => Ok(Some(None)),
+                    Some(b) if matches!(b.mode, Mode::FILE | Mode::FILE_EXECUTABLE) => {
+                        Ok(String::from_utf8(blob_bytes(&self.repo, b.id)?)
+                            .ok()
+                            .map(Some))
+                    }
+                    Some(_) => Ok(None),
+                }
+            };
+            match (side(base)?, side(ours)?, side(theirs)?) {
+                (Some(base), Some(ours), Some(theirs)) => texts.push(GitConflict {
+                    path,
+                    base,
+                    ours,
+                    theirs,
+                }),
+                _ => other.push(path),
+            }
+        }
+        Ok((tree, texts, other))
+    }
+}

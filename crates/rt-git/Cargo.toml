@@ -28,6 +28,7 @@ gix-pack = { version = "0.77", default-features = false, features = ["generate"]
 # Lets gix send credentials over plain http://; `net` allows that for loopback hosts only.
 gix-transport = { version = "0.62", default-features = false, features = ["http-client-insecure-credentials"] }
 reqwest ={ version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+base64 = "0.22"
 rt-app = { path = "../rt-app" }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }

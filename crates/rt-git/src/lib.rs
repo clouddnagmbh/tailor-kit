@@ -97,6 +97,9 @@
 
 /// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
 mod actions;
+/// Wave 15, strand D: amend, abort, restore and rewrite actions, text conflict result.
+mod abort;
+mod amend;
 mod branch_actions;
 mod cherry_pick;
 pub mod credentials;
@@ -112,16 +115,20 @@ mod file_log;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
 mod merge;
+mod plumbing;
 mod net;
 mod pack;
 mod remote;
 mod remotes_admin;
 mod repo;
+mod resolve_text;
+mod restore;
 mod revert;
 /// Wave 12, strand E: fetching a PR head for review.
 pub mod review;
 /// Wave 12 interface: reading revisions without a checkout.
 mod revisions;
+mod rewrite_branch;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).

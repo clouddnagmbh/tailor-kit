@@ -17,8 +17,9 @@ import { BackendError, type CollectionInfo, type GitApi } from "./backend";
 import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
+import { mockGitFiles } from "./mock-git-files";
 import { mockGitGraph } from "./mock-git-graph";
-import { stubGitHistory, stubGitIndex, stubGitPlumbing, stubGitWorking } from "./wave15-stubs";
+import { stubGitHistory, stubGitIndex, stubGitPlumbing } from "./wave15-stubs";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
@@ -585,6 +586,14 @@ export class MockGit implements GitApi {
     return spec ? clone(spec) : null;
   }
 
+  /** The text of the saved request file `path` in the working tree (`mock-git-files.ts`),
+   *  `null` if there is none. */
+  workText(path: string): string | null {
+    this.start();
+    const spec = this.work.get(path.replace(/^\//, ""));
+    return spec ? renderSpec(spec) : null;
+  }
+
   /** Every request at `rev` as a model, by path. */
   specsAt(rev: string): Map<string, RequestSpec> {
     return clone(this.store.get(this.resolveRev(rev))!.tree);
@@ -636,7 +645,7 @@ export class MockGit implements GitApi {
 
   // Wave 15 (interface): placeholders until strands B (`mock-git-files.ts`), C
   // (`mock-git-history.ts`), D (`mock-git-plumbing.ts`) and F (`mock-git-index.ts`).
-  private wave15Working = stubGitWorking();
+  private wave15Working = mockGitFiles(this);
   private wave15History = stubGitHistory();
   private wave15Plumbing = stubGitPlumbing();
   private wave15Index = stubGitIndex();

@@ -43,11 +43,11 @@ export function initialValues(kind: GitWizardKind, preset: Record<string, unknow
   const values: WizardValues = {
     // `branch` is accepted as an alias of `name` (publish, delete-branch from the graph).
     name: str("name", str("branch")),
-    target: str("target", str("start", kind === "create-branch" || kind === "create-tag" ? "HEAD" : "")),
+    target: str("target", str("start", str(kind === "restore-files" ? "rev" : "tip", kind === "create-branch" || kind === "create-tag" || kind === "restore-files" ? "HEAD" : ""))),
     from: str("from", kind === "rename-branch" ? (ctx.current ?? "") : ""),
     url: str("url"),
     remote: str("remote", "origin"),
-    message: str("message"),
+    message: str("message", str("summary")),
     commit: str("commit"),
     mode: preset.mode === "discard" ? "discard" : "keep-changes",
     switchTo: preset.switch !== false,
@@ -97,7 +97,19 @@ export function toAction(kind: GitWizardKind, v: WizardValues, ctx: WizardContex
     case "set-remote-url":
       return v.remote && v.url.trim() ? { action: "set-remote-url", name: v.remote, url: v.url.trim() } : null;
     case "stash":
-      return v.message.trim() ? { action: "stash", message: v.message.trim() } : { action: "stash" };
+      return { action: "stash", ...(v.message.trim() ? { message: v.message.trim() } : {}), ...(v.paths.length > 0 ? { paths: v.paths } : {}) };
+    case "amend": {
+      const message = v.message.trim();
+      return message || v.paths.length > 0 ? { action: "amend", ...(message ? { message } : {}), ...(v.paths.length > 0 ? { paths: v.paths } : {}) } : null;
+    }
+    case "abort":
+      return { action: "abort" };
+    case "restore-files":
+      return v.paths.length > 0 ? { action: "restore-files", rev: v.target || "HEAD", paths: v.paths } : null;
+    case "restore-branch":
+      return name && v.target ? { action: "restore-branch", name, target: v.target } : null;
+    case "rewrite":
+      return name && v.target ? { action: "rewrite", branch: name, tip: v.target, summary: v.message.trim() } : null;
     case "unstash":
       return { action: "unstash", index: v.index, keep: v.keep };
     case "drop-stash":
@@ -133,7 +145,7 @@ export function toAction(kind: GitWizardKind, v: WizardValues, ctx: WizardContex
 
 /** A name field's problem while typing (before asking the backend). */
 export function nameProblem(kind: GitWizardKind, v: WizardValues): string | null {
-  const named = ["create-branch", "rename-branch", "create-tag", "add-remote", "rename-remote"].includes(kind) || (kind === "detached" && v.choice === "branch");
+  const named = ["create-branch", "rename-branch", "create-tag", "add-remote", "rename-remote", "restore-branch"].includes(kind) || (kind === "detached" && v.choice === "branch");
   if (!named || v.name.trim() === "") return null;
   return refNameProblem(v.name.trim());
 }
@@ -188,6 +200,16 @@ export function confirmLabel(kind: GitWizardKind, plan: GitPlan | null, v: Wizar
       return "Delete tag";
     case "push-tag":
       return "Publish tag";
+    case "amend":
+      return "Change last commit";
+    case "abort":
+      return "Stop and go back";
+    case "restore-files":
+      return `Restore ${plan?.files?.length ?? v.paths.length} ${(plan?.files?.length ?? v.paths.length) === 1 ? "file" : "files"}`;
+    case "restore-branch":
+      return "Bring back";
+    case "rewrite":
+      return "Rewrite branch";
     case "diverged":
       return action?.action === "reset" ? "Take theirs" : "Merge both";
     case "detached":
@@ -209,6 +231,10 @@ export function destructiveQuestion(kind: GitWizardKind, plan: GitPlan): string 
       return `Really delete ${plan.action.name}? ${plan.warnings?.[0] ?? ""}`.trim();
     case "drop-stash":
       return "Really delete these parked changes? Undo can bring them back.";
+    case "abort":
+      return "Really stop and take the changes out of your files? Undo can bring them back as plain changes.";
+    case "restore-files":
+      return `Really replace ${files} ${files === 1 ? "file" : "files"}? The backup keeps what is there now, so Undo can bring it back.`;
     default:
       return kind === "diverged" ? "Really replace your commits with the server's? Undo can bring them back." : "Really do this?";
   }
@@ -275,6 +301,11 @@ export function wizardTerm(kind: GitWizardKind): GitTerm | null {
     detached: "detached",
     clone: "clone",
     undo: "backup",
+    amend: "amend",
+    abort: "abort",
+    "restore-files": "restore",
+    "restore-branch": "restore",
+    rewrite: "rewrite",
   };
   return map[kind] ?? null;
 }

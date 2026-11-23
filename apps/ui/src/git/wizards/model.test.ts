@@ -116,3 +116,34 @@ describe("wizard words", () => {
     }
   });
 });
+
+describe("wave 15 wizards (strand D)", () => {
+  const values = (kind: GitWizardKind, preset: Record<string, unknown>) => initialValues(kind, preset, ctx);
+
+  it("builds the new actions from the presets other views pass", () => {
+    expect(toAction("amend", values("amend", { message: "better" }), ctx)).toEqual({ action: "amend", message: "better" });
+    expect(toAction("amend", values("amend", { paths: ["/a.yml"] }), ctx)).toEqual({ action: "amend", paths: ["/a.yml"] });
+    expect(toAction("amend", values("amend", {}), ctx)).toBeNull();
+    expect(toAction("abort", values("abort", {}), ctx)).toEqual({ action: "abort" });
+    expect(toAction("restore-files", values("restore-files", { rev: "abc", paths: ["/a.yml"] }), ctx)).toEqual({ action: "restore-files", rev: "abc", paths: ["/a.yml"] });
+    expect(toAction("restore-files", values("restore-files", { paths: ["/a.yml"] }), ctx)).toMatchObject({ rev: "HEAD" });
+    expect(toAction("restore-files", values("restore-files", {}), ctx)).toBeNull();
+    expect(toAction("restore-branch", values("restore-branch", { name: "old", target: "abc" }), ctx)).toEqual({ action: "restore-branch", name: "old", target: "abc" });
+    expect(toAction("rewrite", values("rewrite", { branch: "feature", tip: "abc", summary: "Dropped c2" }), ctx)).toEqual({ action: "rewrite", branch: "feature", tip: "abc", summary: "Dropped c2" });
+    expect(toAction("stash", values("stash", { paths: ["/a.yml"] }), ctx)).toEqual({ action: "stash", paths: ["/a.yml"] });
+    expect(toAction("stash", values("stash", {}), ctx)).toEqual({ action: "stash" });
+  });
+
+  it("says what each does, asks before replacing files, and explains its word", () => {
+    expect(confirmLabel("restore-files", plan({ files: ["/a", "/b"] }), values("restore-files", {}))).toBe("Restore 2 files");
+    expect(destructiveQuestion("abort", plan({ action: { action: "abort" }, destructive: true }))).toContain("Undo");
+    expect(destructiveQuestion("restore-files", plan({ action: { action: "restore-files", rev: "HEAD", paths: [] }, files: ["/a"] }))).toContain("1 file");
+    expect(nameProblem("restore-branch", values("restore-branch", { name: "bad name" }))).not.toBeNull();
+    for (const kind of ["amend", "abort", "restore-files", "restore-branch", "rewrite"] as GitWizardKind[]) {
+      const term = wizardTerm(kind);
+      expect(term).not.toBeNull();
+      expect(GLOSSARY[term!].text.length).toBeGreaterThan(10);
+    }
+    expect(wayOut("published")).toBe("none");
+  });
+});

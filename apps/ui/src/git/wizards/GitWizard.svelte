@@ -483,6 +483,31 @@
         {:else if effective === "stash"}
           <!-- svelte-ignore a11y_autofocus -->
           <TextField label="Note (optional)" autofocus placeholder="What you were trying" data-testid="git-wizard-message" bind:value={values.message} />
+          {#if values.paths.length > 0}<p>Only {values.paths.length} {values.paths.length === 1 ? "file or folder" : "files or folders"} will be parked; your other changes stay.</p>{/if}
+        {:else if effective === "amend"}
+          <!-- svelte-ignore a11y_autofocus -->
+          <TextField label="New message (leave empty to keep it)" autofocus data-testid="git-wizard-message" bind:value={values.message} />
+          {#if values.paths.length > 0}<p>The current content of {values.paths.length} {values.paths.length === 1 ? "file" : "files"} goes into the commit.</p>{/if}
+        {:else if effective === "abort"}
+          <p>Your files go back to how they were before it started. Your branch does not move.</p>
+        {:else if effective === "restore-files"}
+          <Select
+            label="Restore from"
+            data-testid="git-wizard-target"
+            bind:value={values.target}
+            options={withValue([{ value: "HEAD", label: "The last commit" }, ...commitOpts], values.target, shortOid)}
+          />
+          <p>{values.paths.length} {values.paths.length === 1 ? "file or folder" : "files or folders"} will match that commit.</p>
+        {:else if effective === "restore-branch"}
+          {@render nameField("feature/login")}
+          <Select
+            label="Point it at"
+            data-testid="git-wizard-target"
+            bind:value={values.target}
+            options={withValue(values.target ? commitOpts : [{ value: "", label: "Choose a commit…" }, ...commitOpts], values.target, shortOid)}
+          />
+        {:else if effective === "rewrite"}
+          <p>{values.message.trim() || "The branch gets new commits in place of the old ones."}</p>
         {:else if effective === "unstash" || effective === "drop-stash"}
           {#if stashes.length === 0}
             <EmptyState icon="stash" title="No parked changes" text="Changes you park appear here until you bring them back." size="sm" />

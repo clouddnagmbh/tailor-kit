@@ -9,6 +9,7 @@
   import type { GitConflict, GitResolution, MergeState } from "../commands/types";
   import MergeFields from "../merge/MergeFields.svelte";
   import { getApp } from "../state/app.svelte";
+  import { getGitViews } from "./views.svelte";
 
   let {
     path,
@@ -22,6 +23,7 @@
     onclose: () => void;
   } = $props();
   const app = getApp();
+  const views = getGitViews();
 
   let conflict = $state<GitConflict | null>(null);
   let error = $state<string | null>(null);
@@ -84,7 +86,10 @@
       </div>
       <h3 class="whole">Or keep one whole version</h3>
     {:else}
-      <p class="hint">Both sides changed this file. Keep one version; you can edit it afterwards.</p>
+      <p class="hint">
+        Both sides changed this file. Keep one version, or
+        <button data-testid="git-resolve-by-hand" onclick={() => { views.open({ kind: "text-merge", path }); onclose(); }}>resolve it line by line</button>.
+      </p>
       {#if blocked}<p class="warn" role="status">{blocked}</p>{/if}
     {/if}
     <div class="sides">

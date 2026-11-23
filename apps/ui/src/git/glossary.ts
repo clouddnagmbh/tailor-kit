@@ -31,7 +31,12 @@ export type GitTerm =
   | "cherry-pick"
   | "reset"
   | "backup"
-  | "clone";
+  | "clone"
+  | "amend"
+  | "abort"
+  | "restore"
+  | "rewrite"
+  | "published";
 
 export interface GitGloss {
   /** The word as the UI shows it ("Park changes" rather than "stash"). */
@@ -69,4 +74,9 @@ export const GLOSSARY: Record<GitTerm, GitGloss> = {
   reset: { label: "Move branch back", git: "reset", text: "Moves the current branch to an earlier commit. The app keeps a backup, so you can undo it." },
   backup: { label: "Backup", git: "refs/requesttailor/backup", text: "Before anything that changes history or your files, the app saves where everything was, so Undo can put it back." },
   clone: { label: "Clone", git: "clone", text: "Copies a repository from a server (or a folder) to this computer, with its whole history." },
+  amend: { label: "Change last commit", git: "commit --amend", text: "Replaces your most recent commit with a new one: a better message, or files you forgot. Only for commits that are not on the server yet." },
+  abort: { label: "Stop and go back", git: "merge --abort", text: "Stops a merge or copy that needs your decision and puts your files back as they were before it started." },
+  restore: { label: "Restore", git: "restore", text: "Takes files, or a deleted branch, back to how they were in an earlier commit. The app keeps a backup of what it replaces." },
+  rewrite: { label: "Rewrite history", git: "rebase", text: "Replaces some of a branch's commits with new ones, for example to drop or combine them. Only for commits that are not on the server yet." },
+  published: { label: "On the server", git: "pushed", text: "Commits that others may have already. Changing them would make their copies disagree with yours, so the app does not." },
 };

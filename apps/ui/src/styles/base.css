@@ -1,8 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 /* Copyright 2026 The RequestTailor Authors */
 
-/* App-wide base styles, loaded by the shell: form controls use the UI font and every
-   focusable element shows a visible focus ring when focused from the keyboard. */
+/* App-wide base styles, loaded by the shell: form controls use the UI font, every focusable
+   element shows a visible focus ring when focused from the keyboard, thin themed scrollbars. */
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
 
 button,
 input,
@@ -13,7 +19,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--rt-focus);
+  outline: var(--rt-focus-width) solid var(--rt-focus);
   outline-offset: 1px;
 }
 
@@ -22,5 +28,35 @@ kbd {
 }
 
 ::selection {
-  background: var(--rt-bg-selected);
+  background: color-mix(in srgb, var(--rt-accent) 26%, transparent);
+}
+
+/* Scrollbars: thin, rounded, quiet until hovered. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rt-scrollbar) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rt-scrollbar);
+  border: 3px solid transparent;
+  border-radius: var(--rt-radius-pill);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--rt-scrollbar-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

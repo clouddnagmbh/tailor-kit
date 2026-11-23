@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AiConfig, AiProviderKind, KEY_COLLECTION, KEY_ENVIRONMENT};
+use super::{AiConfig, AiError, AiProviderKind, KEY_COLLECTION, KEY_ENVIRONMENT};
 use crate::SecretKey;
 
 /// Role names a caller may ask for instead of a profile id.
@@ -125,6 +125,75 @@ impl AiSettings {
         }
     }
 
+    /// Checks what the settings dialog lets through: profile ids (`[a-z0-9-]`, 1 to 32
+    /// characters, unique), each profile's configuration, and that the default and the roles
+    /// name existing profiles.
+    pub fn validate(&self) -> Result<(), AiError> {
+        let bad = |m: String| AiError::Transport(m);
+        for (i, p) in self.profiles.iter().enumerate() {
+            let ok_id = !p.id.is_empty()
+                && p.id.len() <= 32
+                && p.id
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+            if !ok_id {
+                return Err(bad(format!(
+                    "a profile id must be 1 to 32 characters of a-z, 0-9 and -: {}",
+                    p.id
+                )));
+            }
+            if self.profiles[..i].iter().any(|q| q.id == p.id) {
+                return Err(bad(format!("two profiles have the id {}", p.id)));
+            }
+            p.config.validate()?;
+        }
+        let exists = |id: &Option<String>| {
+            id.as_ref()
+                .is_none_or(|id| self.profiles.iter().any(|p| &p.id == id))
+        };
+        if !exists(&self.default_profile) || !exists(&self.roles.fast) || !exists(&self.roles.smart)
+        {
+            return Err(bad(
+                "the default profile and the roles must name existing profiles".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Keeps `previewed` from `old` for the profiles that still send to the same place (same
+    /// provider, model and base URL): a profile that changes where the data goes is a first
+    /// use again. Whatever `previewed` the caller sent is discarded.
+    pub fn carry_previewed(&mut self, old: Option<&AiSettings>) {
+        let same = |p: &AiProfile| {
+            old.is_some_and(|o| {
+                o.previewed.contains(&p.id)
+                    && o.profiles
+                        .iter()
+                        .any(|q| q.id == p.id && q.config == p.config)
+            })
+        };
+        self.previewed = self
+            .profiles
+            .iter()
+            .filter(|p| same(p))
+            .map(|p| p.id.clone())
+            .collect();
+    }
+
+    /// The user confirmed the first-use preview of `profile`.
+    pub fn confirm(&mut self, profile: &str) {
+        if self.profiles.iter().any(|p| p.id == profile)
+            && !self.previewed.iter().any(|p| p == profile)
+        {
+            self.previewed.push(profile.to_owned());
+        }
+    }
+
+    /// The wave-8 view of the settings: the default profile's configuration.
+    pub fn default_config(&self) -> Option<&AiConfig> {
+        self.resolve(None).map(|p| &p.config)
+    }
+
     /// Whether the preview must be shown before a call of `profile`.
     pub fn must_preview(&self, profile: &str) -> bool {
         match self.preview {
@@ -206,7 +275,7 @@ impl AiProviderKind {
         };
         match self {
             AiProviderKind::Anthropic => c(true, true, AiJsonMode::Schema, true, false),
-            AiProviderKind::Openai => c(true, true, AiJsonMode::Schema, true, false),
+            AiProviderKind::Openai => c(true, true, AiJsonMode::Schema, false, false),
             AiProviderKind::AzureOpenai => c(true, true, AiJsonMode::Schema, false, true),
             AiProviderKind::Gemini => c(true, true, AiJsonMode::Schema, true, false),
             AiProviderKind::Mistral => c(true, true, AiJsonMode::Schema, false, false),
@@ -287,6 +356,53 @@ mod tests {
         assert!(!s.must_preview("smart"));
         assert!(s.must_preview("local"));
         assert_eq!(profile_key_slot("local").variable, "profile:local");
+    }
+
+    #[test]
+    fn settings_are_checked_and_a_moved_profile_is_a_first_use_again() {
+        let mut s = AiSettings {
+            profiles: vec![
+                profile("a", AiProviderKind::Anthropic, "m1"),
+                profile("b", AiProviderKind::Openai, "m2"),
+            ],
+            roles: AiRoles {
+                fast: Some("b".into()),
+                smart: Some("a".into()),
+            },
+            ..Default::default()
+        };
+        assert!(s.validate().is_ok());
+        s.profiles.push(profile("a", AiProviderKind::Gemini, "x"));
+        assert!(s.validate().is_err());
+        s.profiles.pop();
+        s.profiles
+            .push(profile("Bad Id", AiProviderKind::Gemini, "x"));
+        assert!(s.validate().is_err());
+        s.profiles.pop();
+        s.roles.fast = Some("gone".into());
+        assert!(s.validate().is_err());
+        s.roles.fast = None;
+        s.profiles
+            .push(profile("c", AiProviderKind::OpenaiCompatible, "m"));
+        assert!(s.validate().is_err(), "a compatible endpoint needs its URL");
+
+        let mut old = AiSettings {
+            profiles: vec![
+                profile("a", AiProviderKind::Anthropic, "m1"),
+                profile("b", AiProviderKind::Openai, "m2"),
+            ],
+            ..Default::default()
+        };
+        old.confirm("a");
+        old.confirm("b");
+        old.confirm("nope");
+        assert_eq!(old.previewed, ["a", "b"]);
+        let mut next = old.clone();
+        next.previewed = vec!["a".into(), "b".into(), "forged".into()];
+        next.profiles[1].config.model = "other".into();
+        next.carry_previewed(Some(&old));
+        assert_eq!(next.previewed, ["a"]);
+        assert!(!next.must_preview("a") && next.must_preview("b"));
     }
 
     #[test]

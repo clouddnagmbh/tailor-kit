@@ -24,7 +24,7 @@ const caps = (
 /** In the order of `AiProviderKind::ALL`. */
 export const AI_PROVIDERS: readonly AiProviderInfo[] = [
   { kind: "anthropic", label: "Anthropic", capabilities: caps(true, true, "schema", true, false) },
-  { kind: "openai", label: "OpenAI", capabilities: caps(true, true, "schema", true, false) },
+  { kind: "openai", label: "OpenAI", capabilities: caps(true, true, "schema", false, false) },
   { kind: "azure-openai", label: "Azure OpenAI", capabilities: caps(true, true, "schema", false, true) },
   { kind: "gemini", label: "Google Gemini", capabilities: caps(true, true, "schema", true, false) },
   { kind: "mistral", label: "Mistral", capabilities: caps(true, true, "schema", false, false) },

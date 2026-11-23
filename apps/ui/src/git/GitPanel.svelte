@@ -37,7 +37,6 @@
     GitUndoEntry,
     SecretFinding,
   } from "../commands/types";
-  import MethodBadge from "../shell/MethodBadge.svelte";
   import { getApp } from "../state/app.svelte";
   import { gitApiCommands } from "./api-commands";
   import CloneFields from "./CloneFields.svelte";
@@ -45,7 +44,6 @@
   import DiffView from "./DiffView.svelte";
   import { commitMessage, mergeMessage, pullMessage, pushMessage } from "./format";
   import { GLOSSARY, type GitTerm } from "./glossary";
-  import Menu, { type MenuItem } from "./panel/Menu.svelte";
   import {
     changeRows,
     commitLabel,
@@ -60,6 +58,25 @@
   import RecentCommits from "./panel/RecentCommits.svelte";
   import ToolsGrid from "./panel/ToolsGrid.svelte";
   import SecretFindings from "./SecretFindings.svelte";
+  import {
+    Badge,
+    Banner,
+    Button,
+    Card,
+    Checkbox,
+    Chip,
+    Dropdown,
+    EmptyState,
+    Icon,
+    IconButton,
+    Section,
+    Spinner,
+    SplitButton,
+    TextArea,
+    TextField,
+    tooltip,
+    type MenuEntry,
+  } from "../ui";
   import { getGitViews } from "./views.svelte";
   import { openGitWizard, type GitWizardKind } from "./wizards/open";
 
@@ -231,6 +248,16 @@
     });
   });
 
+  // A wizard opened from the palette changes Git behind the panel's back: read again when a
+  // dialog closes.
+  const dialogOpen = $derived(app.dialog !== null);
+  let wasOpen = false;
+  $effect(() => {
+    const open = dialogOpen;
+    if (wasOpen && !open) untrack(() => void refresh());
+    wasOpen = open;
+  });
+
   /** Runs a Git command with progress, error display and the credentials prompt. */
   async function act(name: string, run: () => Promise<void>): Promise<void> {
     busy = name;
@@ -258,11 +285,9 @@
   async function wizard(kind: GitWizardKind, preset?: Record<string, unknown>): Promise<void> {
     error = null;
     result = null;
+    // The wizard reloads the collections itself when the action changed files.
     const done: GitActionResult | undefined = await openGitWizard(app, { kind, preset });
-    if (done) {
-      if (done.reload) await app.reload();
-      result = done.message;
-    }
+    if (done) result = done.message;
     await refresh();
   }
 
@@ -430,100 +455,108 @@
     resolve: "Resolving…",
   };
 
-  const branchItems = $derived.by((): MenuItem[] => {
-    const items: MenuItem[] = [{ id: "h-local", label: "Switch to", heading: true }];
+  const branchItems = $derived.by((): MenuEntry[] => {
+    const locked = !!blocked || busy !== null || !!status?.merging;
+    const items: MenuEntry[] = [{ heading: "Switch to" }];
     for (const b of localBranches) {
       items.push({
         id: `switch-${b.name}`,
         label: b.name,
         checked: b.name === current,
-        disabled: !!blocked || busy !== null || !!status?.merging,
-        title: blocked ?? undefined,
+        disabled: locked,
         run: () => (b.name !== current ? checkout(b.name) : undefined),
       });
     }
     if (remoteOnly.length > 0) {
-      items.push({ id: "h-remote", label: "On the server only", heading: true });
+      items.push({ heading: "On the server only" });
       for (const b of remoteOnly) {
-        items.push({
-          id: `switch-${b.name}`,
-          label: b.name,
-          checked: false,
-          disabled: !!blocked || busy !== null || !!status?.merging,
-          title: "Creates a local branch linked to it and switches to it.",
-          run: () => checkout(b.name),
-        });
+        items.push({ id: `switch-${b.name}`, label: b.name, icon: "pull", disabled: locked, run: () => checkout(b.name) });
       }
     }
     items.push(
-      { id: "sep-1", label: "", separator: true },
-      { id: "new", label: "New branch…", run: () => wizard("create-branch", { start: "HEAD" }) },
-      {
-        id: "merge",
-        label: current ? `Merge into ${current}…` : "Merge into current…",
-        disabled: !current,
-        title: GLOSSARY.merge.text,
-        run: () => wizard("merge"),
-      },
-      { id: "rename", label: "Rename branch…", disabled: !current, run: () => wizard("rename-branch", { from: current }) },
-      { id: "delete", label: "Delete branch…", danger: true, run: () => wizard("delete-branch") },
+      { separator: true },
+      { id: "new", label: "New branch…", icon: "add", run: () => wizard("create-branch", { start: "HEAD" }) },
+      { id: "merge", label: current ? `Merge into ${current}…` : "Merge into current…", icon: "merge", disabled: !current, run: () => wizard("merge") },
+      { id: "rename", label: "Rename branch…", icon: "edit", disabled: !current, run: () => wizard("rename-branch", { from: current }) },
+      { id: "delete", label: "Delete branch…", icon: "delete", danger: true, run: () => wizard("delete-branch") },
     );
     return items;
   });
 
-  const syncItems = $derived.by((): MenuItem[] => {
+  const syncItems = $derived.by((): MenuEntry[] => {
     const up = status?.upstream;
-    const items: MenuItem[] = [
-      { id: "pull", label: "Pull", hint: status?.behind ? `↓${status.behind}` : undefined, title: GLOSSARY.pull.text, disabled: !up || !!blocked, run: pull },
-      { id: "push", label: up ? "Push" : "Publish branch", hint: status?.ahead ? `↑${status.ahead}` : undefined, title: up ? GLOSSARY.push.text : GLOSSARY.publish.text, disabled: !current, run: push },
-      { id: "fetch", label: "Check for changes", title: GLOSSARY.fetch.text, disabled: !up, run: () => wizard("fetch") },
-      { id: "remotes", label: "Remotes…", title: GLOSSARY.remote.text, run: () => wizard("remotes") },
+    const items: MenuEntry[] = [
+      { id: "pull", label: "Pull", icon: "pull", hint: status?.behind ? `↓${status.behind}` : undefined, disabled: !up || !!blocked, run: pull },
+      { id: "push", label: up ? "Push" : "Publish branch", icon: "push", hint: status?.ahead ? `↑${status.ahead}` : undefined, disabled: !current, run: push },
+      { id: "fetch", label: "Check for changes", icon: "sync", disabled: !up, run: () => wizard("fetch") },
+      { id: "remotes", label: "Remotes…", icon: "service", run: () => wizard("remotes") },
     ];
     if (stashes.length > 0) {
-      items.push({ id: "unstash", label: "Bring back parked changes…", hint: String(stashes.length), run: () => wizard("unstash") });
+      items.push({ id: "unstash", label: "Bring back parked changes…", icon: "stash", hint: String(stashes.length), run: () => wizard("unstash") });
     }
     items.push(
-      { id: "sep-u", label: "", separator: true },
+      { separator: true },
       {
         id: "undo",
         label: last ? `Undo: ${last.summary}` : "Undo last Git action",
+        icon: "undo",
         disabled: !last || !!last.stale,
-        title: last?.stale ?? GLOSSARY.backup.text,
         run: () => wizard("undo"),
       },
     );
     return items;
   });
 
-  const changeItems = $derived.by((): MenuItem[] => [
-    { id: "by-field", label: "Show all changes by field", run: () => views.open({ kind: "diff", scope: { kind: "working" } }) },
-    { id: "all", label: selected.length === files.length ? "Uncheck all" : "Check all", run: () => toggleAll(selected.length !== files.length) },
-    { id: "sep", label: "", separator: true },
-    { id: "stash", label: "Park changes…", title: GLOSSARY.stash.text, disabled: files.length === 0 || conflicted, run: () => wizard("stash") },
+  const changeItems = $derived.by((): MenuEntry[] => [
+    { id: "by-field", label: "Show all changes by field", icon: "compare", run: () => views.open({ kind: "diff", scope: { kind: "working" } }) },
+    { id: "all", label: selected.length === files.length ? "Uncheck all" : "Check all", icon: "check", run: () => toggleAll(selected.length !== files.length) },
+    { separator: true },
+    { id: "stash", label: "Park changes…", icon: "stash", disabled: files.length === 0 || conflicted, run: () => wizard("stash") },
     {
       id: "discard",
       label: "Discard changes…",
+      icon: "undo",
       danger: true,
       disabled: files.length === 0,
-      title: "Throws away the changes of the checked files; the app keeps a backup.",
       run: () => wizard("discard", { paths: selected.map((p) => `/${p}`) }),
     },
   ]);
 
-  function commitItems(c: GitGraphCommit): MenuItem[] {
+  function commitItems(c: GitGraphCommit): MenuEntry[] {
     const onHead = c.oid === head;
     return [
-      { id: "show", label: "Show changes", run: () => views.open({ kind: "diff", scope: { kind: "commit", rev: c.oid } }) },
-      { id: "compare", label: "Compare with current", disabled: onHead, run: () => views.open({ kind: "compare", from: c.oid, to: "HEAD" }) },
-      { id: "sep-1", label: "", separator: true },
-      { id: "branch", label: "Branch from here…", title: GLOSSARY.branch.text, run: () => wizard("create-branch", { start: c.oid }) },
-      { id: "cherry-pick", label: "Copy this commit here…", title: GLOSSARY["cherry-pick"].text, disabled: onHead, run: () => wizard("cherry-pick", { commit: c.oid }) },
-      { id: "revert", label: "Undo this commit…", title: GLOSSARY.revert.text, run: () => wizard("revert", { commit: c.oid }) },
-      { id: "tag", label: "Tag…", title: GLOSSARY.tag.text, run: () => wizard("create-tag", { target: c.oid }) },
-      { id: "sep-2", label: "", separator: true },
+      { id: "show", label: "Show changes", icon: "eye", run: () => views.open({ kind: "diff", scope: { kind: "commit", rev: c.oid } }) },
+      { id: "compare", label: "Compare with current", icon: "compare", disabled: onHead, run: () => views.open({ kind: "compare", from: c.oid, to: "HEAD" }) },
+      { separator: true },
+      { id: "branch", label: "Branch from here…", icon: "branch", run: () => wizard("create-branch", { start: c.oid }) },
+      { id: "cherry-pick", label: "Copy this commit here…", icon: "copy", disabled: onHead, run: () => wizard("cherry-pick", { commit: c.oid }) },
+      { id: "revert", label: "Undo this commit…", icon: "undo", run: () => wizard("revert", { commit: c.oid }) },
+      { id: "tag", label: "Tag…", icon: "tag", run: () => wizard("create-tag", { target: c.oid }) },
+      { separator: true },
       { id: "copy", label: "Copy commit id", hint: c.oid.slice(0, 7), run: () => navigator.clipboard?.writeText(c.oid) },
     ];
   }
+
+  /** Tags the main button of the commit split button (`SplitButton` passes no attributes to it
+   *  yet; the tests and other strands find the commit button by this id). */
+  function tagMain(node: HTMLElement, id: string) {
+    const tag = () => node.querySelector<HTMLElement>(".rt-split > button:first-child, .rt-split .main")?.setAttribute("data-testid", id);
+    tag();
+    const observer = new MutationObserver(tag);
+    observer.observe(node, { childList: true, subtree: true });
+    return { destroy: () => observer.disconnect() };
+  }
+
+  /** Icon of the header's main action. */
+  const ACTION_ICON: Record<SyncActionKind, string> = {
+    pull: "pull",
+    push: "push",
+    publish: "push",
+    sync: "sync",
+    fetch: "sync",
+    "add-remote": "add",
+    "create-branch-here": "branch",
+  };
 
   /** The word a situation's banner explains. */
   const BANNER_TERM: Partial<Record<GitSituation["kind"], GitTerm>> = {
@@ -535,25 +568,39 @@
 </script>
 
 {#snippet explain(term: GitTerm)}
-  <button
-    class="link explain"
-    data-testid="git-explain-{term}"
-    aria-expanded={explaining === term}
-    onclick={() => (explaining = explaining === term ? null : term)}>What does this mean?</button
-  >
-  {#if explaining === term}
-    <p class="gloss" data-testid="git-gloss">
-      <strong>{GLOSSARY[term].label}</strong>
-      {GLOSSARY[term].text}
-      <span class="git-word">In Git: {GLOSSARY[term].git}</span>
-    </p>
+  <div class="explain">
+    <Button
+      variant="ghost"
+      size="sm"
+      icon="help"
+      data-testid="git-explain-{term}"
+      aria-expanded={explaining === term}
+      onclick={() => (explaining = explaining === term ? null : term)}>What does this mean?</Button
+    >
+    {#if explaining === term}{@render gloss(term)}{/if}
+  </div>
+{/snippet}
+
+{#snippet gloss(term: GitTerm)}
+  <p class="gloss" data-testid="git-gloss">
+    <strong>{GLOSSARY[term].label}.</strong>
+    {GLOSSARY[term].text}
+    <span class="git-word">In Git: <code>{GLOSSARY[term].git}</code></span>
+  </p>
+{/snippet}
+
+{#snippet messages()}
+  {#if error}
+    <div data-testid="git-error"><Banner tone="danger" dismissible dismissLabel="Dismiss" ondismiss={() => (error = null)}>{error}</Banner></div>
+  {/if}
+  {#if result}
+    <div data-testid="git-result"><Banner tone="ok" dismissible dismissLabel="Dismiss" ondismiss={() => (result = null)}>{result}</Banner></div>
   {/if}
 {/snippet}
 
 <div class="git" data-testid="git-panel" data-situation={sit.kind} aria-busy={busy !== null}>
   {#if credentials}
     <form
-      class="card"
       data-testid="git-credentials"
       aria-label="Credentials for {credentials.host}"
       onsubmit={(e) => {
@@ -561,31 +608,28 @@
         void saveCredentials();
       }}
     >
-      <p><strong>{credentials.host}</strong> needs a username and password (or access token).</p>
-      <label>Username <input data-testid="git-cred-username" autocomplete="username" bind:value={credUser} /></label>
-      <label>
-        Password or token
-        <input data-testid="git-cred-password" type="password" autocomplete="current-password" bind:value={credPassword} />
-      </label>
-      <p class="hint">
-        Stored on this device ({app.backend.kind === "web"
-          ? "encrypted in this browser"
-          : app.backend.kind === "tauri"
-            ? "in the system keychain"
-            : "in memory"}), never in the collection.
-      </p>
-      <div class="row">
-        <button class="primary" data-testid="git-cred-save" type="submit" disabled={!credUser || !credPassword}>
-          Save and retry
-        </button>
-        <button type="button" data-testid="git-cred-cancel" onclick={() => (credentials = null)}>Cancel</button>
-      </div>
+      <Card padding="sm" icon="key" title="Sign in to {credentials.host}" description="A username and password, or an access token.">
+        <div class="stack">
+          <TextField label="Username" data-testid="git-cred-username" autocomplete="username" bind:value={credUser} />
+          <TextField label="Password or token" data-testid="git-cred-password" type="password" autocomplete="current-password" bind:value={credPassword} />
+          <p class="hint">
+            Stored on this device ({app.backend.kind === "web"
+              ? "encrypted in this browser"
+              : app.backend.kind === "tauri"
+                ? "in the system keychain"
+                : "in memory"}), never in the collection.
+          </p>
+        </div>
+        {#snippet footer()}
+          <Button size="sm" variant="ghost" type="button" data-testid="git-cred-cancel" onclick={() => (credentials = null)}>Cancel</Button>
+          <Button size="sm" variant="primary" type="submit" data-testid="git-cred-save" disabled={!credUser || !credPassword}>Save and retry</Button>
+        {/snippet}
+      </Card>
     </form>
   {/if}
 
   {#if identityThen}
     <form
-      class="card"
       data-testid="git-identity"
       aria-label="Author for commits"
       novalidate
@@ -594,223 +638,246 @@
         void saveIdentity();
       }}
     >
-      <p>Who is committing? Name and email go into every commit.</p>
-      <label>Name <input data-testid="git-identity-name" autocomplete="name" bind:value={identityName} /></label>
-      <label>Email <input data-testid="git-identity-email" type="email" autocomplete="email" bind:value={identityEmail} /></label>
-      <div class="row">
-        <button class="primary" data-testid="git-identity-save" type="submit">Save</button>
-        <button type="button" onclick={() => (identityThen = null)}>Cancel</button>
-      </div>
+      <Card padding="sm" icon="user" title="Who is committing?" description="Name and email go into every commit.">
+        <div class="stack">
+          <TextField label="Name" data-testid="git-identity-name" autocomplete="name" bind:value={identityName} />
+          <TextField label="Email" data-testid="git-identity-email" type="email" autocomplete="email" bind:value={identityEmail} />
+        </div>
+        {#snippet footer()}
+          <Button size="sm" variant="ghost" type="button" onclick={() => (identityThen = null)}>Cancel</Button>
+          <Button size="sm" variant="primary" type="submit" data-testid="git-identity-save">Save</Button>
+        {/snippet}
+      </Card>
     </form>
   {/if}
 
   {#if loadError}
-    <p class="error" role="alert" data-testid="git-load-error">{loadError}</p>
+    <div data-testid="git-load-error"><Banner tone="danger" title="Cannot read the repository">{loadError}</Banner></div>
   {:else if sit.kind === "loading"}
-    <p class="hint">Reading the repository…</p>
+    <div class="loading"><Spinner size="sm" /> <span class="hint">Reading the repository…</span></div>
   {:else if sit.kind === "no-repo"}
-    <section class="empty" data-testid="git-norepo">
-      <h3 class="empty-title">No version history yet</h3>
-      <p class="hint">
-        This collection is not in a Git repository. Start one to keep every version of your requests, or clone an
-        existing one.
-      </p>
+    <div class="empty" data-testid="git-norepo">
+      <EmptyState
+        icon="history"
+        title="No version history yet"
+        text="Keep every version of your requests in Git: start a repository here, or clone one your team already has."
+        size="sm"
+      >
+        {#snippet actions()}
+          <Button variant="primary" size="sm" icon="add" data-testid="git-init" disabled={busy !== null} loading={busy === "init"} onclick={init}>Start a repository here</Button>
+          {#if !cloneOpen}
+            <Button size="sm" icon="pull" data-testid="git-clone-open" onclick={() => (cloneOpen = true)}>Clone…</Button>
+          {/if}
+        {/snippet}
+      </EmptyState>
       {#if app.backend.kind === "web"}
-        <p class="hint">In the browser, the repository must be the collection folder itself: the app cannot see the folders above it.</p>
+        <p class="hint center">In the browser, the repository must be the collection folder itself: the app cannot see the folders above it.</p>
       {/if}
-      <button class="primary wide" data-testid="git-init" disabled={busy !== null} onclick={init}>Start a repository here</button>
-    </section>
+    </div>
   {:else}
-    <section class="repo card" aria-label="Repository" data-testid="git-repo">
-      <div class="repo-line">
-        <span class="repo-name" data-testid="git-repo-name" title="{GLOSSARY.repository.label}: {GLOSSARY.repository.text}">{name}</span>
-        <Menu items={syncItems} label="Sync and more" testid="git-sync-menu" align="end" triggerClass="icon-button" title="Pull, push, remotes, undo">
-          {#snippet trigger()}<span aria-hidden="true">⋯</span>{/snippet}
-        </Menu>
-        <button
-          class="help"
-          data-testid="git-help"
-          aria-label="What do these words mean?"
-          aria-expanded={explaining !== null}
-          title="What do these words mean?"
-          onclick={() => (explaining = explaining ? null : (BANNER_TERM[sit.kind] ?? sync?.term ?? "branch"))}>?</button
-        >
-      </div>
-      <div class="branch-line">
-        <Menu
-          items={branchItems}
-          label="Branch {current ?? ''}: switch, create, merge"
-          testid="git-branch-menu"
-          triggerClass="chip"
-          title="{GLOSSARY['current-branch'].label}: {GLOSSARY['current-branch'].text}"
-        >
-          {#snippet trigger()}
-            <span class="chip-icon" aria-hidden="true">⑂</span>
-            <span class="chip-name" data-testid="git-branch">{sit.kind === "detached" ? (head?.slice(0, 7) ?? "HEAD") : sit.kind === "empty" ? `${sit.branch} (no commits yet)` : (current ?? "")}</span>
-            <span class="caret" aria-hidden="true">▾</span>
-          {/snippet}
-        </Menu>
-        {#if sync}
-          <span class="sync {sync.tone}" data-testid="git-sync" title="{sync.title} {GLOSSARY[sync.term].text}">
-            {sync.text}{#if status?.upstream && (sync.ahead || sync.behind)}<span class="upstream">{status.upstream}</span>{/if}
+    <div class="repo" data-testid="git-repo">
+      <Card padding="sm">
+        <div class="repo-line">
+          <span class="repo-icon" aria-hidden="true"><Icon name="collection" size="sm" /></span>
+          <span class="repo-name" data-testid="git-repo-name" use:tooltip={`${GLOSSARY.repository.label}: ${GLOSSARY.repository.text}`}>{name}</span>
+          <IconButton
+            icon="help"
+            size="sm"
+            label="What do these words mean?"
+            data-testid="git-help"
+            aria-expanded={explaining !== null}
+            onclick={() => (explaining = explaining ? null : (BANNER_TERM[sit.kind] ?? sync?.term ?? "branch"))}
+          />
+          <Dropdown items={syncItems} menuLabel="Sync and more" placement="bottom-end">
+            {#snippet trigger(p)}<IconButton {...p} icon="more" size="sm" label="Sync and more" data-testid="git-sync-menu" />{/snippet}
+          </Dropdown>
+        </div>
+        <div class="branch-line">
+          <span class="branch-chip">
+            <Dropdown items={branchItems} menuLabel="Branch {current ?? ''}">
+              {#snippet trigger(p)}
+                <Chip
+                  {...p}
+                  icon="branch"
+                  mono
+                  caret
+                  tone={sit.kind === "detached" ? "warn" : undefined}
+                  data-testid="git-branch"
+                  title="{GLOSSARY['current-branch'].label}: {GLOSSARY['current-branch'].text}"
+                  label={sit.kind === "detached" ? (head?.slice(0, 7) ?? "HEAD") : sit.kind === "empty" ? `${sit.branch} (no commits yet)` : (current ?? "")}
+                />
+              {/snippet}
+            </Dropdown>
           </span>
-        {/if}
-      </div>
-      {#if primary && !BANNER_TERM[sit.kind]}
-        <button
-          class="sync-action"
-          class:primary={primary.primary}
-          data-testid="git-sync-action"
-          data-action={primary.kind}
-          title={primary.title}
-          disabled={busy !== null || ((primary.kind === "pull" || primary.kind === "fetch") && !!blocked)}
-          onclick={() => runSync(primary.kind)}>{busy && PROGRESS[busy] ? PROGRESS[busy] : primary.label}</button
-        >
-      {/if}
-      {#if siblings.length > 0}
-        <p class="hint" data-testid="git-siblings">Also in this repository: {siblings.map((c) => c.name).join(", ")}</p>
-      {/if}
-      {#if explaining && !BANNER_TERM[sit.kind]}
-        <p class="gloss" data-testid="git-gloss">
-          <strong>{GLOSSARY[explaining].label}</strong>
-          {GLOSSARY[explaining].text}
-          <span class="git-word">In Git: {GLOSSARY[explaining].git}</span>
-        </p>
-      {/if}
-    </section>
-
-    {#if blocked}<p class="warn" data-testid="git-blocked">{blocked}</p>{/if}
-    {#if error}<p class="error" role="alert" data-testid="git-error">{error}</p>{/if}
-    {#if result}<p class="result" role="status" data-testid="git-result">{result}</p>{/if}
-    {#if busy && PROGRESS[busy] && !primary}<p class="progress" role="status" data-testid="git-progress">{PROGRESS[busy]}</p>{/if}
-
-    {#if sit.kind === "conflicts"}
-      <section class="banner danger" data-testid="git-merging" aria-label="Merge stopped">
-        <strong>The merge needs your decision</strong>
-        <p>The same {sit.files === 1 ? "request was" : "requests were"} changed here and on the server. Choose which version to keep, then commit.</p>
-        <div class="row">
-          <button class="primary" data-testid="git-resolve" onclick={() => views.open({ kind: "merge" })}>Resolve conflicts</button>
-        </div>
-        {@render explain("conflict")}
-      </section>
-    {:else if sit.kind === "merging"}
-      <section class="banner" data-testid="git-merging" aria-label="Merge in progress">
-        <strong>Almost done</strong>
-        <p>Every conflict is resolved. Commit to finish the merge.</p>
-        {@render explain("merge")}
-      </section>
-    {:else if sit.kind === "diverged"}
-      <section class="banner warn" data-testid="git-diverged" aria-label="Branches went apart">
-        <strong>{sit.branch} and {sit.upstream} went apart</strong>
-        <p>You have {sit.ahead} new {sit.ahead === 1 ? "commit" : "commits"}, the server has {sit.behind}. Bring them together before you push.</p>
-        <div class="row">
-          <button class="primary" data-testid="git-diverged-merge" disabled={!!blocked || busy !== null} onclick={pull}>Merge both</button>
-          <button data-testid="git-diverged-theirs" onclick={() => wizard("diverged", { choice: "theirs" })}>Take theirs…</button>
-        </div>
-        {@render explain("diverged")}
-      </section>
-    {:else if sit.kind === "detached"}
-      <section class="banner warn" data-testid="git-detached" aria-label="Not on a branch">
-        <strong>You are looking at an older commit</strong>
-        <p>New commits here belong to no branch. Create a branch to keep them, or go back to a branch.</p>
-        <div class="row">
-          <button class="primary" data-testid="git-detached-branch" onclick={() => wizard("create-branch", { start: "HEAD" })}>Create a branch here</button>
-          {#if localBranches.length > 0}
-            <button data-testid="git-detached-back" disabled={!!blocked || busy !== null} onclick={() => checkout(localBranches.find((b) => b.name === "main")?.name ?? localBranches[0].name)}
-              >Back to {localBranches.find((b) => b.name === "main")?.name ?? localBranches[0].name}</button
-            >
+          {#if sync}
+            <span class="sync {sync.tone}" data-testid="git-sync" data-ahead={sync.ahead} data-behind={sync.behind} aria-label="{sync.title} {GLOSSARY[sync.term].text}" use:tooltip={`${sync.title} ${GLOSSARY[sync.term].text}`}>
+              {#if sync.ahead || sync.behind}
+                {#if sync.ahead}<span class="count"><Icon name="push" size="sm" />{sync.ahead}</span>{/if}
+                {#if sync.behind}<span class="count"><Icon name="pull" size="sm" />{sync.behind}</span>{/if}
+                {#if status?.upstream}<span class="upstream">{status.upstream}</span>{/if}
+              {:else}
+                {#if sync.tone === "ok"}<Icon name="success" size="sm" />{/if}
+                <span class="sync-text">{sync.text}</span>
+              {/if}
+            </span>
           {/if}
         </div>
-        {@render explain("detached")}
-      </section>
+        {#if primary && !BANNER_TERM[sit.kind]}
+          <div class="sync-action" data-action={primary.kind}>
+            <Button
+              block
+              size="md"
+              variant={primary.primary ? "primary" : "secondary"}
+              icon={ACTION_ICON[primary.kind]}
+              data-testid="git-sync-action"
+              data-action={primary.kind}
+              title={primary.title}
+              loading={busy === "pull" || busy === "push"}
+              disabled={busy !== null || ((primary.kind === "pull" || primary.kind === "fetch") && !!blocked)}
+              onclick={() => runSync(primary.kind)}>{primary.label}</Button
+            >
+          </div>
+        {/if}
+        {#if siblings.length > 0}
+          <p class="hint" data-testid="git-siblings">Also in this repository: {siblings.map((c) => c.name).join(", ")}</p>
+        {/if}
+        {#if explaining && !BANNER_TERM[sit.kind]}{@render gloss(explaining)}{/if}
+      </Card>
+    </div>
+
+    {#if blocked}
+      <div data-testid="git-blocked"><Banner tone="warn">{blocked}</Banner></div>
+    {/if}
+    {@render messages()}
+    {#if busy && PROGRESS[busy] && !primary}
+      <div class="loading" role="status" data-testid="git-progress"><Spinner size="sm" /> <span class="hint">{PROGRESS[busy]}</span></div>
     {/if}
 
-    <section class="changes" aria-label="Changes">
-      <header class="section-head">
-        <h3>Changes</h3>
-        {#if files.length > 0}<span class="count" data-testid="git-change-count">{files.length}</span>{/if}
-        <span class="spacer"></span>
-        {#if files.length > 0}
-          <button class="link" data-testid="git-semantic-diff" title="Every change, field by field" onclick={() => views.open({ kind: "diff", scope: { kind: "working" } })}>By field</button>
+    {#if sit.kind === "conflicts"}
+      <div data-testid="git-merging">
+        <Banner tone="danger" title="The merge needs your decision">
+          The same {sit.files === 1 ? "request was" : "requests were"} changed here and on the server. Choose which version to keep, then commit.
+          <span class="banner-actions">
+            <Button size="sm" variant="primary" icon="merge" data-testid="git-resolve" onclick={() => views.open({ kind: "merge" })}>Resolve conflicts</Button>
+          </span>
+          {@render explain("conflict")}
+        </Banner>
+      </div>
+    {:else if sit.kind === "merging"}
+      <div data-testid="git-merging">
+        <Banner tone="info" title="Almost done">
+          Every conflict is resolved. Commit to finish the merge.
+          {@render explain("merge")}
+        </Banner>
+      </div>
+    {:else if sit.kind === "diverged"}
+      <div data-testid="git-diverged">
+        <Banner tone="warn" title="{sit.branch} and {sit.upstream} went apart">
+          You have {sit.ahead} new {sit.ahead === 1 ? "commit" : "commits"}, the server has {sit.behind}. Bring them together before you push.
+          <span class="banner-actions">
+            <Button size="sm" variant="primary" icon="merge" data-testid="git-diverged-merge" disabled={!!blocked || busy !== null} loading={busy === "pull"} onclick={pull}>Merge both</Button>
+            <Button size="sm" data-testid="git-diverged-theirs" onclick={() => wizard("diverged", { choice: "theirs" })}>Take theirs…</Button>
+          </span>
+          {@render explain("diverged")}
+        </Banner>
+      </div>
+    {:else if sit.kind === "detached"}
+      {@const back = localBranches.find((b) => b.name === "main")?.name ?? localBranches[0]?.name}
+      <div data-testid="git-detached">
+        <Banner tone="warn" title="You are looking at an older commit">
+          New commits here belong to no branch. Create a branch to keep them, or go back to a branch.
+          <span class="banner-actions">
+            <Button size="sm" variant="primary" icon="branch" data-testid="git-detached-branch" onclick={() => wizard("create-branch", { start: "HEAD" })}>Create a branch here</Button>
+            {#if back}
+              <Button size="sm" data-testid="git-detached-back" disabled={!!blocked || busy !== null} onclick={() => checkout(back)}>Back to {back}</Button>
+            {/if}
+          </span>
+          {@render explain("detached")}
+        </Banner>
+      </div>
+    {/if}
+
+    <div class="changes" data-testid="git-changes">
+      <Section title="Changes" count={files.length > 0 ? files.length : undefined}>
+        {#snippet actions()}
+          {#if files.length > 0}
+            <IconButton icon="compare" size="sm" label="Show all changes by field" data-testid="git-semantic-diff" onclick={() => views.open({ kind: "diff", scope: { kind: "working" } })} />
+          {/if}
+          <Dropdown items={changeItems} menuLabel="More for changes" placement="bottom-end">
+            {#snippet trigger(p)}<IconButton {...p} icon="more" size="sm" label="More for changes" data-testid="git-changes-menu" />{/snippet}
+          </Dropdown>
+        {/snippet}
+        {#if files.length === 0}
+          <p class="clean" data-testid="git-clean">
+            <Icon name="success" size="sm" />
+            {sit.kind === "empty" ? "Nothing to commit yet." : "No changes. Everything is committed."}
+          </p>
+        {:else}
+          {#if sit.kind === "empty"}<p class="hint">Commit these files to start the history.</p>{/if}
+          <ul class="files">
+            {#each rows as f (f.path)}
+              <li data-testid="git-file" data-path={f.path}>
+                <Checkbox
+                  data-testid="git-file-check"
+                  aria-label="Include {f.path}"
+                  checked={!excluded.includes(f.path)}
+                  onchange={(e: Event) => toggle(f.path, (e.currentTarget as HTMLInputElement).checked)}
+                />
+                <button class="row" data-testid="git-file-open" title="{f.path}: {f.badgeTitle}" onclick={(e) => openFile(f.path, f.state, e)}>
+                  {#if f.method}<Badge kind="method" value={f.method} />{/if}
+                  <span class="file-title">{f.title}</span>
+                  {#if f.dir}<span class="file-dir">{f.dir}</span>{/if}
+                </button>
+                <span class="state" data-testid="git-file-state" data-badge={f.badge}><Badge kind="status" value={f.badge} title={f.badgeTitle} /></span>
+              </li>
+            {/each}
+          </ul>
         {/if}
-        <Menu items={changeItems} label="More for changes" testid="git-changes-menu" align="end" triggerClass="icon-button" title="More">
-          {#snippet trigger()}<span aria-hidden="true">⋯</span>{/snippet}
-        </Menu>
-      </header>
-      {#if files.length === 0}
-        <p class="hint clean" data-testid="git-clean">
-          {sit.kind === "empty" ? "Nothing to commit yet." : "No changes. Everything is committed."}
-        </p>
-      {:else}
-        {#if sit.kind === "empty"}<p class="hint">Commit these files to start the history.</p>{/if}
-        <ul class="files">
-          {#each rows as f (f.path)}
-            <li data-testid="git-file" data-path={f.path}>
-              <input
-                type="checkbox"
-                data-testid="git-file-check"
-                aria-label="Include {f.path}"
-                checked={!excluded.includes(f.path)}
-                onchange={(e) => toggle(f.path, e.currentTarget.checked)}
-              />
-              <button class="file" data-testid="git-file-open" title="{f.path}: {f.badgeTitle}" onclick={(e) => openFile(f.path, f.state, e)}>
-                {#if f.method}<MethodBadge method={f.method} />{/if}
-                <span class="file-title">{f.title}</span>
-                {#if f.dir}<span class="file-dir">{f.dir}</span>{/if}
-              </button>
-              <span class="badge {f.state}" data-testid="git-file-state" title={f.badgeTitle} aria-label={f.badgeTitle}>{f.badge}</span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      {#if files.length > 0 || status?.merging}
-        <form
-          class="commit"
-          onsubmit={(e) => {
-            e.preventDefault();
-            if (canCommit) void commit();
-          }}
-        >
-          <textarea
-            data-testid="git-message"
-            aria-label="Commit message"
-            placeholder="Describe what changed"
-            rows="2"
-            bind:value={message}
-            onkeydown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canCommit) {
-                e.preventDefault();
-                void commit();
-              }
+        {#if files.length > 0 || status?.merging}
+          <form
+            class="commit"
+            onsubmit={(e) => {
+              e.preventDefault();
+              if (canCommit) void commit();
             }}
-          ></textarea>
-          <div class="split">
-            <button class="main primary" data-testid="git-commit" type="submit" disabled={!canCommit}>
-              {busy === "commit" ? "Committing…" : commitLabel(selected.length)}
-            </button>
-            <Menu
-              items={[
-                {
-                  id: "push",
-                  label: status?.upstream ? "Commit & push" : "Commit & publish",
-                  disabled: !canCommit || !current,
-                  title: "Commits, then sends the commit to the server.",
-                  run: () => commit(true),
-                },
-              ]}
-              label="More commit options"
-              testid="git-commit-more"
-              align="end"
-              triggerClass="side primary"
-              disabled={!canCommit}
-            >
-              {#snippet trigger()}<span aria-hidden="true">▾</span>{/snippet}
-            </Menu>
-          </div>
-        </form>
-        {#if findings.length > 0}<SecretFindings {findings} />{/if}
-      {/if}
-    </section>
+          >
+            <TextArea
+              data-testid="git-message"
+              aria-label="Commit message"
+              placeholder="Describe what changed"
+              rows={2}
+              bind:value={message}
+              onkeydown={(e: KeyboardEvent) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canCommit) {
+                  e.preventDefault();
+                  void commit();
+                }
+              }}
+            />
+            <div class="commit-button" use:tagMain={"git-commit"}>
+              <SplitButton
+                variant="primary"
+                icon="commit"
+                disabled={!canCommit}
+                loading={busy === "commit"}
+                menuLabel="More commit options"
+                items={[
+                  {
+                    id: "push",
+                    label: status?.upstream ? "Commit & push" : "Commit & publish",
+                    icon: "push",
+                    disabled: !canCommit || !current,
+                    run: () => commit(true),
+                  },
+                ]}
+                onclick={() => canCommit && void commit()}>{commitLabel(selected.length)}</SplitButton
+              >
+            </div>
+          </form>
+          {#if findings.length > 0}<SecretFindings {findings} />{/if}
+        {/if}
+      </Section>
+    </div>
 
     {#if tiles.length > 0}<ToolsGrid {tiles} />{/if}
 
@@ -826,142 +893,96 @@
     {/if}
   {/if}
 
-  {#if status && (!status.repo || cloneOpen)}
+  {#if status && cloneOpen}
     <form
-      class="card clone"
+      class="clone"
       aria-label="Clone a repository"
       onsubmit={(e) => {
         e.preventDefault();
         if (cloneUrl.trim()) void clone();
       }}
     >
-      <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
-      {#if app.backend.kind === "web"}<p class="hint">Opens the clone as the collection; pick the folder to clone into.</p>{/if}
-      <button data-testid="git-clone" type="submit" disabled={!cloneUrl.trim() || busy !== null}>
-        {busy === "clone" ? "Cloning…" : "Clone"}
-      </button>
+      <Card padding="sm" icon="pull" title="Clone a repository" description={app.backend.kind === "web" ? "Opens the clone as the collection; pick the folder to clone into." : "Opens the clone as the collection."}>
+        <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
+        {#snippet footer()}
+          <Button size="sm" variant="ghost" type="button" onclick={() => (cloneOpen = false)}>Cancel</Button>
+          <Button size="sm" variant="primary" type="submit" data-testid="git-clone" disabled={!cloneUrl.trim() || busy !== null} loading={busy === "clone"}>Clone</Button>
+        {/snippet}
+      </Card>
     </form>
-  {:else if status}
-    <button class="link footer" data-testid="git-clone-open" onclick={() => (cloneOpen = true)}>Clone another repository…</button>
+  {:else if status?.repo}
+    <div class="footer">
+      <Button variant="ghost" size="sm" icon="pull" data-testid="git-clone-open" onclick={() => (cloneOpen = true)}>Clone another repository…</Button>
+    </div>
   {/if}
-  {#if !status?.repo}
-    {#if error}<p class="error" role="alert" data-testid="git-error">{error}</p>{/if}
-    {#if result}<p class="result" role="status" data-testid="git-result">{result}</p>{/if}
-  {/if}
+  {#if status && !status.repo}{@render messages()}{/if}
 </div>
 
 {#if diffPath}
   <DiffView path={diffPath} onclose={closeDialog} />
 {/if}
 {#if conflictPath}
-  <ConflictView
-    path={conflictPath}
-    {blocked}
-    onresolve={(r) => conflictPath && resolve(conflictPath, r)}
-    onclose={closeDialog}
-  />
+  <ConflictView path={conflictPath} {blocked} onresolve={(r) => conflictPath && resolve(conflictPath, r)} onclose={closeDialog} />
 {/if}
 
 <style>
   .git {
-    height: 100%;
-    overflow: auto;
-    padding: var(--rt-gap) var(--rt-side-inset);
-    box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--rt-space-5);
+    box-sizing: border-box;
+    height: 100%;
+    overflow: auto;
+    padding: var(--rt-space-4) var(--rt-side-inset) var(--rt-space-6);
+    font: var(--rt-font-body);
   }
   p {
     margin: 0;
   }
-  .card {
+  .stack {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: var(--rt-gap);
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    background: var(--rt-bg-panel);
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: var(--rt-size-small);
-    color: var(--rt-fg-muted);
-  }
-  input:not([type="checkbox"]),
-  textarea {
-    min-width: 0;
-    box-sizing: border-box;
-    padding: 4px 6px;
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    background: var(--rt-bg);
-    color: var(--rt-fg);
-    font: inherit;
-  }
-  textarea {
-    width: 100%;
-    resize: vertical;
-  }
-  button,
-  .git :global(.chip),
-  .git :global(.side),
-  .git :global(.icon-button) {
-    height: 26px;
-    padding: 0 10px;
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    background: var(--rt-bg);
-    color: var(--rt-fg);
-    font: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  button:hover:not(:disabled) {
-    background: var(--rt-bg-hover);
-  }
-  button:disabled {
-    color: var(--rt-fg-muted);
-    cursor: default;
-    opacity: 0.6;
-  }
-  button.primary:not(:disabled),
-  .git :global(.side.primary:not(:disabled)) {
-    background: var(--rt-accent);
-    border-color: var(--rt-accent);
-    color: var(--rt-accent-fg);
-  }
-  .git :global(.link) {
-    height: auto;
-    border: none;
-    background: none;
-    padding: 0;
-    color: var(--rt-accent);
-    font-size: var(--rt-size-small);
-  }
-  .git :global(.link:hover:not(:disabled)) {
-    background: none;
-    text-decoration: underline;
-  }
-  .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
+    gap: var(--rt-space-4);
   }
   .hint {
     color: var(--rt-fg-muted);
-    font-size: var(--rt-size-small);
+    font: var(--rt-font-small);
+  }
+  .center {
+    text-align: center;
+  }
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: var(--rt-space-4);
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rt-space-5);
+    padding-top: var(--rt-space-7);
+  }
+
+  /* Repository card */
+  .repo {
+    container-type: inline-size;
   }
   .repo-line,
   .branch-line {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--rt-space-3);
     min-width: 0;
+  }
+  .repo-icon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: var(--rt-control-sm);
+    height: var(--rt-control-sm);
+    border-radius: var(--rt-radius-md);
+    background: var(--rt-accent-subtle);
+    color: var(--rt-accent-subtle-fg);
   }
   .repo-name {
     flex: 1;
@@ -969,192 +990,146 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 600;
+    font: var(--rt-font-title);
+    letter-spacing: var(--rt-tracking-tight);
   }
-  .help {
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border-radius: 50%;
-    font-size: var(--rt-size-small);
-    color: var(--rt-fg-muted);
-  }
-  .branch-line :global(.menu-root) {
+  .branch-chip {
+    display: flex;
     flex: 0 1 auto;
-    min-width: 4em;
+    min-width: 5em;
+    max-width: 100%;
   }
-  .git :global(.chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+  .branch-chip :global(.rt-dropdown),
+  .branch-chip :global(.rt-chip),
+  .branch-chip :global(.rt-chip .hit) {
     min-width: 0;
     max-width: 100%;
-    padding: 0 8px;
-    border-radius: 13px;
   }
-  .chip-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 600;
-  }
-  .chip-icon,
-  .caret {
-    flex: none;
-    color: var(--rt-fg-muted);
-  }
-  .sync {
-    flex: 0 1000 auto;
-    min-width: 0;
+  .branch-chip :global(.rt-chip .label) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .sync {
+    display: inline-flex;
+    flex: 0 1000 auto;
+    align-items: center;
+    gap: var(--rt-space-3);
+    min-width: 0;
+    overflow: hidden;
     color: var(--rt-fg-muted);
-    font-size: var(--rt-size-small);
+    font: var(--rt-font-small);
+    white-space: nowrap;
   }
   .sync.ok {
-    color: var(--rt-ok);
+    color: var(--rt-ok-fg);
   }
   .sync.attention {
     color: var(--rt-accent);
   }
   .sync.warn {
-    color: var(--rt-warn);
+    color: var(--rt-warn-fg);
   }
+  .count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--rt-space-1);
+    font-weight: var(--rt-weight-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+  .sync-text,
   .upstream {
-    margin-left: 6px;
-    color: var(--rt-fg-muted);
-  }
-  .sync-action {
-    width: 100%;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .repo {
-    container-type: inline-size;
+  .upstream {
+    color: var(--rt-fg-muted);
+    font-family: var(--rt-font-mono);
   }
   @container (max-width: 220px) {
     .upstream {
       display: none;
     }
   }
-  .split {
-    display: flex;
-    min-width: 0;
-  }
-  .split .main {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-  .split :global(.side) {
-    width: 26px;
-    padding: 0;
-    border-left: none;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
-  .split :global(.side.primary:not(:disabled)) {
-    border-left: 1px solid color-mix(in srgb, var(--rt-accent-fg) 35%, transparent);
-  }
-  .banner {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: var(--rt-gap);
-    border: 1px solid var(--rt-border);
-    border-left: 3px solid var(--rt-accent);
-    border-radius: var(--rt-radius);
-    background: var(--rt-bg-panel);
-    font-size: var(--rt-size-small);
-  }
-  .banner.warn {
-    border-left-color: var(--rt-warn);
-  }
-  .banner.danger {
-    border-left-color: var(--rt-danger);
-  }
-  .explain {
-    align-self: flex-start;
-  }
   .gloss {
+    padding: var(--rt-space-4) var(--rt-space-5);
+    border-radius: var(--rt-radius-md);
+    background: var(--rt-surface-sunken);
     color: var(--rt-fg);
-    font-size: var(--rt-size-small);
+    font: var(--rt-font-small);
   }
   .git-word {
     display: block;
+    margin-top: var(--rt-space-2);
     color: var(--rt-fg-muted);
   }
-  .git :global(.section-head) {
+  .banner-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--rt-space-3);
+    margin-top: var(--rt-space-4);
+  }
+  .explain {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--rt-space-3);
+    margin-top: var(--rt-space-3);
+  }
+  .banner-actions :global(.rt-btn),
+  .explain :global(.rt-btn) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Changes */
+  .clean {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 24px;
-    margin-bottom: 4px;
-  }
-  .git :global(.section-head h3) {
-    margin: 0;
+    gap: var(--rt-space-3);
     color: var(--rt-fg-muted);
-    font-size: var(--rt-size-small);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .git :global(.section-head .link) {
-    margin-left: auto;
-  }
-  .spacer {
-    flex: 1;
-  }
-  .count {
-    padding: 0 6px;
-    border-radius: 8px;
-    background: var(--rt-bg-hover);
-    color: var(--rt-fg-muted);
-    font-size: 11px;
-    line-height: 16px;
-  }
-  .git :global(.icon-button) {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--rt-fg-muted);
+    font: var(--rt-font-small);
   }
   .files {
-    margin: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0 calc(-1 * var(--rt-space-3));
     padding: 0;
     list-style: none;
   }
   .files li {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 26px;
-    border-radius: var(--rt-radius);
+    gap: var(--rt-space-3);
+    min-height: var(--rt-control-md);
+    padding: 0 var(--rt-space-3);
+    border-radius: var(--rt-radius-md);
   }
   .files li:hover {
     background: var(--rt-bg-hover);
   }
-  .file {
-    flex: 1;
-    min-width: 0;
+  /* A list row: the row is the control, drawn with the row tokens (README: rows use
+     --rt-control-md and --rt-bg-hover). */
+  .row {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    height: auto;
-    padding: 3px 0;
-    border: none;
-    background: none;
+    flex: 1;
+    align-items: center;
+    gap: var(--rt-space-3);
+    min-width: 0;
+    height: var(--rt-control-md);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--rt-fg);
+    font: var(--rt-font-body);
     text-align: left;
+    cursor: pointer;
   }
-  .file:hover:not(:disabled) {
-    background: none;
+  .row:focus-visible {
+    outline: var(--rt-focus-width) solid var(--rt-focus);
+    outline-offset: calc(-1 * var(--rt-focus-width));
+    border-radius: var(--rt-radius-sm);
   }
   .file-title {
     flex: 0 1 auto;
@@ -1169,64 +1144,32 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--rt-fg-muted);
-    font-size: var(--rt-size-small);
+    color: var(--rt-fg-subtle);
+    font: var(--rt-font-small);
   }
-  .badge {
+  .state {
+    display: inline-flex;
     flex: none;
-    width: 16px;
-    margin-right: 4px;
-    text-align: center;
-    font: 700 11px / 16px var(--rt-font-mono);
-    border-radius: 3px;
-  }
-  .badge.untracked {
-    color: var(--rt-ok);
-  }
-  .badge.modified {
-    color: var(--rt-warn);
-  }
-  .badge.deleted,
-  .badge.conflicted {
-    color: var(--rt-danger);
   }
   .commit {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
+    gap: var(--rt-space-4);
+    margin-top: var(--rt-space-4);
   }
-  .empty {
+  .commit-button {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 16px 4px;
-    text-align: center;
+    min-width: 0;
   }
-  .empty-title {
-    margin: 0;
-    font-size: var(--rt-size);
+  .commit-button :global(.rt-split) {
+    flex: 1;
+    min-width: 0;
   }
-  .wide {
-    align-self: stretch;
+  .commit-button :global(.rt-split .main) {
+    flex: 1;
+    min-width: 0;
   }
   .footer {
-    align-self: flex-start;
     margin-top: auto;
-  }
-  .error {
-    color: var(--rt-danger);
-    font-size: var(--rt-size-small);
-  }
-  .warn {
-    color: var(--rt-warn);
-    font-size: var(--rt-size-small);
-  }
-  .result {
-    color: var(--rt-ok);
-    font-size: var(--rt-size-small);
-  }
-  .progress {
-    color: var(--rt-fg-muted);
   }
 </style>

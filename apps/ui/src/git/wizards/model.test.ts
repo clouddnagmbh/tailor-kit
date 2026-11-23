@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 The RequestTailor Authors
+
+import { describe, expect, it } from "vitest";
+
+import type { GitPlan, GitRef } from "../../commands/types";
+import { GLOSSARY } from "../glossary";
+import { confirmLabel, destructiveQuestion, initialValues, nameProblem, refMove, toAction, wayOut, wizardTerm, type WizardContext } from "./model";
+import type { GitWizardKind } from "./open";
+import { refNameProblem, suggestRefName } from "./refname";
+
+const ref = (name: string, kind: GitRef["kind"], current = false): GitRef => ({
+  full: kind === "local" ? `refs/heads/${name}` : kind === "tag" ? `refs/tags/${name}` : `refs/remotes/${name}`,
+  name,
+  kind,
+  target: "a".repeat(40),
+  current,
+  ahead: 0,
+  behind: 0,
+});
+const ctx: WizardContext = {
+  current: "feature",
+  upstream: "origin/feature",
+  refs: [ref("main", "local"), ref("feature", "local", true), ref("origin/main", "remote"), ref("v1.0", "tag")],
+};
+const plan = (over: Partial<GitPlan>): GitPlan =>
+  ({ action: { action: "pull" }, steps: [], refs: [], backup: false, undoable: true, destructive: false, network: false, ...over }) as GitPlan;
+
+describe("wizard values and actions", () => {
+  it("presets the obvious choice for each wizard", () => {
+    expect(initialValues("merge", {}, ctx).from).toBe("main");
+    expect(initialValues("create-branch", {}, ctx).target).toBe("HEAD");
+    expect(initialValues("create-branch", { start: "abc1234" }, ctx).target).toBe("abc1234");
+    expect(initialValues("create-branch", {}, ctx).switchTo).toBe(true);
+    expect(initialValues("rename-branch", {}, ctx).from).toBe("feature");
+    expect(initialValues("delete-branch", {}, ctx).name).toBe("main");
+    expect(initialValues("publish", {}, ctx).name).toBe("feature");
+    expect(initialValues("reset", {}, ctx).target).toBe("HEAD~1");
+    expect(initialValues("diverged", {}, ctx).choice).toBe("merge");
+    expect(initialValues("diverged", { choice: "theirs" }, ctx).choice).toBe("theirs");
+    expect(initialValues("detached", {}, ctx)).toMatchObject({ choice: "branch", target: "main" });
+  });
+
+  it("builds the action only when everything required is there", () => {
+    const v = (kind: GitWizardKind, preset: Record<string, unknown> = {}) => initialValues(kind, preset, ctx);
+    expect(toAction("create-branch", v("create-branch"), ctx)).toBeNull();
+    expect(toAction("create-branch", { ...v("create-branch"), name: " docs " }, ctx)).toEqual({ action: "create-branch", name: "docs", start: "HEAD", switch: true });
+    expect(toAction("merge", v("merge"), ctx)).toEqual({ action: "merge", from: "main" });
+    expect(toAction("add-remote", { ...v("add-remote"), name: "origin", url: "" }, ctx)).toBeNull();
+    expect(toAction("stash", v("stash"), ctx)).toEqual({ action: "stash" });
+    expect(toAction("revert", v("revert"), ctx)).toBeNull();
+    expect(toAction("reset", { ...v("reset"), mode: "discard" }, ctx)).toEqual({ action: "reset", target: "HEAD~1", mode: "discard" });
+    expect(toAction("create-tag", { ...v("create-tag"), name: "v2" }, ctx)).toEqual({ action: "create-tag", name: "v2", target: "HEAD", message: undefined });
+  });
+
+  it("turns the guided choices into plain actions", () => {
+    expect(toAction("diverged", initialValues("diverged", {}, ctx), ctx)).toEqual({ action: "pull" });
+    expect(toAction("diverged", initialValues("diverged", { choice: "theirs" }, ctx), ctx)).toEqual({ action: "reset", target: "origin/feature", mode: "discard" });
+    expect(toAction("detached", { ...initialValues("detached", {}, ctx), name: "rescue" }, ctx)).toEqual({ action: "create-branch", name: "rescue", start: "HEAD", switch: true });
+    expect(toAction("detached", initialValues("detached", { choice: "back" }, ctx), ctx)).toEqual({ action: "switch", target: "main" });
+  });
+
+  it("checks names while typing, like git check-ref-format", () => {
+    const v = initialValues("create-branch", {}, ctx);
+    expect(nameProblem("create-branch", { ...v, name: "" })).toBeNull();
+    expect(nameProblem("create-branch", { ...v, name: "feature/ok" })).toBeNull();
+    for (const bad of ["a..b", "-x", "x/", "x.lock", "a b", "a~b", "HEAD", ".hidden", "a//b", "a@{1}"]) expect(refNameProblem(bad), bad).toMatch(/cannot be used/);
+    expect(nameProblem("merge", { ...v, name: "a..b" })).toBeNull();
+    expect(suggestRefName("Fix the  login bug!")).toBe("fix-the-login-bug");
+    expect(suggestRefName("  /feature/New Thing. ")).toBe("feature/new-thing");
+  });
+});
+
+describe("wizard words", () => {
+  it("labels the confirm button with what happens", () => {
+    const v = initialValues("create-branch", {}, ctx);
+    expect(confirmLabel("create-branch", null, v)).toBe("Create and switch");
+    expect(confirmLabel("create-branch", null, { ...v, switchTo: false })).toBe("Create branch");
+    expect(confirmLabel("merge", plan({ merge: { fast_forward: true, commits: [], files: [] } as unknown as GitPlan["merge"] }), v)).toBe("Move forward");
+    expect(confirmLabel("discard", plan({ files: ["a", "b"] }), v)).toBe("Discard 2 changes");
+    expect(confirmLabel("diverged", plan({ action: { action: "reset", target: "x", mode: "discard" } }), v)).toBe("Take theirs");
+  });
+
+  it("asks a destructive question that names the way back", () => {
+    expect(destructiveQuestion("discard", plan({ action: { action: "discard", paths: [] }, files: ["a"] }))).toMatch(/1 file\? Undo can bring them back/);
+    expect(destructiveQuestion("diverged", plan({ action: { action: "reset", target: "x", mode: "discard" } }))).toMatch(/Undo/);
+  });
+
+  it("offers a way out for every block it can solve", () => {
+    expect(wayOut("unsaved-changes")).toBe("save");
+    expect(wayOut("local-changes")).toBe("park");
+    expect(wayOut("no-upstream")).toBe("publish");
+    expect(wayOut("rejected")).toBe("diverged");
+    expect(wayOut("not-merged")).toBe("force");
+    expect(wayOut("in-progress")).toBe("resolve");
+  });
+
+  it("shows ref moves in short words", () => {
+    expect(refMove({ name: "refs/heads/main", before: "a".repeat(40), after: "" })).toEqual({ name: "main", before: "aaaaaaa", after: "new commit" });
+    expect(refMove({ name: "HEAD", before: null, after: "b".repeat(40) })).toEqual({ name: "You are here", before: "(none)", after: "bbbbbbb" });
+  });
+
+  it("explains a Git word in every wizard", () => {
+    const kinds: GitWizardKind[] = ["create-branch", "merge", "pull", "push", "publish", "stash", "revert", "cherry-pick", "reset", "create-tag", "diverged", "detached", "clone", "undo", "remotes"];
+    for (const k of kinds) {
+      const term = wizardTerm(k);
+      expect(term, k).not.toBeNull();
+      expect(GLOSSARY[term!].text.length, k).toBeGreaterThan(20);
+    }
+  });
+});

@@ -150,7 +150,7 @@ export interface ChangeRow {
   path: string;
   state: GitFileState;
   /** A, M, D, C (R once the status reports renames). */
-  badge: "A" | "M" | "D" | "C" | "R";
+  badge: "A" | "M" | "D" | "U" | "R";
   /** Plain words for the badge. */
   badgeTitle: string;
   /** The request's name, or the file name for any other file. */
@@ -161,7 +161,7 @@ export interface ChangeRow {
   method: string | null;
 }
 
-const BADGE: Record<GitFileState, ChangeRow["badge"]> = { untracked: "A", modified: "M", deleted: "D", conflicted: "C" };
+const BADGE: Record<GitFileState, ChangeRow["badge"]> = { untracked: "A", modified: "M", deleted: "D", conflicted: "U" };
 const BADGE_TITLE: Record<GitFileState, string> = {
   untracked: "Added: a new file",
   modified: "Modified",
@@ -217,7 +217,7 @@ const TOOLS: { id: string; label: string; icon: string; tip: string }[] = [
   { id: "git:bisect", label: "Bisect", icon: "bisect", tip: "Find the commit that broke a test by running it on older versions, halving the range each time." },
   { id: "git:review", label: "Review", icon: "review", tip: "Review pull and merge requests from GitHub or GitLab: changes by field, contract notes and checks." },
   { id: "contract:open", label: "Contract", icon: "contract", tip: "Check the requests against the OpenAPI spec and list breaking changes between versions." },
-  { id: "git:rescue", label: "Secrets", icon: "shield", tip: "Scan the whole history for passwords and tokens that were committed, and move them out safely." },
+  { id: "git:rescue", label: "Secrets", icon: "shield-secret", tip: "Scan the whole history for passwords and tokens that were committed, and move them out safely." },
 ];
 
 /** Palette entries that the panel shows elsewhere, not as tiles. */
@@ -233,8 +233,8 @@ export function toolTiles(commands: Command[], openGraph: () => void): ToolTile[
     if (c) tiles.push({ ...t, run: c.run });
   }
   for (const c of commands) {
-    if (NOT_TILES.has(c.id) || TOOLS.some((t) => t.id === c.id)) continue;
-    tiles.push({ id: c.id, label: c.label.replace(/[:…(].*$/, "").trim() || c.label, icon: "tool", tip: c.label, run: c.run });
+    if (NOT_TILES.has(c.id) || c.id.startsWith("git-wizard:") || TOOLS.some((t) => t.id === c.id)) continue;
+    tiles.push({ id: c.id, label: c.label.replace(/[:…(].*$/, "").trim() || c.label, icon: "settings", tip: c.label, run: c.run });
   }
   return tiles;
 }

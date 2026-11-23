@@ -8,6 +8,7 @@
 
   import type { PullRequest, ReviewRepo } from "../commands/types";
   import { getApp } from "../state/app.svelte";
+  import { Avatar, Badge, Banner, Button, Card, Chip, EmptyState } from "../ui";
   import { relativeTime, requestWord, stateLabel } from "./model";
   import PullView from "./PullView.svelte";
   import ReviewSetup from "./ReviewSetup.svelte";
@@ -82,30 +83,42 @@
       }}
     />
     {#if repo && !needsToken}
-      <div class="bar"><button class="button" onclick={() => (showSetup = false)}>Back to the list</button></div>
+      <div class="bar"><Button onclick={() => (showSetup = false)}>Back to the list</Button></div>
     {/if}
-    {#if error}<p class="error" role="alert" data-testid="review-error">{error}</p>{/if}
+    {#if error}<div class="note" data-testid="review-error"><Banner tone="danger">{error}</Banner></div>{/if}
   {:else}
-    <div class="bar">
-      <span class="muted" data-testid="review-repo">{repo.host} · {repo.project}</span>
+    <header class="bar">
+      <div class="titles">
+        <h2>Pull requests</h2>
+        <span class="muted" data-testid="review-repo">{repo.host} · {repo.project}</span>
+      </div>
       <span class="spacer"></span>
-      <button class="button" data-testid="review-refresh" disabled={loading} onclick={() => void refresh()}>{loading ? "Loading…" : "Refresh"}</button>
-      <button class="button" data-testid="review-settings" onclick={() => (showSetup = true)}>Token and hosts</button>
-    </div>
-    {#if error}<p class="error" role="alert" data-testid="review-error">{error}</p>{/if}
+      <Button data-testid="review-refresh" icon="sync" loading={loading} disabled={loading} onclick={() => void refresh()}>{loading ? "Loading…" : "Refresh"}</Button>
+      <Button variant="ghost" data-testid="review-settings" icon="settings" onclick={() => (showSetup = true)}>Token and hosts</Button>
+    </header>
+    {#if error}<div class="note" data-testid="review-error"><Banner tone="danger">{error}</Banner></div>{/if}
     {#if pulls.length === 0 && !loading && !error}
-      <p class="hint" data-testid="review-empty">No open {word}s.</p>
+      <div data-testid="review-empty"><EmptyState icon="review" title="No open {word}s." /></div>
     {/if}
     <ul class="list" data-testid="review-list">
       {#each pulls as p (p.number)}
-        <li>
-          <button class="row" data-testid="review-row" data-number={p.number} onclick={() => (current = p.number)}>
-            <span class="num">#{p.number}</span>
-            <span class="title">{p.title}</span>
-            {#if p.draft}<span class="badge" data-testid="review-draft">Draft</span>{:else if p.state !== "open"}<span class="badge">{stateLabel(p)}</span>{/if}
-            <span class="muted branches">{p.author} · {p.source} → {p.target}</span>
-            <span class="muted">{relativeTime(p.updated)}</span>
-          </button>
+        <li data-testid="review-row" data-number={p.number}>
+          <Card padding="sm" onclick={() => (current = p.number)}>
+            <div class="row">
+              <span class="num">#{p.number}</span>
+              <span class="title">{p.title}</span>
+              {#if p.draft}<span data-testid="review-draft"><Badge tone="neutral" value="Draft" /></span>{:else if p.state !== "open"}<Badge tone={p.state === "merged" ? "accent" : "neutral"} value={stateLabel(p)} />{/if}
+              <span class="spacer"></span>
+              <span class="meta">
+                <Avatar name={p.author} size="sm" />
+                <span class="muted">{p.author}</span>
+                <Chip size="sm" mono icon="branch" label={p.source} />
+                <span class="muted" aria-hidden="true">→</span>
+                <Chip size="sm" mono label={p.target} />
+                <span class="muted">{relativeTime(p.updated)}</span>
+              </span>
+            </div>
+          </Card>
         </li>
       {/each}
     </ul>
@@ -116,14 +129,24 @@
   .review {
     display: flex;
     flex-direction: column;
-    gap: var(--rt-gap);
+    gap: var(--rt-space-6);
+    padding: var(--rt-space-6);
     min-height: 0;
   }
   .bar {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--rt-gap);
-    padding: var(--rt-gap) 12px 0;
+    gap: var(--rt-space-4);
+  }
+  .titles {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  h2 {
+    margin: 0;
+    font: var(--rt-font-heading);
   }
   .spacer {
     flex: 1;
@@ -131,72 +154,40 @@
   .hint,
   .muted {
     color: var(--rt-fg-muted);
+    font: var(--rt-font-small);
   }
-  .hint,
-  .error {
+  .hint {
     margin: 0;
-    padding: var(--rt-gap) 12px;
-  }
-  .error {
-    color: var(--rt-danger);
-  }
-  .button {
-    height: 26px;
-    padding: 0 10px;
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    background: var(--rt-bg);
-    color: var(--rt-fg);
-    cursor: pointer;
-  }
-  .button:disabled {
-    opacity: 0.6;
-    cursor: default;
   }
   .list {
     list-style: none;
-    margin: 0 12px;
+    margin: 0;
     padding: 0;
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-  }
-  .list li + li {
-    border-top: 1px solid var(--rt-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--rt-space-4);
   }
   .row {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 12px;
-    width: 100%;
-    padding: var(--rt-gap) 12px;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-  .row:hover {
-    background: var(--rt-bg-hover);
+    align-items: center;
+    gap: var(--rt-space-2) var(--rt-space-5);
   }
   .num {
+    font: var(--rt-font-small);
     font-family: var(--rt-font-mono);
     color: var(--rt-fg-muted);
   }
   .title {
-    font-weight: 600;
+    font: var(--rt-font-title);
     overflow-wrap: anywhere;
+    min-width: 0;
   }
-  .branches {
-    font-family: var(--rt-font-mono);
-    font-size: var(--rt-size-small);
-  }
-  .badge {
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    padding: 0 6px;
-    font-size: var(--rt-size-small);
-    color: var(--rt-fg-muted);
+  .meta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--rt-space-3);
+    min-width: 0;
   }
 </style>

@@ -100,6 +100,8 @@ mod abort;
 /// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
 mod actions;
 mod amend;
+/// Wave 15, strand C: blame, history search and reflog.
+mod blame;
 mod branch_actions;
 mod cherry_pick;
 pub mod credentials;
@@ -114,10 +116,12 @@ mod commit;
 mod file_log;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
+mod history_search;
 mod merge;
 mod net;
 mod pack;
 mod plumbing;
+mod reflog;
 mod remote;
 mod remotes_admin;
 mod repo;

@@ -19,7 +19,7 @@
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionActions from "../../shell/ExtensionActions.svelte";
   import { getApp } from "../../state/app.svelte";
-  import { EmptyState, IconButton, Menu, SegmentedControl, Skeleton, TextField, type MenuEntry } from "../../ui";
+  import { Button, EmptyState, IconButton, Menu, SegmentedControl, Skeleton, TextField, type MenuEntry } from "../../ui";
   import { getGitViews } from "../views.svelte";
   import { toMenu, type ActionHost } from "./actions";
   import CommitDetails from "./CommitDetails.svelte";
@@ -340,6 +340,7 @@
     </div>
     <IconButton icon="chevron-up" size="sm" label="Previous match" shortcut="Shift+Enter" disabled={hits.length === 0} onclick={() => jumpHit(-1)} />
     <IconButton icon="chevron-down" size="sm" label="Next match" shortcut="Enter" disabled={hits.length === 0} onclick={() => jumpHit(1)} />
+    <Button size="sm" variant="ghost" icon="search" data-testid="graph-search-all" onclick={() => host.views.open({ kind: "search", query: query.trim() ? { message: query.trim() } : undefined })}>Search all history</Button>
     <span class="spacer"></span>
     {#if notice}<span class="notice" role="status" data-testid="graph-notice">{notice}</span>{/if}
     <ExtensionActions actions={rangeActions} label="Range actions" />

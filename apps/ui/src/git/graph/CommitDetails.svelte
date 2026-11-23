@@ -246,6 +246,10 @@
       <div class="diff-head">
         <span class="diff-title">{split(file.path).name}</span>
         <span class="spacer"></span>
+        {#if !file.binary && file.change !== "deleted"}
+          <Button size="sm" variant="ghost" icon="file-text" data-testid="graph-file-blame" onclick={() => host.views.open({ kind: "blame", path: file.path, rev: commit.oid })}>Blame</Button>
+        {/if}
+        <Button size="sm" variant="ghost" icon="history" data-testid="graph-file-history" onclick={() => host.views.open({ kind: "file-history", path: file.path })}>File history</Button>
         {#if semanticHere}
           <SegmentedControl
             size="sm"

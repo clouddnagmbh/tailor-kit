@@ -192,12 +192,14 @@ impl Repo {
         Ok(n)
     }
 
-    /// One page of the graph (see the module docs for the order).
-    pub fn commit_graph(&self, query: &GitGraphQuery) -> Result<GitGraphPage> {
-        let refs = self.refs()?;
-        let head = self.head_commit()?;
-        let detached = head.is_some() && self.head_ref()?.is_none();
-        let tips: Vec<ObjectId> = match &query.refs {
+    /// The commits the history starts from: the refs asked for (`names`), else every ref and
+    /// `HEAD`.
+    pub(crate) fn graph_tips(
+        &self,
+        refs: &[GitRef],
+        names: Option<&[String]>,
+    ) -> Result<Vec<ObjectId>> {
+        Ok(match names {
             Some(names) => names
                 .iter()
                 .map(|n| self.resolve_rev(n))
@@ -207,34 +209,58 @@ impl Repo {
                     .iter()
                     .filter_map(|r| ObjectId::from_hex(r.target.as_bytes()).ok())
                     .collect();
-                tips.extend(head);
+                tips.extend(self.head_commit()?);
                 tips.sort();
                 tips.dedup();
                 tips
             }
-        };
-        let order = self.date_order(&tips)?;
-        let mut labels: HashMap<&str, Vec<String>> = HashMap::new();
-        for r in &refs {
+        })
+    }
+
+    /// Full ref names by the commit they point to, for the labels of graph rows.
+    pub(crate) fn ref_labels(refs: &[GitRef]) -> HashMap<String, Vec<String>> {
+        let mut labels: HashMap<String, Vec<String>> = HashMap::new();
+        for r in refs {
             labels
-                .entry(r.target.as_str())
+                .entry(r.target.clone())
                 .or_default()
                 .push(r.full.clone());
         }
+        labels
+    }
+
+    /// One row of the graph.
+    pub(crate) fn graph_commit(
+        &self,
+        id: ObjectId,
+        parents: &[ObjectId],
+        labels: &mut HashMap<String, Vec<String>>,
+    ) -> Result<GitGraphCommit> {
+        let (commit, email) = self.describe_with_email(id)?;
+        let refs = labels.remove(commit.oid.as_str()).unwrap_or_default();
+        Ok(GitGraphCommit {
+            commit,
+            parents: parents.iter().map(ToString::to_string).collect(),
+            email,
+            refs,
+            // Wave 15 interface: strand F reads the `gpgsig` header.
+            signed: false,
+        })
+    }
+
+    /// One page of the graph (see the module docs for the order).
+    pub fn commit_graph(&self, query: &GitGraphQuery) -> Result<GitGraphPage> {
+        let refs = self.refs()?;
+        let head = self.head_commit()?;
+        let detached = head.is_some() && self.head_ref()?.is_none();
+        let tips = self.graph_tips(&refs, query.refs.as_deref())?;
+        let order = self.date_order(&tips)?;
+        let mut labels = Self::ref_labels(&refs);
         let skip = query.skip as usize;
         let end = skip.saturating_add(query.limit as usize).min(order.len());
         let mut commits = Vec::with_capacity(end.saturating_sub(skip));
         for (id, parents) in order.get(skip..end).unwrap_or_default() {
-            let (commit, email) = self.describe_with_email(*id)?;
-            let refs = labels.remove(commit.oid.as_str()).unwrap_or_default();
-            commits.push(GitGraphCommit {
-                commit,
-                parents: parents.iter().map(ToString::to_string).collect(),
-                email,
-                refs,
-                // Wave 15 interface: strand F reads the `gpgsig` header.
-                signed: false,
-            });
+            commits.push(self.graph_commit(*id, parents, &mut labels)?);
         }
         Ok(GitGraphPage {
             commits,
@@ -247,7 +273,7 @@ impl Repo {
 
     /// All commits reachable from `tips`, children before parents, ties newest first, with
     /// their parents.
-    fn date_order(&self, tips: &[ObjectId]) -> Result<Vec<(ObjectId, Vec<ObjectId>)>> {
+    pub(crate) fn date_order(&self, tips: &[ObjectId]) -> Result<Vec<(ObjectId, Vec<ObjectId>)>> {
         if tips.is_empty() {
             return Ok(Vec::new());
         }

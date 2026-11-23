@@ -86,7 +86,8 @@
   const views = getGitViews();
   const commands = $derived(gitApiCommands(app, views));
   const git = app.backend.git;
-  const RECENT = 8;
+  /** Commits loaded for the panel; it shows as many as fit its height. */
+  const RECENT = 40;
 
   let status = $state<GitStatus | null>(null);
   let branches = $state<GitBranch[]>([]);

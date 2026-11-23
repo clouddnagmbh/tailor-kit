@@ -97,6 +97,7 @@ pub mod identity;
 pub mod local;
 
 mod branch;
+mod changelog_commits;
 mod commit;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;

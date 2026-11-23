@@ -20,6 +20,7 @@
   import { ICON_NAMES } from "../icons";
   import Kbd from "../Kbd.svelte";
   import type { MenuEntry } from "../menu";
+  import Progress from "../Progress.svelte";
   import Section from "../Section.svelte";
   import SegmentedControl from "../SegmentedControl.svelte";
   import Select from "../Select.svelte";
@@ -359,6 +360,13 @@
       <Kbd keys="Mod+Enter" />
       <Kbd keys="Mod+Shift+P" />
       <Kbd keys="Escape" />
+    </div>
+    <div class="stack">
+      <Progress label="Upload" value={60} />
+      <Progress label="Run" value={100} tone="ok" size="sm" />
+      <Progress label="Quota" value={85} tone="warn" />
+      <Progress label="Failed" value={30} tone="danger" size="sm" />
+      <Progress label="Loading collection" />
     </div>
     <div class="grid2">
       <div class="stack">

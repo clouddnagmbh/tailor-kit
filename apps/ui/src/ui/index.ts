@@ -20,6 +20,7 @@ export { default as Icon } from "./Icon.svelte";
 export { default as IconButton } from "./IconButton.svelte";
 export { default as Kbd } from "./Kbd.svelte";
 export { default as Menu } from "./Menu.svelte";
+export { default as Progress } from "./Progress.svelte";
 export { default as Section } from "./Section.svelte";
 export { default as SegmentedControl, type SegmentOption } from "./SegmentedControl.svelte";
 export { default as Select, type SelectOption } from "./Select.svelte";

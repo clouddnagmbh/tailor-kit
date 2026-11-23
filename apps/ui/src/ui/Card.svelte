@@ -5,6 +5,7 @@
      `actions` (no buttons inside a button). -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
 
   import Icon from "./Icon.svelte";
   import type { IconName } from "./icons";
@@ -19,7 +20,9 @@
     actions,
     footer,
     children,
-  }: {
+    class: className = "",
+    ...rest
+  }: Omit<HTMLAttributes<HTMLElement>, "class" | "title" | "children" | "onclick"> & {
     title?: string;
     description?: string;
     icon?: IconName | (string & {});
@@ -29,6 +32,7 @@
     actions?: Snippet;
     footer?: Snippet;
     children?: Snippet;
+    class?: string;
   } = $props();
 </script>
 
@@ -52,7 +56,8 @@
 {#if onclick}
   <!-- A div, not a <button>: headings and blocks are not allowed inside buttons. -->
   <div
-    class="rt-card p-{padding} interactive"
+    {...rest}
+    class="rt-card p-{padding} interactive {className}"
     class:selected
     role="button"
     tabindex="0"
@@ -67,7 +72,7 @@
     {@render content()}
   </div>
 {:else}
-  <section class="rt-card p-{padding}" class:selected>{@render content()}</section>
+  <section {...rest} class="rt-card p-{padding} {className}" class:selected>{@render content()}</section>
 {/if}
 
 <style>
@@ -119,6 +124,13 @@
     box-shadow:
       0 0 0 1px var(--rt-accent),
       var(--rt-elev-1);
+  }
+  /* Hover must not hide the selection; it only lifts the card a little more. */
+  .selected.interactive:hover {
+    border-color: var(--rt-accent);
+    box-shadow:
+      0 0 0 1px var(--rt-accent),
+      var(--rt-elev-2);
   }
   header {
     display: flex;

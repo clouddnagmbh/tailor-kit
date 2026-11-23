@@ -3,6 +3,7 @@
 <!-- A button with a main action and a menu of related ones ("Commit" | "Commit and push…"). -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { HTMLButtonAttributes } from "svelte/elements";
 
   import Button from "./Button.svelte";
   import Icon from "./Icon.svelte";
@@ -21,7 +22,8 @@
     onclick,
     onselect,
     children,
-  }: {
+    ...rest
+  }: Omit<HTMLButtonAttributes, "class" | "children" | "onclick" | "disabled"> & {
     items: MenuEntry[];
     icon?: IconName | (string & {});
     variant?: "primary" | "secondary";
@@ -49,7 +51,7 @@
 </script>
 
 <span class="rt-split {variant} {size}" class:disabled>
-  <Button {variant} {size} {icon} {disabled} {loading} {onclick} class="main">{@render children()}</Button>
+  <Button {...rest} {variant} {size} {icon} {disabled} {loading} {onclick} class="main">{@render children()}</Button>
   <button
     bind:this={caret}
     type="button"

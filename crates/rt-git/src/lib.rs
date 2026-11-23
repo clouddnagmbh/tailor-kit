@@ -86,6 +86,8 @@ mod branch;
 mod commit;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
+/// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
+mod graph;
 mod merge;
 mod net;
 mod pack;

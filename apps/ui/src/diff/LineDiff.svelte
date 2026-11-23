@@ -6,6 +6,7 @@
   import type { DiffScope, GitDiff } from "../commands/types";
   import { hunkHeader } from "../git/format";
   import { getApp } from "../state/app.svelte";
+  import { Spinner } from "../ui";
   import { lineDiff } from "./textdiff";
 
   let { scope, path }: { scope: DiffScope; path: string } = $props();
@@ -46,7 +47,7 @@
   {#if error}
     <p class="error" role="alert">{error}</p>
   {:else if !diff}
-    <p class="hint">Loading…</p>
+    <p class="hint"><Spinner size="sm" label="Loading" /> Loading…</p>
   {:else if diff.binary}
     <p class="hint">Binary file: no line diff.</p>
   {:else if diff.hunks.length === 0}
@@ -65,45 +66,67 @@
 
 <style>
   .lines {
-    margin: var(--rt-gap) 0;
+    margin: var(--rt-space-5) 0;
+    border: 1px solid var(--rt-border);
+    border-radius: var(--rt-radius-lg);
+    background: var(--rt-surface-2);
+    box-shadow: var(--rt-elev-1);
+    overflow: hidden;
     font-family: var(--rt-font-mono);
-    font-size: var(--rt-size-small);
+    font-size: var(--rt-text-small);
+    line-height: var(--rt-leading-small);
   }
   .path {
-    padding: 2px calc(var(--rt-gap) * 2);
-    font-weight: 600;
-    background: var(--rt-bg-panel);
+    padding: var(--rt-space-4) var(--rt-space-5);
+    font-weight: var(--rt-weight-semibold);
+    background: var(--rt-surface-sunken);
+    border-bottom: 1px solid var(--rt-border);
     overflow-wrap: anywhere;
   }
+  .hunk + .hunk {
+    border-top: 1px solid var(--rt-border);
+  }
   .hunk-header {
-    padding: 2px calc(var(--rt-gap) * 2);
+    padding: var(--rt-space-2) var(--rt-space-5);
     color: var(--rt-fg-muted);
+    background: var(--rt-surface-sunken);
   }
   .line {
-    padding: 0 calc(var(--rt-gap) * 2);
+    padding: 0 var(--rt-space-5);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
   .line.added {
-    background: color-mix(in srgb, var(--rt-ok) 16%, transparent);
+    background: var(--rt-diff-add-bg);
   }
   .line.removed {
-    background: color-mix(in srgb, var(--rt-danger) 16%, transparent);
+    background: var(--rt-diff-del-bg);
   }
   .sign {
     display: inline-block;
-    width: 1.5ch;
+    width: 2ch;
+    color: var(--rt-fg-muted);
     user-select: none;
+  }
+  .added .sign {
+    color: var(--rt-ok-fg);
+  }
+  .removed .sign {
+    color: var(--rt-danger-fg);
   }
   .hint,
   .error {
+    display: flex;
+    align-items: center;
+    gap: var(--rt-space-4);
     margin: 0;
-    padding: 2px calc(var(--rt-gap) * 2);
+    padding: var(--rt-space-4) var(--rt-space-5);
+    font: var(--rt-font-small);
   }
   .hint {
     color: var(--rt-fg-muted);
   }
   .error {
-    color: var(--rt-danger);
+    color: var(--rt-danger-fg);
   }
 </style>

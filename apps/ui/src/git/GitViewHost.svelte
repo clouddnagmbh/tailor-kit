@@ -13,6 +13,7 @@
   import RescueWizard from "../rescue/RescueWizard.svelte";
   import ReviewPanel from "../review/ReviewPanel.svelte";
   import RequestTimeline from "../timeline/RequestTimeline.svelte";
+  import { Icon, IconButton } from "../ui";
   import type { GitView, GitViews } from "./views.svelte";
 
   let { views }: { views: GitViews } = $props();
@@ -28,14 +29,35 @@
     rescue: "Secret rescue",
     graph: "History",
   };
+  const ICONS: Record<GitView["kind"], string> = {
+    diff: "compare",
+    merge: "merge",
+    compare: "compare",
+    bisect: "bisect",
+    timeline: "history",
+    review: "review",
+    contract: "contract",
+    rescue: "shield-secret",
+    graph: "graph",
+  };
+
+  function onkeydown(e: KeyboardEvent) {
+    // Escape closes the view unless something inside (a picker, a menu, a field) used it.
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest("input, textarea, select, [role='listbox'], [role='menu'], [role='dialog']")) return;
+    views.close();
+  }
 </script>
 
 {#if views.current}
   {@const view = views.current}
-  <section class="git-view" data-testid="git-view" data-kind={view.kind} aria-label={TITLES[view.kind]}>
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <section class="git-view" data-testid="git-view" data-kind={view.kind} aria-label={TITLES[view.kind]} {onkeydown}>
     <header>
+      <span class="icon"><Icon name={ICONS[view.kind]} /></span>
       <h2>{TITLES[view.kind]}</h2>
-      <button class="button" data-testid="git-view-close" onclick={() => views.close()}>Close</button>
+      <IconButton icon="close" label="Close view" shortcut="Escape" tooltipPlacement="left" data-testid="git-view-close" onclick={() => views.close()} />
     </header>
     <div class="body">
       {#if view.kind === "diff"}
@@ -71,20 +93,30 @@
   header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--rt-gap);
+    gap: var(--rt-space-4);
+    flex: none;
     height: var(--rt-bar-height);
-    padding: 0 var(--rt-gap);
+    padding: 0 var(--rt-space-4) 0 var(--rt-space-6);
     border-bottom: 1px solid var(--rt-border);
+    background: var(--rt-surface-1);
+  }
+  .icon {
+    display: inline-flex;
+    color: var(--rt-fg-muted);
   }
   h2 {
+    flex: 1;
+    min-width: 0;
     margin: 0;
-    font-size: var(--rt-size);
-    font-weight: 600;
+    font: var(--rt-font-title);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .body {
     flex: 1;
     min-height: 0;
     overflow: auto;
+    background: var(--rt-surface-1);
   }
 </style>

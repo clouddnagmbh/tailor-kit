@@ -143,6 +143,8 @@
     branches.filter((b) => b.remote && !localBranches.some((l) => b.name.endsWith(`/${l.name}`)) && !b.name.endsWith("/HEAD")),
   );
   const current = $derived(status?.branch ?? null);
+  /** Branches to compare the current one with, field by field ("Compare with" in the branch menu). */
+  const compareTargets = $derived(branches.filter((b) => b.name !== current && !b.name.endsWith("/HEAD")));
   const origin = $derived(remotes?.find((r) => r.name === "origin") ?? remotes?.[0] ?? null);
   const name = $derived(repoName(origin?.url ?? null, app.collection?.location ?? null));
   /** Other collections of the set in the same repository (strand A fills `repo`). */
@@ -478,6 +480,17 @@
       { separator: true },
       { id: "new", label: "New branch…", icon: "add", run: () => wizard("create-branch", { start: "HEAD" }) },
       { id: "merge", label: current ? `Merge into ${current}…` : "Merge into current…", icon: "merge", disabled: !current, run: () => wizard("merge") },
+      {
+        id: "compare",
+        label: "Compare with",
+        icon: "compare",
+        disabled: compareTargets.length === 0,
+        items: compareTargets.map((b) => ({
+          id: `compare-${b.name}`,
+          label: b.name,
+          run: () => views.open({ kind: "diff", scope: { kind: "between", from: current ?? "HEAD", to: b.name } }),
+        })),
+      },
       { id: "rename", label: "Rename branch…", icon: "edit", disabled: !current, run: () => wizard("rename-branch", { from: current }) },
       { id: "delete", label: "Delete branch…", icon: "delete", danger: true, run: () => wizard("delete-branch") },
     );

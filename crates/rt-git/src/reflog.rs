@@ -45,8 +45,8 @@ impl Repo {
         let mut out = Vec::new();
         for (index, line) in lines.take(limit as usize).enumerate() {
             let line = line.ctx("cannot read the reflog")?;
-            let new = ObjectId::from(line.new_oid);
-            let old = ObjectId::from(line.previous_oid);
+            let new = line.new_oid;
+            let old = line.previous_oid;
             out.push(GitReflogEntry {
                 name: full.clone(),
                 index: index as u32,

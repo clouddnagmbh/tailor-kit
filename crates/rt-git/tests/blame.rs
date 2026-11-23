@@ -209,7 +209,7 @@ fn blames_every_line_across_renames_and_merges() {
     let first = blame
         .hunks
         .iter()
-        .find(|h| h.commit.oid == f.c1.to_string())
+        .find(|h| f.c1 == h.commit.oid.as_str())
         .unwrap();
     assert_eq!(first.path, "/src/main.txt", "before the rename");
     assert_eq!(first.orig_start, 1);

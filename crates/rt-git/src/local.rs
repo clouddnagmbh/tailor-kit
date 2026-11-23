@@ -28,7 +28,29 @@ pub fn missing_objects(
 ) -> Result<Vec<ObjectId>> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    let mut commits: VecDeque<ObjectId> = tips.iter().copied().collect();
+    let mut commits: VecDeque<ObjectId> = VecDeque::new();
+    // Annotated tags (wave 14, push-tag): the tag object first (it points to the commit, so it
+    // is written last), then what it points to.
+    for tip in tips {
+        let mut id = *tip;
+        loop {
+            let object = src.find_object(id).ctx("cannot read an object")?;
+            if object.kind != gix::objs::Kind::Tag {
+                break;
+            }
+            let target = object
+                .try_into_tag()
+                .ctx("cannot read a tag")?
+                .target_id()
+                .ctx("cannot read a tag")?
+                .detach();
+            if seen.insert(id) && !has(&id) {
+                out.push(id);
+            }
+            id = target;
+        }
+        commits.push_back(id);
+    }
     while let Some(id) = commits.pop_front() {
         if !seen.insert(id) || has(&id) {
             continue;

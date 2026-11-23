@@ -133,7 +133,7 @@ impl Repo {
     /// (then through a local `x` that tracks it, created if needed). Refuses if files that
     /// differ between the branches have local changes.
     pub fn checkout(&self, branch: &str) -> Result<()> {
-        if self.merge_head()?.is_some() {
+        if self.underway()?.is_some() {
             return Err(fail(
                 "finish the merge (resolve and commit) before switching branches",
             ));

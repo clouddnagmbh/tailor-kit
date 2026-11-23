@@ -366,7 +366,7 @@ impl Repo {
         store: &mut dyn FnMut(&str) -> Result<()>,
     ) -> Result<RescueResult> {
         rescue::check_plan(plan)?;
-        if self.merge_head()?.is_some() {
+        if self.underway()?.is_some() {
             return Err(fail("finish the merge before rewriting the history"));
         }
         if self.head_ref()?.is_none() {

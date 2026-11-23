@@ -17,7 +17,13 @@ export type GitWizardKind = GitAction["action"] | "diverged" | "detached" | "clo
 
 export interface GitWizardRequest {
   kind: GitWizardKind;
-  /** Fields known already, e.g. `{ start: "<oid>" }` for "branch from here". */
+  /** Fields known already (stable; the graph and the panel rely on them):
+   *  create-branch `{ start, name?, switch? }`, switch `{ target }`, merge `{ from }`,
+   *  rename-branch `{ from }`, delete-branch `{ name | branch }`, publish `{ name | branch, remote? }`,
+   *  cherry-pick and revert `{ commit }`, reset `{ target, mode?: "keep-changes" | "discard" }`,
+   *  create-tag `{ target, name?, message? }`, delete-tag and push-tag `{ name }`,
+   *  discard `{ paths }` (relative to the collection, or to the repository with a leading `/`), unstash and drop-stash `{ index }`,
+   *  diverged `{ choice: "merge" | "theirs" }`, detached `{ choice: "branch" | "back" }`. */
   preset?: Record<string, unknown>;
 }
 

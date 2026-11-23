@@ -11,7 +11,16 @@
 
   let { ai }: { ai: AiState } = $props();
 
-  const DEFAULT_MODEL: Record<AiProviderKind, string> = { anthropic: "claude-opus-5-5", "openai-compatible": "" };
+  // Wave 16: the other providers get their dialog with profiles (strand A).
+  const DEFAULT_MODEL: Record<AiProviderKind, string> = {
+    anthropic: "claude-opus-5-5",
+    "openai-compatible": "",
+    openai: "",
+    "azure-openai": "",
+    gemini: "",
+    mistral: "",
+    bedrock: "",
+  };
 
   // The dialog edits a copy; nothing changes until "Save".
   // svelte-ignore state_referenced_locally

@@ -37,9 +37,25 @@
 //! line diff and merge. Several collections of the set can share one repository; Git works per
 //! repository (the one of the active collection), and an action that changes the working tree
 //! reloads all of them.
+//!
+//! Wave 15 (interface): a Git client for any repository. [`repos`] puts repositories without a
+//! collection into the set (the *active repository* is what every `GitApi` command acts on;
+//! strand A), [`files`] the whole working copy, a file tree and file contents for the viewers
+//! (strand B), [`history`] blame, history search and the reflog (strand C), [`plumbing`]
+//! in-memory replays and object writes for history editors, moved into place only by
+//! [`actions::GitAction::Rewrite`] (strand D), [`index`] the index as building blocks for a
+//! staging view and [`signing`] what the app knows about signatures (strand F). Everything new
+//! uses repository-relative paths with a leading `/`; the default commit stays "without
+//! staging".
 
 pub mod actions;
+pub mod files;
 pub mod graph;
+pub mod history;
+pub mod index;
+pub mod plumbing;
+pub mod repos;
+pub mod signing;
 
 use std::collections::BTreeMap;
 

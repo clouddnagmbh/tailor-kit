@@ -8,6 +8,16 @@
   import ComparePanel from "../compare/ComparePanel.svelte";
   import ContractPanel from "../contract/ContractPanel.svelte";
   import GraphView from "./graph/GraphView.svelte";
+  import ChangesView from "./changes/ChangesView.svelte";
+  import FileView from "./files/FileView.svelte";
+  import BlameView from "./history/BlameView.svelte";
+  import FileHistoryView from "./history/FileHistoryView.svelte";
+  import ReflogView from "./history/ReflogView.svelte";
+  import SearchView from "./history/SearchView.svelte";
+  import TextMergeView from "./conflict/TextMergeView.svelte";
+  import ExtensionGitView from "./extension/ExtensionGitView.svelte";
+  import { extensionGitView } from "../shell/extension-git";
+  import { getExtensions } from "../shell/extension-tabs";
   import SemanticDiffView from "../diff/SemanticDiffView.svelte";
   import MergeView from "../merge/MergeView.svelte";
   import RescueWizard from "../rescue/RescueWizard.svelte";
@@ -17,6 +27,7 @@
   import type { GitView, GitViews } from "./views.svelte";
 
   let { views }: { views: GitViews } = $props();
+  const extensions = getExtensions();
 
   const TITLES: Record<GitView["kind"], string> = {
     diff: "Changes",
@@ -28,6 +39,14 @@
     contract: "API contract",
     rescue: "Secret rescue",
     graph: "History",
+    changes: "Changes",
+    file: "File",
+    "file-history": "File history",
+    blame: "Blame",
+    search: "Search history",
+    reflog: "Lost work",
+    "text-merge": "Resolve conflict",
+    extension: "Git",
   };
   const ICONS: Record<GitView["kind"], string> = {
     diff: "compare",
@@ -39,7 +58,19 @@
     contract: "contract",
     rescue: "shield-secret",
     graph: "graph",
+    changes: "commit",
+    file: "file-text",
+    "file-history": "history",
+    blame: "history",
+    search: "search",
+    reflog: "undo",
+    "text-merge": "merge",
+    extension: "graph",
   };
+  // An extension's view names its own title and icon.
+  const extensionView = $derived(views.current?.kind === "extension" ? extensionGitView(extensions, views.current.id) : null);
+  const title = $derived(views.current ? (extensionView?.title ?? TITLES[views.current.kind]) : "");
+  const icon = $derived(views.current ? (extensionView?.icon ?? ICONS[views.current.kind]) : "graph");
 
   function onkeydown(e: KeyboardEvent) {
     // Escape closes the view unless something inside (a picker, a menu, a field) used it.
@@ -53,10 +84,10 @@
 {#if views.current}
   {@const view = views.current}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <section class="git-view" data-testid="git-view" data-kind={view.kind} aria-label={TITLES[view.kind]} {onkeydown}>
+  <section class="git-view" data-testid="git-view" data-kind={view.kind} aria-label={title} {onkeydown}>
     <header>
-      <span class="icon"><Icon name={ICONS[view.kind]} /></span>
-      <h2>{TITLES[view.kind]}</h2>
+      <span class="icon"><Icon name={icon} /></span>
+      <h2>{title}</h2>
       <IconButton icon="close" label="Close view" shortcut="Escape" tooltipPlacement="left" data-testid="git-view-close" onclick={() => views.close()} />
     </header>
     <div class="body">
@@ -76,6 +107,22 @@
         <ContractPanel />
       {:else if view.kind === "graph"}
         <GraphView select={view.select} />
+      {:else if view.kind === "changes"}
+        <ChangesView />
+      {:else if view.kind === "file"}
+        <FileView path={view.path} rev={view.rev} />
+      {:else if view.kind === "file-history"}
+        <FileHistoryView path={view.path} />
+      {:else if view.kind === "blame"}
+        <BlameView path={view.path} rev={view.rev} />
+      {:else if view.kind === "search"}
+        <SearchView query={view.query} />
+      {:else if view.kind === "reflog"}
+        <ReflogView name={view.name} />
+      {:else if view.kind === "text-merge"}
+        <TextMergeView path={view.path} onclose={() => views.close()} />
+      {:else if view.kind === "extension"}
+        <ExtensionGitView id={view.id} props={view.props ?? {}} onclose={() => views.close()} />
       {:else}
         <RescueWizard />
       {/if}

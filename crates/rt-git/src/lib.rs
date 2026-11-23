@@ -86,6 +86,14 @@
 //! [`Repo::commit_to_branch`] writes files onto a (new) branch: the branch's or a start
 //! revision's tree with the files written or removed. Only that branch ref moves; the work
 //! tree, the index and `HEAD` stay as they are, and the checked-out branch is refused.
+//!
+//! # Git client (wave 15)
+//!
+//! Any repository, not only one that holds a collection (`rt_app::git::{repos, files, history,
+//! plumbing, index, signing}`). The interface adds the types and [`sign`]; the strands add
+//! `Repo` methods in their own files: strand B the working copy, file tree and blobs, strand C
+//! blame, history search and reflog, strand D the new actions and the plumbing (`pick`,
+//! `write_tree`, `write_commit`), strand F the index operations and signing.
 
 /// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
 mod actions;
@@ -116,6 +124,8 @@ pub mod review;
 mod revisions;
 /// Wave 12, strand G: history scan and rewrite.
 pub mod rewrite;
+/// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
+pub mod sign;
 mod stash;
 mod status;
 mod tags;

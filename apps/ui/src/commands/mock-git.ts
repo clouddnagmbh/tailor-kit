@@ -18,6 +18,7 @@ import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitGraph } from "./mock-git-graph";
+import { stubGitHistory, stubGitIndex, stubGitPlumbing, stubGitWorking } from "./wave15-stubs";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
@@ -632,6 +633,32 @@ export class MockGit implements GitApi {
   apply: GitApi["apply"] = (action) => this.wave14Actions.apply(action);
   lastAction: GitApi["lastAction"] = () => this.wave14Actions.lastAction();
   undo: GitApi["undo"] = (id) => this.wave14Actions.undo(id);
+
+  // Wave 15 (interface): placeholders until strands B (`mock-git-files.ts`), C
+  // (`mock-git-history.ts`), D (`mock-git-plumbing.ts`) and F (`mock-git-index.ts`).
+  private wave15Working = stubGitWorking();
+  private wave15History = stubGitHistory();
+  private wave15Plumbing = stubGitPlumbing();
+  private wave15Index = stubGitIndex();
+  workingCopy: GitApi["workingCopy"] = () => this.wave15Working.workingCopy();
+  fileTree: GitApi["fileTree"] = (rev, dir) => this.wave15Working.fileTree(rev, dir);
+  blob: GitApi["blob"] = (rev, path) => this.wave15Working.blob(rev, path);
+  blame: GitApi["blame"] = (rev, path) => this.wave15History.blame(rev, path);
+  searchHistory: GitApi["searchHistory"] = (q) => this.wave15History.searchHistory(q);
+  reflog: GitApi["reflog"] = (name, limit) => this.wave15History.reflog(name, limit);
+  commitInfo: GitApi["commitInfo"] = (rev) => this.wave15Plumbing.commitInfo(rev);
+  pick: GitApi["pick"] = (r) => this.wave15Plumbing.pick(r);
+  writeTree: GitApi["writeTree"] = (w) => this.wave15Plumbing.writeTree(w);
+  writeCommit: GitApi["writeCommit"] = (w) => this.wave15Plumbing.writeCommit(w);
+  resolveText: GitApi["resolveText"] = (path, text) => this.wave15Plumbing.resolveText(path, text);
+  indexDiff: GitApi["indexDiff"] = (path, side) => this.wave15Index.indexDiff(path, side);
+  stage: GitApi["stage"] = (paths) => this.wave15Index.stage(paths);
+  unstage: GitApi["unstage"] = (paths) => this.wave15Index.unstage(paths);
+  stagePatch: GitApi["stagePatch"] = (p) => this.wave15Index.stagePatch(p);
+  unstagePatch: GitApi["unstagePatch"] = (p) => this.wave15Index.unstagePatch(p);
+  discardPatch: GitApi["discardPatch"] = (p) => this.wave15Index.discardPatch(p);
+  commitStaged: GitApi["commitStaged"] = (c) => this.wave15Index.commitStaged(c);
+  verify: GitApi["verify"] = (oids) => this.wave15Index.verify(oids);
 
   mergeCommits(): { ours: string; theirs: string; base: string | null } | null {
     const ours = this.head();

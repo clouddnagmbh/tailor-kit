@@ -15,6 +15,9 @@
   import { onMount, tick } from "svelte";
 
   import type { GitGraphCommit } from "../../commands/types";
+  import { extensionRangeActions } from "../../shell/extension-actions";
+  import { getExtensions } from "../../shell/extension-tabs";
+  import ExtensionActions from "../../shell/ExtensionActions.svelte";
   import { getApp } from "../../state/app.svelte";
   import { EmptyState, IconButton, Menu, SegmentedControl, Skeleton, TextField, type MenuEntry } from "../../ui";
   import { getGitViews } from "../views.svelte";
@@ -56,6 +59,13 @@
   const n = $derived(data.commits.length);
   const selectedIndex = $derived(selected ? (data.index.get(selected) ?? -1) : -1);
   const selectedCommit = $derived(selectedIndex >= 0 ? data.commits[selectedIndex]! : null);
+  // Wave 16: actions of extensions on the two commits selected together (base and selection).
+  const extensions = getExtensions();
+  const rangeActions = $derived(
+    base && selected && base !== selected
+      ? extensionRangeActions(extensions, { collection: app.activeCollection, from: base, to: selected, source: "graph" })
+      : [],
+  );
   const baseCommit = $derived(base ? (data.commits[data.index.get(base) ?? -1] ?? null) : null);
   const ctx: GraphContext = $derived({ head: data.head, branch: data.branch });
   const lanes = $derived(Math.min(MAX_LANES, Math.max(2, data.maxWidth)));
@@ -332,6 +342,7 @@
     <IconButton icon="chevron-down" size="sm" label="Next match" shortcut="Enter" disabled={hits.length === 0} onclick={() => jumpHit(1)} />
     <span class="spacer"></span>
     {#if notice}<span class="notice" role="status" data-testid="graph-notice">{notice}</span>{/if}
+    <ExtensionActions actions={rangeActions} label="Range actions" />
     <span class="count" data-testid="graph-count">{countText}</span>
     <SegmentedControl
       size="sm"

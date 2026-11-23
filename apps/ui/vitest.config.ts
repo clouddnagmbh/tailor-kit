@@ -6,5 +6,11 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [svelte()],
-  test: { include: ["src/**/*.test.ts"] },
+  test: {
+    include: ["src/**/*.test.ts"],
+    // tokens.test.ts reads tokens.css with `?raw`.
+    css: { include: [/tokens\.css/] },
+    // Lucide ships .svelte sources; compile them instead of loading them as Node modules.
+    server: { deps: { inline: [/@lucide\/svelte/] } },
+  },
 });

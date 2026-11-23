@@ -1,0 +1,44 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Copyright 2026 The RequestTailor Authors */
+
+/* Layers created outside Svelte components (tooltips, tooltip.ts). */
+
+.rt-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: var(--rt-z-tooltip);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rt-space-3);
+  max-width: 280px;
+  padding: var(--rt-space-2) var(--rt-space-4);
+  border-radius: var(--rt-radius-md);
+  background: var(--rt-tooltip-bg);
+  color: var(--rt-tooltip-fg);
+  font: var(--rt-weight-medium) var(--rt-text-small) / var(--rt-leading-small) var(--rt-font-ui);
+  box-shadow: var(--rt-elev-2);
+  pointer-events: none;
+  animation: rt-tooltip-in var(--rt-dur-fast) var(--rt-ease-out);
+}
+
+.rt-tooltip-keys {
+  display: inline-flex;
+  gap: var(--rt-space-1);
+}
+
+.rt-tooltip-keys kbd {
+  min-width: 16px;
+  padding: 0 var(--rt-space-2);
+  border-radius: var(--rt-radius-sm);
+  background: rgb(255 255 255 / 0.14);
+  font: var(--rt-weight-medium) var(--rt-text-caption) / 16px var(--rt-font-ui);
+  text-align: center;
+}
+
+@keyframes rt-tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}

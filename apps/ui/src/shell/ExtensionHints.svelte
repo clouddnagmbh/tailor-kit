@@ -6,6 +6,7 @@
      modal, never blocking. -->
 <script lang="ts">
   import type { HintTarget } from "../extensions";
+  import { Banner, Button } from "../ui";
   import { dismissalKey, extensionHintsFor, pickHint } from "./extension-hints";
   import { getExtensions } from "./extension-tabs";
   import { hintStore } from "./hint-store";
@@ -32,89 +33,34 @@
 
 {#if shown && target}
   {#key shown.key}
-    <aside class="hint" class:compact={target.place === "collection"} aria-label="Hint" data-testid="extension-hint" data-hint={shown.key}>
-      <span class="mark" aria-hidden="true"></span>
-      <p>{shown.hint.text}</p>
-      <div class="actions">
-        {#each (shown.hint.actions ?? []).slice(0, 2) as action, i (i)}
-          <button type="button" class="act" data-testid="hint-action" onclick={() => act(action)}>{action.label}</button>
-        {/each}
-        <button type="button" class="close" data-testid="hint-dismiss" aria-label="Dismiss hint" title="Dismiss" onclick={dismiss}>
-          <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" /></svg>
-        </button>
-      </div>
-    </aside>
+    <div class="hint" data-testid="extension-hint" data-hint={shown.key}>
+      <Banner tone="info" dismissible dismissLabel="Dismiss hint" ondismiss={dismiss}>
+        {shown.hint.text}
+        {#snippet actions()}
+          {#each (shown.hint.actions ?? []).slice(0, 2) as action, i (i)}
+            <Button size="sm" data-testid="hint-action" onclick={() => act(action)}>{action.label}</Button>
+          {/each}
+        {/snippet}
+      </Banner>
+    </div>
   {/key}
 {/if}
 
 <style>
   .hint {
-    display: flex;
+    padding: 0 0 var(--rt-space-4);
+  }
+  /* A calm line above the URL bar: tighter than a full banner. */
+  .hint :global(.rt-banner) {
     align-items: center;
-    gap: var(--rt-gap);
-    min-height: var(--rt-bar-height);
-    padding: 4px var(--rt-side-inset);
-    background: var(--rt-bg-panel);
-    border-bottom: 1px solid var(--rt-border);
-    color: var(--rt-fg);
-    font-size: var(--rt-size-small);
+    padding: var(--rt-space-3) var(--rt-space-4);
+    border-radius: var(--rt-radius-md);
+    font: var(--rt-font-small);
   }
-  .hint.compact {
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-    margin: 4px var(--rt-side-inset);
-  }
-  .mark {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--rt-accent);
-  }
-  p {
-    flex: 1 1 auto;
-    min-width: 0;
+  .hint :global(.rt-banner .dismiss) {
     margin: 0;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
   }
-  .actions {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  button {
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-  }
-  .act {
-    padding: 2px 8px;
-    background: var(--rt-bg);
-    border: 1px solid var(--rt-border);
-    border-radius: var(--rt-radius);
-  }
-  .act:hover {
-    background: var(--rt-bg-hover);
-  }
-  .close {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    background: none;
-    border: 0;
-    border-radius: var(--rt-radius);
-    color: var(--rt-fg-muted);
-  }
-  .close:hover {
-    background: var(--rt-bg-hover);
-    color: var(--rt-fg);
-  }
-  button:focus-visible {
-    outline: 2px solid var(--rt-focus);
-    outline-offset: 1px;
+  .hint :global(.rt-banner .lead) {
+    margin-top: 0;
   }
 </style>

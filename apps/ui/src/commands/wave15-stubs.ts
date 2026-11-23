@@ -6,9 +6,8 @@
 // replaces them in its own files (desktop `src/<group>.ts`, web `src/git/<group>.ts`, mock
 // `commands/mock-<group>.ts`). Exported from the package so the shells can use them until then.
 
-import type { GitApi, RepositoryApi, ReviewApi } from "./backend";
+import type { GitApi, ReviewApi } from "./backend";
 import { BackendError } from "./backend";
-import type { CollectionEntry, CollectionSet, RepositoryEntry } from "./types";
 
 /** Strand B: working copy, file tree, file contents. */
 export type GitWorkingMethods = Pick<GitApi, "workingCopy" | "fileTree" | "blob">;
@@ -24,11 +23,6 @@ export type GitIndexMethods = Pick<
 
 function notYet(feature: string, strand: string): () => Promise<never> {
   return () => Promise.reject(new BackendError("unsupported", `${feature} is not implemented yet (wave 15, strand ${strand}).`));
-}
-
-export function stubRepositories(): RepositoryApi {
-  const no = notYet("Opening any repository", "A");
-  return { open: no, activate: no, summary: no, clone: no, init: no };
 }
 
 export function stubGitWorking(): GitWorkingMethods {
@@ -62,27 +56,3 @@ export function stubGitIndex(): GitIndexMethods {
 
 /** `ReviewApi.create` until strand E. */
 export const stubCreatePull: ReviewApi["create"] = notYet("Opening pull requests", "E");
-
-/** The repositories of a set's collections, in sidebar order, until strand A lists repository
- *  roots too (`CollectionSet.repositories`). */
-export function repositoriesOfCollections(collections: readonly CollectionEntry[]): RepositoryEntry[] {
-  const out: RepositoryEntry[] = [];
-  for (const c of collections) {
-    if (!c.repo) continue;
-    const known = out.find((r) => r.id === c.repo);
-    if (known) {
-      known.collections.push(c.id);
-      continue;
-    }
-    const name = c.repo.split(/[\\/]/).filter(Boolean).pop() ?? c.repo;
-    out.push({ id: c.repo, name, location: c.repo, root: c.root, collections: [c.id], linked: false });
-  }
-  return out;
-}
-
-/** `repositories` and `active_repository` of a set from its collections (see above). */
-export function withRepositories(set: Omit<CollectionSet, "repositories" | "active_repository">): CollectionSet {
-  const repositories = repositoriesOfCollections(set.collections);
-  const active = set.collections.find((c) => c.id === set.active)?.repo ?? undefined;
-  return active ? { ...set, repositories, active_repository: active } : { ...set, repositories };
-}

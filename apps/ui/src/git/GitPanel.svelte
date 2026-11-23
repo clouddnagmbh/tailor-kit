@@ -538,16 +538,6 @@
     ];
   }
 
-  /** Tags the main button of the commit split button (`SplitButton` passes no attributes to it
-   *  yet; the tests and other strands find the commit button by this id). */
-  function tagMain(node: HTMLElement, id: string) {
-    const tag = () => node.querySelector<HTMLElement>(".rt-split > button:first-child, .rt-split .main")?.setAttribute("data-testid", id);
-    tag();
-    const observer = new MutationObserver(tag);
-    observer.observe(node, { childList: true, subtree: true });
-    return { destroy: () => observer.disconnect() };
-  }
-
   /** Icon of the header's main action. */
   const ACTION_ICON: Record<SyncActionKind, string> = {
     pull: "pull",
@@ -858,10 +848,11 @@
                 }
               }}
             />
-            <div class="commit-button" use:tagMain={"git-commit"}>
+            <div class="commit-button">
               <SplitButton
                 variant="primary"
                 icon="commit"
+                data-testid="git-commit"
                 disabled={!canCommit}
                 loading={busy === "commit"}
                 menuLabel="More commit options"

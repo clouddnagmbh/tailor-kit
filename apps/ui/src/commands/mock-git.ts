@@ -15,6 +15,8 @@
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
+import { mockGitActions } from "./mock-git-actions";
+import { mockGitGraph } from "./mock-git-graph";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
 
 /** What the mock Git needs from the mock backend. */
@@ -444,6 +446,43 @@ export class MockGit implements GitApi {
 
   /** The commits of the merge in progress (`null` without one): `HEAD`, the merged commit
    *  and their merge base. */
+  /** Wave 14: everything the graph needs, as copies (for `mock-git-graph.ts`). */
+  graphData(): {
+    commits: { oid: string; parents: string[]; message: string; author: string; time: number }[];
+    branches: { name: string; oid: string | null }[];
+    remote: { name: string; oid: string }[];
+    current: string | null;
+  } {
+    this.start();
+    return {
+      commits: [...this.store.values()].map((c) => ({
+        oid: c.oid,
+        parents: [...c.parents],
+        message: c.message,
+        author: c.author,
+        time: c.time,
+      })),
+      branches: [...this.branchesMap].map(([name, oid]) => ({ name, oid })),
+      remote: [...this.fetched].map(([name, oid]) => ({ name: `origin/${name}`, oid })),
+      current: this.current,
+    };
+  }
+
+  // Wave 14 (interface): graph (strand F, `mock-git-graph.ts`) and wizards (strand G,
+  // `mock-git-actions.ts`).
+  private wave14Graph = mockGitGraph(this);
+  private wave14Actions = mockGitActions(this);
+  graph: GitApi["graph"] = (q) => this.wave14Graph.graph(q);
+  refs: GitApi["refs"] = () => this.wave14Graph.refs();
+  changes: GitApi["changes"] = (from, to) => this.wave14Graph.changes(from, to);
+  fileDiff: GitApi["fileDiff"] = (from, to, path) => this.wave14Graph.fileDiff(from, to, path);
+  remotes: GitApi["remotes"] = () => this.wave14Actions.remotes();
+  stashes: GitApi["stashes"] = () => this.wave14Actions.stashes();
+  plan: GitApi["plan"] = (action) => this.wave14Actions.plan(action);
+  apply: GitApi["apply"] = (action) => this.wave14Actions.apply(action);
+  lastAction: GitApi["lastAction"] = () => this.wave14Actions.lastAction();
+  undo: GitApi["undo"] = (id) => this.wave14Actions.undo(id);
+
   mergeCommits(): { ours: string; theirs: string; base: string | null } | null {
     const ours = this.head();
     if (!this.mergeHead || !ours) return null;

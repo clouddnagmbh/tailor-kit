@@ -28,6 +28,18 @@
 //! `origin/main`), a ref under `refs/` or `HEAD`, optionally followed by `~<n>` or `^` (first
 //! parent). Paths are collection-relative; a leading `/` makes a path relative to the
 //! repository root (`show` only, e.g. an OpenAPI spec next to the collection folder).
+//!
+//! Wave 14 (interface): Git for any repository, not only for collections. [`graph`] is the
+//! commit graph of the whole repository (all branches, remote branches, tags, `HEAD`; strand F),
+//! [`actions`] the wizards' actions with a plan before and an undo entry after (strand G). Both
+//! use repository-relative paths with a leading `/`, and nothing in them assumes the repository
+//! is a collection: a collection file gets the semantic diff and merge, every other file the
+//! line diff and merge. Several collections of the set can share one repository; Git works per
+//! repository (the one of the active collection), and an action that changes the working tree
+//! reloads all of them.
+
+pub mod actions;
+pub mod graph;
 
 use std::collections::BTreeMap;
 

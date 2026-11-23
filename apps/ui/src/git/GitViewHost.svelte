@@ -7,6 +7,7 @@
   import BisectPanel from "../compare/BisectPanel.svelte";
   import ComparePanel from "../compare/ComparePanel.svelte";
   import ContractPanel from "../contract/ContractPanel.svelte";
+  import GraphView from "./graph/GraphView.svelte";
   import SemanticDiffView from "../diff/SemanticDiffView.svelte";
   import MergeView from "../merge/MergeView.svelte";
   import RescueWizard from "../rescue/RescueWizard.svelte";
@@ -25,6 +26,7 @@
     review: "Pull requests",
     contract: "API contract",
     rescue: "Secret rescue",
+    graph: "History",
   };
 </script>
 
@@ -50,6 +52,8 @@
         <ReviewPanel number={view.number} />
       {:else if view.kind === "contract"}
         <ContractPanel />
+      {:else if view.kind === "graph"}
+        <GraphView select={view.select} />
       {:else}
         <RescueWizard />
       {/if}

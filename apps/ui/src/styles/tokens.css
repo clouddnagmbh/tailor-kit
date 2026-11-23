@@ -44,6 +44,19 @@
   --rt-method-patch: #8a4fd0;
   --rt-method-delete: #c4312b;
   --rt-method-other: #626a78;
+  /* Wave 14: lanes of the commit graph (cycled) and the diff backgrounds of the Git views. */
+  --rt-lane-1: #2f62d0;
+  --rt-lane-2: #1f8a4c;
+  --rt-lane-3: #a86400;
+  --rt-lane-4: #8a4fd0;
+  --rt-lane-5: #c4312b;
+  --rt-lane-6: #0f8a8a;
+  --rt-lane-7: #b8409a;
+  --rt-lane-8: #5c6b00;
+  --rt-diff-add-bg: rgb(31 138 76 / 0.12);
+  --rt-diff-del-bg: rgb(196 49 43 / 0.1);
+  --rt-diff-add-word: rgb(31 138 76 / 0.3);
+  --rt-diff-del-word: rgb(196 49 43 / 0.26);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +85,18 @@
     --rt-method-patch: #b98af0;
     --rt-method-delete: #f07069;
     --rt-method-other: #9aa2af;
+    --rt-lane-1: #6b97f5;
+    --rt-lane-2: #4cc27f;
+    --rt-lane-3: #e0a440;
+    --rt-lane-4: #b98af0;
+    --rt-lane-5: #f07069;
+    --rt-lane-6: #4cc9c9;
+    --rt-lane-7: #e882cf;
+    --rt-lane-8: #b7c94a;
+    --rt-diff-add-bg: rgb(76 194 127 / 0.14);
+    --rt-diff-del-bg: rgb(240 112 105 / 0.13);
+    --rt-diff-add-word: rgb(76 194 127 / 0.34);
+    --rt-diff-del-word: rgb(240 112 105 / 0.32);
   }
 }
 
@@ -105,6 +130,18 @@
   --rt-method-patch: #b98af0;
   --rt-method-delete: #f07069;
   --rt-method-other: #9aa2af;
+  --rt-lane-1: #6b97f5;
+  --rt-lane-2: #4cc27f;
+  --rt-lane-3: #e0a440;
+  --rt-lane-4: #b98af0;
+  --rt-lane-5: #f07069;
+  --rt-lane-6: #4cc9c9;
+  --rt-lane-7: #e882cf;
+  --rt-lane-8: #b7c94a;
+  --rt-diff-add-bg: rgb(76 194 127 / 0.14);
+  --rt-diff-del-bg: rgb(240 112 105 / 0.13);
+  --rt-diff-add-word: rgb(76 194 127 / 0.34);
+  --rt-diff-del-word: rgb(240 112 105 / 0.32);
 }
 
 html,

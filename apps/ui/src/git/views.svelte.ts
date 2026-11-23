@@ -26,7 +26,10 @@ export type GitView =
   /** Strand F: `contract/ContractPanel.svelte`. */
   | { kind: "contract" }
   /** Strand G: `rescue/RescueWizard.svelte`. */
-  | { kind: "rescue" };
+  | { kind: "rescue" }
+  /** Wave 14, strand F: `graph/GraphView.svelte`, the commit graph of the whole repository
+   *  (`select`: a commit id or full ref name to select and scroll to). */
+  | { kind: "graph"; select?: string };
 
 export class GitViews {
   current = $state<GitView | null>(null);

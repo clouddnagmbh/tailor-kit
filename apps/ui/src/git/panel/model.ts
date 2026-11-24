@@ -216,6 +216,7 @@ const TOOLS: { id: string; label: string; icon: string; tip: string }[] = [
   { id: "timeline-request", label: "History", icon: "history", tip: "History of the open request: every version, who changed which field, and old test results." },
   { id: "git:bisect", label: "Bisect", icon: "bisect", tip: "Find the commit that broke a test by running it on older versions, halving the range each time." },
   { id: "git:review", label: "Review", icon: "review", tip: "Review pull and merge requests from GitHub or GitLab: changes by field, contract notes and checks." },
+  { id: "git:review-create", label: "New PR", icon: "review", tip: "Open a pull or merge request from a branch on GitHub or GitLab: it asks you to publish the branch first if it is not on the server." },
   { id: "contract:open", label: "Contract", icon: "contract", tip: "Check the requests against the OpenAPI spec and list breaking changes between versions." },
   { id: "git:rescue", label: "Secrets", icon: "shield-secret", tip: "Scan the whole history for passwords and tokens that were committed, and move them out safely." },
 ];

@@ -8,7 +8,11 @@
 <script lang="ts">
   import type { GitConflict, GitResolution, MergeState } from "../commands/types";
   import MergeFields from "../merge/MergeFields.svelte";
+  import { extensionFileEditors } from "../shell/extension-git";
+  import { getExtensions } from "../shell/extension-tabs";
+  import ExtensionGitActions from "../shell/ExtensionGitActions.svelte";
   import { getApp } from "../state/app.svelte";
+  import { chooseEditor } from "./extension/editor-choice";
   import { getGitViews } from "./views.svelte";
 
   let {
@@ -24,6 +28,10 @@
   } = $props();
   const app = getApp();
   const views = getGitViews();
+  // Merge editors of extensions: next to the app's own, never instead (the semantic merge of a
+  // collection file stays the way in); an editor opens in the line-by-line view of the file.
+  const extensions = getExtensions();
+  const editors = $derived(extensionFileEditors(extensions, "merge", path));
 
   let conflict = $state<GitConflict | null>(null);
   let error = $state<string | null>(null);
@@ -72,6 +80,7 @@
 >
   <header>
     <h2 id="rt-git-conflict-title">Conflict in <code>{path}</code></h2>
+    <ExtensionGitActions target={{ kind: "conflict", repository: app.activeRepository ?? "", path }} label="Conflict actions" />
     <button onclick={onclose}>Close</button>
   </header>
   {#if error}
@@ -116,6 +125,17 @@
           onclose();
         }}>resolve it line by line</button
       >, with the original next to both versions.
+      {#each editors as e (e.key)}
+        <button
+          data-testid="git-resolve-with-editor"
+          data-editor={e.key}
+          onclick={() => {
+            chooseEditor("merge", e.key);
+            views.open({ kind: "text-merge", path });
+            onclose();
+          }}>Resolve it in {e.action.title}</button
+        >
+      {/each}
     </p>
   {/if}
 </dialog>

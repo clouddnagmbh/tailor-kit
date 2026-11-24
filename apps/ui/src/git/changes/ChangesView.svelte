@@ -9,8 +9,14 @@
 <script lang="ts">
   import type { CollectionDiff, GitWorkingCopy, GitWorkingFile } from "../../commands/types";
   import SemanticDiff from "../../diff/SemanticDiff.svelte";
+  import type { GitActionTarget, GitHintTarget } from "../../extensions";
+  import { gitActionEntries } from "../../shell/extension-git";
+  import { getExtensions } from "../../shell/extension-tabs";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
+  import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
   import { getApp } from "../../state/app.svelte";
-  import { Badge, Banner, Button, Chip, EmptyState, Icon, IconButton, SegmentedControl, Spinner, TextField } from "../../ui";
+  import { Badge, Banner, Button, Chip, EmptyState, Icon, IconButton, Menu, SegmentedControl, Spinner, TextField, type MenuEntry } from "../../ui";
+  import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { getGitViews } from "../views.svelte";
   import FileCompare from "../viewers/FileCompare.svelte";
   import type { Side } from "../viewers/model";
@@ -27,6 +33,12 @@
   let diff = $state<CollectionDiff | null>(null);
   let reload = $state(0);
   let load = 0;
+  // Extensions: the hints know how many hunks the busiest opened file has, actions sit on
+  // files (right click and the detail bar) and on all changed files.
+  const extensions = getExtensions();
+  let hunkCounts = $state<Record<string, number>>({});
+  let menu = $state<{ items: MenuEntry[]; anchor: { x: number; y: number } } | null>(null);
+  let menuOpen = $state(false);
 
   async function refresh() {
     const token = ++load;
@@ -35,6 +47,7 @@
       if (token !== load) return;
       copy = next;
       error = null;
+      hunkCounts = Object.fromEntries(Object.entries(hunkCounts).filter(([p]) => next.files.some((f) => f.path === p)));
       if (selected !== null && !next.files.some((f) => f.path === selected)) selected = null;
       reload++;
     } catch (e) {
@@ -51,6 +64,23 @@
   });
 
   const files = $derived(copy ? visibleFiles(copy.files) : []);
+  const repository = $derived(app.activeRepository ?? copy?.repository ?? "");
+  const hintTarget = $derived<GitHintTarget>({
+    place: "git",
+    repository,
+    view: "changes",
+    hunks: Math.max(0, ...Object.values(hunkCounts)),
+  });
+  const changesTarget = $derived<GitActionTarget>({ kind: "changes", repository, paths: files.map((f) => f.path) });
+
+  function fileMenu(file: GitWorkingFile, e: MouseEvent) {
+    const items = gitActionEntries(extensions, { kind: "file", repository, path: file.path }, (m) => (app.error = m)).slice(1);
+    if (items.length === 0) return;
+    e.preventDefault();
+    selected = file.path;
+    menu = { items, anchor: { x: e.clientX, y: e.clientY } };
+    menuOpen = true;
+  }
   const counts = $derived(countStates(files));
   const shown = $derived(filterFiles(files, filter));
   const groups = $derived(groupByFolder(shown));
@@ -124,6 +154,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <section class="changes" data-testid="changes-view" aria-label="Changes in the working copy" {onkeydown}>
+  <ExtensionGitHint target={hintTarget} />
   <header class="bar">
     {#if copy}
       <span data-testid="changes-branch"><Chip label={branchLabel} icon="branch" mono /></span>
@@ -132,6 +163,7 @@
       <span class="summary" data-testid="changes-summary">{summaryText(counts)}</span>
     {/if}
     <span class="grow"></span>
+    {#if files.length > 0}<ExtensionGitActions target={changesTarget} label="Actions on the changes" />{/if}
     <Button size="sm" icon="folder-open" data-testid="changes-browse" onclick={() => views.open({ kind: "file", path: "/" })}>Browse files</Button>
     <IconButton icon="sync" size="sm" label="Refresh" data-testid="changes-refresh" onclick={() => void refresh()} />
   </header>
@@ -177,6 +209,7 @@
                 data-state={f.state}
                 onclick={() => (selected = f.path)}
                 ondblclick={() => views.open({ kind: "file", path: f.path })}
+                oncontextmenu={(e) => fileMenu(f, e)}
               >
                 <Badge kind="status" value={letter} tone={TONE[letter]} />
                 <span class="name">{fileName(f.path)}</span>
@@ -208,13 +241,18 @@
               {:else if collectionFile?.collection}
                 <Button size="sm" data-testid="changes-open-collection" onclick={() => void app.activate(collectionFile.collection!)}>Open its collection for the field view</Button>
               {/if}
+              <ExtensionGitActions target={{ kind: "file", repository, path: current.path }} label="File actions" />
               <Button size="sm" icon="file-text" data-testid="changes-open" onclick={() => views.open({ kind: "file", path: current.path })}>Open file</Button>
             </div>
             <div class="viewer">
               {#if fieldMode && fileDiff}
                 <SemanticDiff diff={fileDiff} />
+              {:else if pair.before && pair.after}
+                <FileEditorSwitch path={current.path} from="HEAD" to={null}>
+                  <FileCompare before={pair.before} after={pair.after} {reload} onhunks={(n) => (hunkCounts[current.path] = n)} />
+                </FileEditorSwitch>
               {:else}
-                <FileCompare before={pair.before} after={pair.after} {reload} />
+                <FileCompare before={pair.before} after={pair.after} {reload} onhunks={(n) => (hunkCounts[current.path] = n)} />
               {/if}
             </div>
           {:else}
@@ -225,6 +263,10 @@
     {/if}
   {/if}
 </section>
+
+{#if menu}
+  <Menu items={menu.items} anchor={menu.anchor} label="Actions on the file" bind:open={menuOpen} onclose={() => (menu = null)} />
+{/if}
 
 <style>
   .changes {

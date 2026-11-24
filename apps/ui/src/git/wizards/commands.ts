@@ -48,7 +48,7 @@ async function run(app: AppState, kind: GitWizardKind): Promise<void> {
 }
 
 export function gitWizardCommands(app: AppState, views: GitViews): Command[] {
-  if (!app.collection) return [];
+  if (!app.collection && !app.activeRepository) return [];
   return [
     { id: `${WIZARD_COMMAND_PREFIX}history`, label: "Git: History", run: () => views.open({ kind: "graph" }) },
     { id: `${WIZARD_COMMAND_PREFIX}undo`, label: "Git: Undo last Git action", run: () => run(app, "undo") },

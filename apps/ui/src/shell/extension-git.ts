@@ -18,6 +18,7 @@ import type {
   GitActionTarget,
   GitHintTarget,
 } from "../extensions";
+import type { MenuEntry } from "../ui";
 import type { ExtensionActionRef } from "./extension-actions";
 import type { ExtensionHintRef } from "./extension-hints";
 import type { ProvidedExtensions } from "./extension-tabs";
@@ -40,6 +41,52 @@ function collect<A extends { id: string }>(
 
 export function extensionGitActions(provided: ProvidedExtensions | null, target: GitActionTarget): ExtensionActionRef<ExtensionAction>[] {
   return collect(provided, "Git actions", (x) => x.gitActions?.(provided!.ctx, target));
+}
+
+/** The actions of `target` as menu entries behind a separator (none: an empty list), for the
+ *  context menus of the Git views. A failing action reports through `onerror` and never
+ *  closes the app. */
+export function gitActionEntries(
+  provided: ProvidedExtensions | null,
+  target: GitActionTarget,
+  onerror: (message: string) => void,
+): MenuEntry[] {
+  const refs = extensionGitActions(provided, target);
+  if (refs.length === 0) return [];
+  const fail = (e: unknown) => onerror(e instanceof Error ? e.message : String(e));
+  return [
+    { separator: true },
+    ...refs.map(
+      (r): MenuEntry => ({
+        id: r.key,
+        label: r.action.label,
+        icon: r.action.icon,
+        run: () => {
+          try {
+            const out = r.action.run();
+            if (out instanceof Promise) out.catch(fail);
+          } catch (e) {
+            fail(e);
+          }
+        },
+      }),
+    ),
+  ];
+}
+
+/** `items` of a commit's menu with the extensions' `ref` actions added to the submenu of each
+ *  branch or tag (the entries whose id is `ref:<full name>`). */
+export function withRefActions(
+  provided: ProvidedExtensions | null,
+  repository: string,
+  items: MenuEntry[],
+  onerror: (message: string) => void,
+): MenuEntry[] {
+  return items.map((e) => {
+    if (!("label" in e) || !e.id?.startsWith("ref:") || !e.items) return e;
+    const more = gitActionEntries(provided, { kind: "ref", repository, ref: e.id.slice(4) }, onerror);
+    return more.length === 0 ? e : { ...e, items: [...e.items, ...more] };
+  });
 }
 
 /** Every hint for a Git view, in extension order (dismissed ones included); pick one with

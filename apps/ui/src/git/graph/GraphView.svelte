@@ -15,9 +15,12 @@
   import { onMount, tick } from "svelte";
 
   import type { GitGraphCommit } from "../../commands/types";
+  import type { GitActionTarget, GitHintTarget } from "../../extensions";
   import { extensionRangeActions } from "../../shell/extension-actions";
+  import { gitActionEntries, withRefActions } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionActions from "../../shell/ExtensionActions.svelte";
+  import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
   import { getApp } from "../../state/app.svelte";
   import { Button, EmptyState, IconButton, Menu, SegmentedControl, Skeleton, TextField, type MenuEntry } from "../../ui";
   import { getGitViews } from "../views.svelte";
@@ -54,6 +57,8 @@
   let menuOpen = $state(false);
   let now = $state(Date.now());
   let notice = $state("");
+  /** A commit row is being dragged (extensions' hints may offer what to do with it). */
+  let dragging = $state(false);
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   const n = $derived(data.commits.length);
@@ -66,6 +71,13 @@
       ? extensionRangeActions(extensions, { collection: app.activeCollection, from: base, to: selected, source: "graph" })
       : [],
   );
+  const hintTarget = $derived<GitHintTarget>({
+    place: "git",
+    repository: app.activeRepository ?? "",
+    view: "graph",
+    selected: !selected ? 0 : base && base !== selected ? 2 : 1,
+    dragging,
+  });
   const baseCommit = $derived(base ? (data.commits[data.index.get(base) ?? -1] ?? null) : null);
   const ctx: GraphContext = $derived({ head: data.head, branch: data.branch });
   const lanes = $derived(Math.min(MAX_LANES, Math.max(2, data.maxWidth)));
@@ -194,7 +206,16 @@
   }
 
   function openMenu(commit: GitGraphCommit, anchor: HTMLElement | { x: number; y: number }) {
-    menu = { items: toMenu(commitMenu(commit, refLabels(commit.refs, data.byFull), ctx), host), anchor, label: `Commit ${commit.oid.slice(0, 7)} actions` };
+    const repository = app.activeRepository ?? "";
+    const fail = (message: string) => (app.error = message);
+    // The extensions' actions on this commit (or on the two marked commits) close the menu,
+    // those on a branch or tag sit in that label's submenu.
+    const target: GitActionTarget =
+      base && base !== commit.oid && selected === commit.oid
+        ? { kind: "commits", repository, commits: [commit.oid, base] }
+        : { kind: "commit", repository, commit: commit.oid };
+    const own = withRefActions(extensions, repository, toMenu(commitMenu(commit, refLabels(commit.refs, data.byFull), ctx), host), fail);
+    menu = { items: [...own, ...gitActionEntries(extensions, target, fail)], anchor, label: `Commit ${commit.oid.slice(0, 7)} actions` };
     menuOpen = true;
   }
 
@@ -320,6 +341,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="graph-view" data-testid="git-graph" data-select={select ?? null} onkeydown={onViewKey}>
+  <ExtensionGitHint target={hintTarget} />
   <div class="toolbar">
     <div class="search">
       <TextField
@@ -413,6 +435,7 @@
                 {now}
                 onpick={(e) => pick(i, e)}
                 onmenu={(e) => rowMenu(i, e)}
+                ondragstate={(d) => (dragging = d)}
               />
             {/each}
           </div>

@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use super::client::{Client, encode_component, items, text};
 use super::time::unix_seconds;
 use super::{
-    CiCheck, CiState, CiStatus, NewReviewComment, PullRequest, PullState, ReviewComment,
-    ReviewError, ReviewProvider, ReviewRepo, ReviewSubmission, ReviewVerdict, combine,
+    CiCheck, CiState, CiStatus, NewPullRequest, NewReviewComment, PullRequest, PullState,
+    ReviewComment, ReviewError, ReviewProvider, ReviewRepo, ReviewSubmission, ReviewVerdict,
+    combine,
 };
 
 const MAX_PAGES: usize = 5;
@@ -309,4 +310,34 @@ impl<T: Transport> ReviewProvider for GitlabProvider<'_, T> {
             })
         })
     }
+
+    fn create<'a>(
+        &'a self,
+        pull: &'a NewPullRequest,
+    ) -> LocalBoxFuture<'a, Result<PullRequest, ReviewError>> {
+        Box::pin(async move {
+            // GitLab has no draft flag on create: a "Draft:" title prefix is how it marks one.
+            let title = if pull.draft && !is_draft_title(&pull.title) {
+                format!("Draft: {}", pull.title)
+            } else {
+                pull.title.clone()
+            };
+            let body = json!({
+                "title": title,
+                "description": pull.body,
+                "source_branch": pull.head,
+                "target_branch": pull.base,
+            });
+            let reply = self
+                .client
+                .post(&self.url("/merge_requests"), &body)
+                .await?;
+            Ok(self::pull(&reply.body))
+        })
+    }
+}
+
+fn is_draft_title(title: &str) -> bool {
+    let t = title.trim_start().to_ascii_lowercase();
+    t.starts_with("draft:") || t.starts_with("[draft]") || t.starts_with("(draft)")
 }

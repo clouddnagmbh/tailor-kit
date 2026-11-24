@@ -7,6 +7,8 @@
      keeps a backup and can be undone). -->
 <script lang="ts">
   import type { GitDiff, GitFileCommit } from "../../commands/types";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
+  import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
   import { getApp } from "../../state/app.svelte";
   import { Avatar, Badge, Button, EmptyState, Skeleton } from "../../ui";
   import FileDiff from "../graph/FileDiff.svelte";
@@ -101,10 +103,12 @@
 </script>
 
 <div class="history" data-testid="file-history" data-path={path}>
+  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
   <div class="toolbar">
     <span class="file" title={path}>{name}</span>
     {#if entries}<span class="count" data-testid="file-history-count">{entries.length}{more ? "+" : ""} commit{entries.length === 1 && !more ? "" : "s"}</span>{/if}
     <span class="spacer"></span>
+    <ExtensionGitActions target={{ kind: "file", repository: app.activeRepository ?? "", path }} label="File actions" />
     <Button size="sm" variant="ghost" icon="file-text" data-testid="file-history-blame" onclick={() => views.open({ kind: "blame", path })}>Blame</Button>
   </div>
 
@@ -153,6 +157,7 @@
       <section class="detail" aria-label="What the commit changed in the file">
         {#if entry}
           <div class="actions">
+            <ExtensionGitActions target={{ kind: "commit", repository: app.activeRepository ?? "", commit: entry.commit.oid }} label="Commit actions" />
             <Button size="sm" variant="secondary" icon="file-text" data-testid="file-history-blame-at" onclick={() => views.open({ kind: "blame", path: entry.path.startsWith("/") ? entry.path : `/${entry.path}`, rev: entry.commit.oid })}>Blame here</Button>
             <Button size="sm" variant="secondary" icon="graph" data-testid="file-history-show" onclick={() => views.open({ kind: "graph", select: entry.commit.oid })}>Show in the history</Button>
             {#if entry.change !== "deleted"}

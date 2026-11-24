@@ -8,7 +8,9 @@
   import { untrack } from "svelte";
 
   import type { GitBlob, GitTreeEntry } from "../../commands/types";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import { getApp } from "../../state/app.svelte";
+  import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { Button, EmptyState, SegmentedControl, Spinner, TextField } from "../../ui";
   import BlobView from "../viewers/BlobView.svelte";
   import FileCompare from "../viewers/FileCompare.svelte";
@@ -149,6 +151,11 @@
       {:else if !blob}
         <p class="hint"><Spinner size="sm" label="Loading" /> Loading…</p>
       {:else}
+        {#if !folder}
+          <div class="ext" data-testid="file-extension-actions">
+            <ExtensionGitActions target={{ kind: "file", repository: app.activeRepository ?? "", path: at, rev: revision ?? undefined }} label="File actions" />
+          </div>
+        {/if}
         {#if revision === null && changedState && changedState !== "deleted"}
           <div class="actions">
             <Button size="sm" icon="compare" data-testid="file-compare-head" onclick={() => (compare = !compare)}>{compare ? "Show the file" : "Compare with HEAD"}</Button>
@@ -156,7 +163,13 @@
         {/if}
         <div class="content">
           {#if compare}
-            <FileCompare before={changedState === "untracked" ? null : { rev: "HEAD", path: at }} after={{ rev: null, path: at }} {reload} />
+            {#if changedState === "untracked"}
+              <FileCompare before={null} after={{ rev: null, path: at }} {reload} />
+            {:else}
+              <FileEditorSwitch path={at} from="HEAD" to={null}>
+                <FileCompare before={{ rev: "HEAD", path: at }} after={{ rev: null, path: at }} {reload} />
+              </FileEditorSwitch>
+            {/if}
           {:else}
             <BlobView {blob} />
           {/if}
@@ -222,6 +235,14 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+  }
+  .ext {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--rt-space-3) var(--rt-space-5) 0;
+  }
+  .ext:not(:has(*)) {
+    display: none;
   }
   .actions {
     padding: var(--rt-space-3) var(--rt-space-5);

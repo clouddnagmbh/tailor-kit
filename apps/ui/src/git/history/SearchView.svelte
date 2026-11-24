@@ -6,6 +6,8 @@
      Content searches read the history in pieces ("Search further") because they open files. -->
 <script lang="ts">
   import type { GitHistoryHit, GitHistoryQuery } from "../../commands/types";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
+  import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
   import { getApp } from "../../state/app.svelte";
   import { Avatar, Badge, Button, EmptyState, IconButton, Skeleton, TextField } from "../../ui";
   import { relativeTime, shortId } from "../graph/model";
@@ -79,6 +81,7 @@
 </script>
 
 <div class="search" data-testid="history-search">
+  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
   <form class="form" onsubmit={(e) => (e.preventDefault(), search())}>
     <TextField label="Message" size="sm" placeholder="Words in the commit message" bind:value={fields.message} data-testid="search-message" />
     <TextField label="Author" size="sm" placeholder="Name or email" bind:value={fields.author} data-testid="search-author" />
@@ -115,6 +118,9 @@
               <span class="matched">{#each h.matched as m (m)}<Badge value={MATCH_LABEL[m]} tone="accent" />{/each}</span>
               <code class="id">{shortId(h.commit.oid)}</code>
             </button>
+            <div class="ext" data-testid="search-hit-actions">
+              <ExtensionGitActions target={{ kind: "commit", repository: app.activeRepository ?? "", commit: h.commit.oid }} label="Commit actions" />
+            </div>
             {#if h.paths && h.paths.length > 0}
               <ul class="paths">
                 {#each h.paths as p (p)}
@@ -251,5 +257,13 @@
   .note {
     color: var(--rt-fg-muted);
     font: var(--rt-font-small);
+  }
+  .ext {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 var(--rt-space-4) var(--rt-space-2);
+  }
+  .ext:not(:has(*)) {
+    display: none;
   }
 </style>

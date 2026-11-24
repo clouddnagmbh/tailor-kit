@@ -107,6 +107,12 @@
   /** Paths the user unchecked. */
   let excluded = $state<string[]>([]);
   let message = $state("");
+  // An extension asked for a message (`AppState.prefillCommitMessage`): shown when the field is empty.
+  $effect(() => {
+    if (!app.commitPrefill) return;
+    const text = app.takeCommitPrefill();
+    if (text !== null && untrack(() => message).trim() === "") message = text;
+  });
   /** The merge whose message was pre-filled, so it is filled once. */
   let prefilledFor = $state<string | null>(null);
   /** Running command, for progress and to disable the buttons. */

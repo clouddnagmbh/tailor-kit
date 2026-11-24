@@ -10,7 +10,7 @@ import { BackendError } from "./backend";
 import { mergeTrees, type Core } from "./mock-git-actions";
 import { renderSpec, type MockGit } from "./mock-git";
 import type { GitCommitDetails, GitConflict, GitPickResult, GitSignature, RequestSpec } from "./types";
-import type { GitPlumbingMethods } from "./wave15-stubs";
+import type { GitPlumbingMethods } from "./git-methods";
 
 type Tree = Map<string, RequestSpec>;
 

@@ -16,7 +16,7 @@ import { BackendError } from "./backend";
 import { applyLineSelection, chosenLines } from "./line-selection";
 import { lineDiff, type MockGit } from "./mock-git";
 import type { GitCommit, GitDiff, GitIndexDiff, GitPatchRequest, GitPatchSide, GitSignatureCheck } from "./types";
-import type { GitIndexMethods } from "./wave15-stubs";
+import type { GitIndexMethods } from "./git-methods";
 
 const err = (message: string) => new BackendError("git", message);
 

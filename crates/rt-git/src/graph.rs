@@ -236,15 +236,14 @@ impl Repo {
         parents: &[ObjectId],
         labels: &mut HashMap<String, Vec<String>>,
     ) -> Result<GitGraphCommit> {
-        let (commit, email) = self.describe_with_email(id)?;
+        let (commit, email, signed) = self.describe_with_email(id)?;
         let refs = labels.remove(commit.oid.as_str()).unwrap_or_default();
         Ok(GitGraphCommit {
             commit,
             parents: parents.iter().map(ToString::to_string).collect(),
             email,
             refs,
-            // Wave 15 interface: strand F reads the `gpgsig` header.
-            signed: false,
+            signed,
         })
     }
 
@@ -332,7 +331,7 @@ impl Repo {
         Ok(out)
     }
 
-    fn describe_with_email(&self, id: ObjectId) -> Result<(GitCommit, String)> {
+    fn describe_with_email(&self, id: ObjectId) -> Result<(GitCommit, String, bool)> {
         let commit = self.repo.find_commit(id).ctx("cannot read a commit")?;
         let decoded = commit.decode().ctx("cannot read a commit")?;
         let author = decoded.author().ctx("cannot read a commit")?;
@@ -344,6 +343,7 @@ impl Repo {
                 time: author.seconds(),
             },
             author.email.to_str_lossy().into_owned(),
+            crate::signing::has_signature(&decoded),
         ))
     }
 

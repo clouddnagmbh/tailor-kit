@@ -19,7 +19,7 @@ import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitFiles } from "./mock-git-files";
 import { mockGitGraph } from "./mock-git-graph";
-import { stubGitIndex } from "./wave15-stubs";
+import { mockGitIndex } from "./mock-git-index";
 import { mockGitHistory } from "./mock-git-history";
 import { mockGitPlumbing } from "./mock-git-plumbing";
 import type { DiffHunk, DiffLine, GitBranch, GitCommit, GitConflict, GitDiff, GitFile, GitFileCommit, GitIdentity, GitPullResult, GitResolution, GitStatus, GitTree, RequestSpec, SecretFinding } from "./types";
@@ -650,7 +650,7 @@ export class MockGit implements GitApi {
   private wave15Working = mockGitFiles(this);
   private wave15History = mockGitHistory(this);
   private wave15Plumbing = mockGitPlumbing(this);
-  private wave15Index = stubGitIndex();
+  private wave15Index = mockGitIndex(this);
   workingCopy: GitApi["workingCopy"] = () => this.wave15Working.workingCopy();
   fileTree: GitApi["fileTree"] = (rev, dir) => this.wave15Working.fileTree(rev, dir);
   blob: GitApi["blob"] = (rev, path) => this.wave15Working.blob(rev, path);
@@ -670,6 +670,7 @@ export class MockGit implements GitApi {
   discardPatch: GitApi["discardPatch"] = (p) => this.wave15Index.discardPatch(p);
   commitStaged: GitApi["commitStaged"] = (c) => this.wave15Index.commitStaged(c);
   verify: GitApi["verify"] = (oids) => this.wave15Index.verify(oids);
+  config: GitApi["config"] = (key) => this.wave15Index.config(key);
 
   mergeCommits(): { ours: string; theirs: string; base: string | null } | null {
     const ours = this.head();

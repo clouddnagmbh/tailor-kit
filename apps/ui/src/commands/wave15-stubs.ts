@@ -18,7 +18,7 @@ export type GitPlumbingMethods = Pick<GitApi, "commitInfo" | "pick" | "writeTree
 /** Strand F: the index and signatures. */
 export type GitIndexMethods = Pick<
   GitApi,
-  "indexDiff" | "stage" | "unstage" | "stagePatch" | "unstagePatch" | "discardPatch" | "commitStaged" | "verify"
+  "indexDiff" | "stage" | "unstage" | "stagePatch" | "unstagePatch" | "discardPatch" | "commitStaged" | "verify" | "config"
 >;
 
 function notYet(feature: string, strand: string): () => Promise<never> {
@@ -51,6 +51,7 @@ export function stubGitIndex(): GitIndexMethods {
     discardPatch: no,
     commitStaged: no,
     verify: no,
+    config: no,
   };
 }
 

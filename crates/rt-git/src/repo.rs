@@ -52,6 +52,8 @@ pub struct Repo {
     pub(crate) root: PathBuf,
     pub(crate) scope: Scope,
     pub(crate) options: Options,
+    /// What commits are signed and verified with (wave 15); the default signs nothing.
+    pub(crate) signing: crate::sign::Signing,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -96,6 +98,7 @@ impl Repo {
             root,
             scope: Scope::new(prefix),
             options: options.clone(),
+            signing: crate::sign::Signing::default(),
         }))
     }
 
@@ -106,7 +109,14 @@ impl Repo {
 
     /// The same repository opened again (after its configuration changed on disk).
     pub(crate) fn reopen(&self) -> Result<Self> {
-        Self::require(&self.root, &self.options)
+        Ok(Self::require(&self.root, &self.options)?.with_signing(self.signing.clone()))
+    }
+
+    /// Signs and verifies commits with `signing` (a distribution's hook, `sign`); without it
+    /// every commit stays unsigned.
+    pub fn with_signing(mut self, signing: crate::sign::Signing) -> Self {
+        self.signing = signing;
+        self
     }
 
     /// Canonical root of the collection.
@@ -262,6 +272,7 @@ impl Repo {
             root: self.workdir.clone(),
             scope: Scope::new(BString::default()),
             options: self.options.clone(),
+            signing: self.signing.clone(),
         })
     }
 
@@ -307,6 +318,13 @@ impl Repo {
             .config_snapshot()
             .string(key)
             .and_then(|v| v.to_str().ok().map(str::to_owned))
+    }
+
+    /// An effective Git configuration value (`GitApi.config`): the repository's own
+    /// configuration first, then the user's global and system configuration (not when the
+    /// repository was opened `isolated`). `None` if the key is not set.
+    pub fn config_value(&self, key: &str) -> Option<String> {
+        self.config(key)
     }
 
     /// Sets values in the repository's own `.git/config` (never the user's global one).

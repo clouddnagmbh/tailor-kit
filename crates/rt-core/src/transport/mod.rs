@@ -110,6 +110,32 @@ pub struct Timing {
     pub ttfb: Duration,
 }
 
+/// What a transport learned about the TLS connection of a response (wave 19, strand R,
+/// additive). Only the native transport can fill it; the browser's `fetch` reveals nothing.
+/// No key material, only what a passive check needs.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TlsInfo {
+    /// `TLSv1.2`, `TLSv1.3`, …
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
+    /// The negotiated cipher suite name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cipher: Option<String>,
+    /// Certificate validity of the server's leaf certificate, Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_before: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_after: Option<i64>,
+    /// The leaf key's algorithm (`RSA`, `EC`, `Ed25519`) and size in bits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_algorithm: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_bits: Option<u32>,
+    /// The certificate's subject alternative names or common name, for display.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Redirect {
     pub status: u16,

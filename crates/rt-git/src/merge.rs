@@ -557,26 +557,11 @@ impl Repo {
         if !conflicted {
             let committer = signature(identity);
             let author = author.unwrap_or_else(|| committer.clone());
-            let (mut t1, mut t2) = (
-                gix::date::parse::TimeBuf::default(),
-                gix::date::parse::TimeBuf::default(),
-            );
             let parents: Vec<ObjectId> = match tw.kind {
                 MergeKind::Merge => vec![tw.ours, tw.theirs],
                 MergeKind::CherryPick | MergeKind::Revert => vec![tw.ours],
             };
-            let id = self
-                .repo
-                .commit_as(
-                    committer.to_ref(&mut t1),
-                    author.to_ref(&mut t2),
-                    "HEAD",
-                    message,
-                    tree,
-                    parents,
-                )
-                .ctx("cannot commit the merge")?
-                .detach();
+            let id = self.commit_on("HEAD", &committer, &author, message, tree, parents)?;
             self.write_index(&mut index)?;
             return Ok(GitPullResult::Merged {
                 oid: id.to_string(),

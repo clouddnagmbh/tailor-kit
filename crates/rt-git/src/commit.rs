@@ -22,7 +22,7 @@ pub fn entry_kind(mode: Mode) -> EntryKind {
     }
 }
 
-fn index_mode(kind: EntryKind) -> Mode {
+pub(crate) fn index_mode(kind: EntryKind) -> Mode {
     match kind {
         EntryKind::BlobExecutable => Mode::FILE_EXECUTABLE,
         EntryKind::Link => Mode::SYMLINK,
@@ -137,14 +137,8 @@ impl Repo {
             return Err(fail("nothing to commit: the selected files are unchanged"));
         }
         let signature = signature(&identity);
-        let mut time = gix::date::parse::TimeBuf::default();
-        let sig = signature.to_ref(&mut time);
         let parents: Vec<ObjectId> = head.into_iter().chain(merge_parent).collect();
-        let id = self
-            .repo
-            .commit_as(sig, sig, "HEAD", message, tree, parents)
-            .ctx("cannot commit")?
-            .detach();
+        let id = self.commit_on("HEAD", &signature, &signature, message, tree, parents)?;
 
         // Keep the index in step for exactly the committed paths.
         for (path, _) in &updates {

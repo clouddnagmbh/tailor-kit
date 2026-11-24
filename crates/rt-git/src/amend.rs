@@ -203,11 +203,7 @@ impl Repo {
             message: message.as_str().into(),
             extra_headers: Vec::new(),
         };
-        let new = self
-            .repo
-            .write_object(&new)
-            .ctx("cannot write the commit")?
-            .detach();
+        let new = self.write_commit_object(new)?;
         run.backup(self, &cur, Some(head))?;
         self.put_ref(
             &branch_full(&cur),

@@ -15,6 +15,8 @@ import {
   extensionGitView,
   extensionGitViews,
   extensionStaging,
+  gitActionEntries,
+  withRefActions,
 } from "./extension-git";
 import { dismissalKey, pickHint } from "./extension-hints";
 import type { ProvidedExtensions } from "./extension-tabs";
@@ -105,5 +107,68 @@ describe("Git contributions of extensions (wave 15 interface)", () => {
     const message = { get: () => "", set: () => {} };
     expect(extensionCommitFormActions(p, { repository: "/r", message, paths: [], staged: true }).map((r) => r.key)).toEqual(["one/template"]);
     expect(extensionCommitFormActions(p, { repository: "/r", message, paths: [], staged: false })).toEqual([]);
+  });
+
+  it("hands hints the situation the view reports", () => {
+    const seen: unknown[] = [];
+    const watcher: AppExtension = {
+      id: "watch",
+      gitHints: (_ctx, t) => {
+        seen.push([t.view, t.selected, t.dragging, t.hunks]);
+        return t.view === "graph" && t.selected === 2 && t.dragging ? [{ id: "range", text: "Two commits." }] : [];
+      },
+    };
+    const p = provided([watcher]);
+    const graph = { place: "git", repository: "/r", view: "graph" } as const;
+    expect(extensionGitHints(p, { ...graph, selected: 1, dragging: false })).toEqual([]);
+    expect(extensionGitHints(p, { ...graph, selected: 2, dragging: true }).map((r) => r.key)).toEqual(["watch/range"]);
+    expect(extensionGitHints(p, { place: "git", repository: "/r", view: "changes", hunks: 7 })).toEqual([]);
+    expect(seen).toEqual([["graph", 1, false, undefined], ["graph", 2, true, undefined], ["changes", undefined, undefined, 7]]);
+  });
+
+  it("turns actions into menu entries behind a separator and reports a failing one", async () => {
+    const fail = vi.fn();
+    const ran: string[] = [];
+    const ext: AppExtension = {
+      id: "m",
+      gitActions: (_ctx, t) =>
+        t.kind === "ref"
+          ? [
+              { id: "ok", label: "Fine", run: () => void ran.push(t.ref) },
+              { id: "sync", label: "Throws", run: () => { throw new Error("sync"); } },
+              { id: "async", label: "Rejects", run: () => Promise.reject(new Error("async")) },
+            ]
+          : [],
+    };
+    const p = provided([ext]);
+    expect(gitActionEntries(p, { kind: "commit", repository: "/r", commit: "a" }, fail)).toEqual([]);
+    const entries = gitActionEntries(p, { kind: "ref", repository: "/r", ref: "refs/heads/main" }, fail);
+    expect(entries[0]).toEqual({ separator: true });
+    expect(entries.slice(1).map((e) => ("label" in e ? e.label : ""))).toEqual(["Fine", "Throws", "Rejects"]);
+    for (const e of entries.slice(1)) if ("run" in e) await e.run?.();
+    await Promise.resolve();
+    expect(ran).toEqual(["refs/heads/main"]);
+    expect(fail.mock.calls.map((c) => c[0])).toEqual(["sync", "async"]);
+  });
+
+  it("adds ref actions to the submenu of each branch or tag of a commit's menu", () => {
+    const ext: AppExtension = {
+      id: "r",
+      gitActions: (_ctx, t) => (t.kind === "ref" ? [{ id: "x", label: `On ${t.ref}`, run: () => {} }] : []),
+    };
+    const menu = withRefActions(
+      provided([ext]),
+      "/r",
+      [
+        { id: "copy-id", label: "Copy" },
+        { id: "ref:refs/heads/main", label: "main", items: [{ id: "switch", label: "Switch" }] },
+      ],
+      () => {},
+    );
+    const sub = (menu[1] as { items: { label?: string }[] }).items;
+    expect(sub.map((i) => i.label)).toEqual(["Switch", undefined, "On refs/heads/main"]);
+    expect(menu[0]).toEqual({ id: "copy-id", label: "Copy" });
+    // Without actions the menu is returned as it was.
+    expect(withRefActions(provided([]), "/r", menu, () => {})).toEqual(menu);
   });
 });

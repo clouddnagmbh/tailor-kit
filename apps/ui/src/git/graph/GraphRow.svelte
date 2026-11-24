@@ -27,6 +27,7 @@
     now,
     onpick,
     onmenu,
+    ondragstate,
   }: {
     id: string;
     commit: GitGraphCommit;
@@ -46,7 +47,18 @@
     now: number;
     onpick: (e: MouseEvent) => void;
     onmenu: (e: MouseEvent) => void;
+    /** The row is being dragged (true) or was dropped or cancelled (false). */
+    ondragstate?: (dragging: boolean) => void;
   } = $props();
+
+  function dragstart(e: DragEvent) {
+    // The commit id travels with the drag: an editor that reorders commits reads it, anything
+    // else gets a plain id to paste.
+    e.dataTransfer?.setData("text/plain", commit.oid);
+    e.dataTransfer?.setData("application/x-requesttailor-commit", commit.oid);
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
+    ondragstate?.(true);
+  }
 
   const x = (l: number) => lane / 2 + l * lane;
   const paths = $derived(rowPaths(row, x, height));
@@ -70,6 +82,9 @@
   aria-label="{commit.summary}, {commit.author}, {relativeTime(commit.time, now)}"
   data-testid="graph-row"
   data-oid={commit.oid}
+  draggable="true"
+  ondragstart={dragstart}
+  ondragend={() => ondragstate?.(false)}
   style:transform="translateY({top}px)"
   style:height="{height}px"
   onclick={onpick}

@@ -14,7 +14,12 @@
   import { blobKind, type Side } from "./model";
   import TextDiff from "./TextDiff.svelte";
 
-  let { before, after, reload = 0 }: { before: Side | null; after: Side | null; reload?: number } = $props();
+  let {
+    before,
+    after,
+    reload = 0,
+    onhunks,
+  }: { before: Side | null; after: Side | null; reload?: number; onhunks?: (count: number) => void } = $props();
   const app = getApp();
 
   let blobs = $state<{ old: GitBlob | null; new: GitBlob | null } | null>(null);
@@ -56,7 +61,7 @@
   {:else if shown === "image"}
     <ImageDiff before={blobs.old} after={blobs.new} />
   {:else if shown === "text"}
-    <TextDiff before={blobs.old?.text ?? null} after={blobs.new?.text ?? null} />
+    <TextDiff before={blobs.old?.text ?? null} after={blobs.new?.text ?? null} {onhunks} />
   {:else}
     <MetaDiff before={blobs.old} after={blobs.new} />
   {/if}

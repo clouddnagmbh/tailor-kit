@@ -7,14 +7,19 @@
 import type { GitViews } from "../git/views.svelte";
 import type { Command } from "../shell/commands";
 import type { AppState } from "../state/app.svelte";
+import { openNewPull } from "./open-new-pull";
 
 export function reviewCommands(app: AppState, views: GitViews): Command[] {
-  void app;
   return [
     {
       id: "git:review",
       label: "Review: pull and merge requests…",
       run: () => views.open({ kind: "review" }),
+    },
+    {
+      id: "git:review-create",
+      label: "Create pull request…",
+      run: () => void openNewPull(app),
     },
   ];
 }

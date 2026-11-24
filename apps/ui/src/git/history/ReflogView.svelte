@@ -6,6 +6,8 @@
      shows what will happen, keeps a backup and can be undone. Nothing here moves a ref itself. -->
 <script lang="ts">
   import type { GitRef, GitReflogEntry } from "../../commands/types";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
+  import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
   import { getApp } from "../../state/app.svelte";
   import { Avatar, Badge, Button, EmptyState, Select, Skeleton } from "../../ui";
   import { relativeTime, shortId } from "../graph/model";
@@ -78,6 +80,7 @@
 </script>
 
 <div class="reflog" data-testid="reflog-view" data-ref={chosen}>
+  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
   <div class="toolbar">
     <Select label="Look at" size="sm" value={chosen} options={choices} onchange={(e) => choose((e.currentTarget as HTMLSelectElement).value)} data-testid="reflog-ref" />
     {#if rows}<span class="count" data-testid="reflog-count">{rows.length} step{rows.length === 1 ? "" : "s"}{lostCount > 0 ? `, ${lostCount} not on any branch` : ""}</span>{/if}
@@ -104,6 +107,7 @@
           <code class="id">{shortId(e.new)}</code>
           <span class="buttons">
             {#if e.commit}
+              <ExtensionGitActions target={{ kind: "commit", repository: app.activeRepository ?? "", commit: e.new }} label="Commit actions" />
               <Button size="sm" variant="ghost" data-testid="reflog-show" onclick={() => views.open({ kind: "graph", select: e.new })} disabled={r.lost === true}>Show</Button>
               <Button size="sm" variant={r.lost === true ? "secondary" : "ghost"} icon="undo" data-testid="reflog-bring-back" onclick={() => void bringBack(e)}>Bring it back</Button>
             {/if}

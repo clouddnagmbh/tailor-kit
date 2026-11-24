@@ -7,8 +7,10 @@
   import { untrack } from "svelte";
 
   import type { GitTreeEntry } from "../../commands/types";
+  import { gitActionEntries } from "../../shell/extension-git";
+  import { getExtensions } from "../../shell/extension-tabs";
   import { getApp } from "../../state/app.svelte";
-  import { Badge, Icon, Spinner } from "../../ui";
+  import { Badge, Icon, Menu, Spinner, type MenuEntry } from "../../ui";
   import { stateLetter } from "./model";
 
   let {
@@ -25,6 +27,22 @@
     reload?: number;
   } = $props();
   const app = getApp();
+  // Extensions' actions on a file or folder: right click.
+  const extensions = getExtensions();
+  let menu = $state<{ items: MenuEntry[]; anchor: { x: number; y: number } } | null>(null);
+  let menuOpen = $state(false);
+
+  function entryMenu(entry: GitTreeEntry, e: MouseEvent) {
+    const items = gitActionEntries(
+      extensions,
+      { kind: "file", repository: app.activeRepository ?? "", path: entry.path, rev: rev ?? undefined },
+      (m) => (app.error = m),
+    ).slice(1);
+    if (items.length === 0) return;
+    e.preventDefault();
+    menu = { items, anchor: { x: e.clientX, y: e.clientY } };
+    menuOpen = true;
+  }
 
   let entries = $state<Record<string, GitTreeEntry[]>>({});
   let open = $state<Record<string, boolean>>({ "/": true });
@@ -110,6 +128,7 @@
         data-kind={entry.kind}
         data-state={entry.state ?? ""}
         onclick={() => toggle(entry)}
+        oncontextmenu={(e) => entryMenu(entry, e)}
       >
         {#if entry.kind === "dir"}
           <Icon name={open[entry.path] ? "chevron-down" : "chevron"} size="sm" />
@@ -136,6 +155,10 @@
 <div class="tree" role="tree" aria-label="Files" data-testid="file-tree">
   {@render level("/", 0)}
 </div>
+
+{#if menu}
+  <Menu items={menu.items} anchor={menu.anchor} label="Actions on the file" bind:open={menuOpen} onclose={() => (menu = null)} />
+{/if}
 
 <style>
   .tree {

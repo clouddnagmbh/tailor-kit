@@ -81,7 +81,9 @@ export type GraphAction =
   | { kind: "wizard"; request: GitWizardRequest }
   | { kind: "view"; view: GitView }
   | { kind: "copy"; text: string }
-  | { kind: "select"; rev: string };
+  | { kind: "select"; rev: string }
+  /** Wave 15: "Create pull request…" from the branch `head`. */
+  | { kind: "pull-request"; head: string };
 
 export interface GraphMenuItem {
   id: string;
@@ -167,6 +169,7 @@ export function refMenu(ref: GitRef, ctx: GraphContext): GraphMenuEntry[] {
         { id: "switch", label: `Switch to ${name}`, icon: "branch", disabled: ref.current, hint: ref.current ? "Current branch" : undefined, action: wizard("switch", { target: name }) },
         { id: "merge", label: into, icon: "merge", disabled: ref.current || !ctx.branch, action: wizard("merge", { from: name }) },
         ...(ref.upstream ? [] : [{ id: "publish", label: "Publish branch…", icon: "push", action: wizard("publish", { name }) } as GraphMenuEntry]),
+        { id: "pull-request", label: "Create pull request…", icon: "review", action: { kind: "pull-request", head: name } },
         SEP,
         { id: "rename", label: "Rename…", icon: "edit", action: wizard("rename-branch", { from: name }) },
         { id: "delete", label: "Delete…", icon: "delete", danger: true, disabled: ref.current, hint: ref.current ? "Current branch" : undefined, action: wizard("delete-branch", { name }) },

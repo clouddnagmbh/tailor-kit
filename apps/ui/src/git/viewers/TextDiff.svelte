@@ -7,12 +7,22 @@
   import { Button, EmptyState } from "../../ui";
   import { diffRows } from "./model";
 
-  let { before, after }: { before: string | null; after: string | null } = $props();
+  let {
+    before,
+    after,
+    onhunks,
+  }: {
+    before: string | null;
+    after: string | null;
+    /** How many hunks (blocks of changed lines) the diff has, whenever it is computed. */
+    onhunks?: (count: number) => void;
+  } = $props();
 
   const ROW_LIMIT = 2000;
   const SIGN = { context: " ", added: "+", removed: "-" } as const;
 
   const rows = $derived(diffRows(before, after));
+  $effect(() => onhunks?.(rows.filter((r) => r.kind === "hunk").length));
   let all = $state(false);
   const shown = $derived(all ? rows : rows.slice(0, ROW_LIMIT));
 </script>

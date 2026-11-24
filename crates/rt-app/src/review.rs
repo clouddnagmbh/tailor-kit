@@ -270,8 +270,8 @@ pub trait ReviewProvider {
     ) -> LocalBoxFuture<'a, Result<(), ReviewError>>;
     fn ci<'a>(&'a self, pull: &'a PullRequest)
     -> LocalBoxFuture<'a, Result<CiStatus, ReviewError>>;
-    /// Wave 15: opens a pull request from a branch that is already on the remote. Strand E
-    /// implements it for the built-in hosts.
+    /// Wave 15: opens a pull request from a branch that is already on the remote. GitHub and
+    /// GitLab implement it; a host that does not answers with an explanation.
     fn create<'a>(
         &'a self,
         pull: &'a NewPullRequest,
@@ -279,7 +279,7 @@ pub trait ReviewProvider {
         let _ = pull;
         Box::pin(async {
             Err(ReviewError::Host(
-                "opening pull requests is not implemented yet (wave 15, strand E)".into(),
+                "this Git host does not support opening pull requests from the app".into(),
             ))
         })
     }

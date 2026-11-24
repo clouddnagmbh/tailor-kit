@@ -14,13 +14,13 @@
 //   deeper check, a header added to `List users` and a new `Ping` request. Comments, verdicts
 //   and the CI status are kept in memory.
 
-import { stubCreatePull } from "./wave15-stubs";
 import { BackendError, type ReviewApi } from "./backend";
 import { MOCK_REMOTE_HOST } from "./mock-git";
 import type { MockWave12Host } from "./mock-wave12";
 import type {
   CiStatus,
   FieldPath,
+  NewPullRequest,
   NewReviewComment,
   PullRequest,
   RequestSpec,
@@ -44,7 +44,15 @@ export function mockReview(host: MockWave12Host): ReviewApi {
   const sessions = new Map<number, ReviewSession>();
   const written = new Map<number, ReviewComment[]>();
 
+  /** Pull requests opened with `create`, newest last. */
+  const created: PullRequest[] = [];
+
   const pulls = (): PullRequest[] => [
+    ...basePulls(),
+    ...created,
+  ];
+
+  const basePulls = (): PullRequest[] => [
     {
       number: 1,
       title: "Add a deeper health check and a ping",
@@ -245,7 +253,29 @@ export function mockReview(host: MockWave12Host): ReviewApi {
         ],
       };
     },
-    // Wave 15 (interface): strand E.
-    create: stubCreatePull,
+    create: async (pull: NewPullRequest) => {
+      authed();
+      if (pull.title.trim() === "") throw new BackendError("host", "422 Validation Failed (title can't be blank)");
+      if (pull.head === pull.base) throw new BackendError("host", "422 Validation Failed (head and base are the same branch)");
+      if (pulls().some((p) => p.source === pull.head && p.target === pull.base)) {
+        throw new BackendError("host", `422 Validation Failed (A pull request already exists for ${pull.head})`);
+      }
+      const number = Math.max(0, ...pulls().map((p) => p.number)) + 1;
+      const made: PullRequest = {
+        number,
+        title: pull.title,
+        author: "you",
+        state: "open",
+        draft: pull.draft,
+        source: pull.head,
+        target: pull.base,
+        head: "",
+        base: "",
+        url: `https://${MOCK_REMOTE_HOST}/acme/demo-api/pull/${number}`,
+        updated: NOW(),
+      };
+      created.push(made);
+      return structuredClone(made);
+    },
   };
 }

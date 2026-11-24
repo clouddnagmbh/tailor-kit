@@ -10,6 +10,7 @@
   import { getApp } from "../state/app.svelte";
   import { Avatar, Badge, Banner, Button, Card, Chip, EmptyState } from "../ui";
   import { relativeTime, requestWord, stateLabel } from "./model";
+  import { openNewPull } from "./open-new-pull";
   import PullView from "./PullView.svelte";
   import ReviewSetup from "./ReviewSetup.svelte";
 
@@ -93,6 +94,7 @@
         <span class="muted" data-testid="review-repo">{repo.host} · {repo.project}</span>
       </div>
       <span class="spacer"></span>
+      <Button variant="primary" data-testid="review-new" icon="add" onclick={() => void openNewPull(app).then((made) => made && refresh())}>New {word}</Button>
       <Button data-testid="review-refresh" icon="sync" loading={loading} disabled={loading} onclick={() => void refresh()}>{loading ? "Loading…" : "Refresh"}</Button>
       <Button variant="ghost" data-testid="review-settings" icon="settings" onclick={() => (showSetup = true)}>Token and hosts</Button>
     </header>

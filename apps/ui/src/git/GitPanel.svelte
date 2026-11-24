@@ -34,9 +34,14 @@
     GitResolution,
     GitStash,
     GitStatus,
+    GitWorkingCopy,
     GitUndoEntry,
     SecretFinding,
   } from "../commands/types";
+  import { extensionCommitFormActions, extensionStaging } from "../shell/extension-git";
+  import { getExtensions } from "../shell/extension-tabs";
+  import ExtensionActions from "../shell/ExtensionActions.svelte";
+  import ExtensionGitActions from "../shell/ExtensionGitActions.svelte";
   import { getApp } from "../state/app.svelte";
   import { gitApiCommands } from "./api-commands";
   import CloneFields from "./CloneFields.svelte";
@@ -86,6 +91,7 @@
   const views = getGitViews();
   const commands = $derived(gitApiCommands(app, views));
   const git = app.backend.git;
+  const extensions = getExtensions();
   /** Commits loaded for the panel; it shows as many as fit its height. */
   const RECENT = 40;
 
@@ -153,7 +159,36 @@
     const mine = app.collections.find((c) => c.id === app.activeCollection);
     return mine?.repo ? app.collections.filter((c) => c.repo === mine.repo && c.id !== mine.id) : [];
   });
-  const canCommit = $derived(!busy && !conflicted && message.trim() !== "" && selected.length > 0);
+  const repository = $derived(app.activeRepository ?? "");
+  // A staging view of an extension takes the place of the file list; the form then commits the
+  // index (`commitStaged`). Without one, nothing changes: commit without staging.
+  const staging = $derived(extensionStaging(extensions, repository));
+  let working = $state<GitWorkingCopy | null>(null);
+  const stagedPaths = $derived(working?.files.filter((f) => f.staged).map((f) => f.path) ?? []);
+  const committing = $derived(staging ? stagedPaths : selected);
+  const canCommit = $derived(!busy && !conflicted && message.trim() !== "" && committing.length > 0);
+  const formActions = $derived(
+    extensionCommitFormActions(extensions, {
+      repository,
+      message: { get: () => message, set: (text: string) => (message = text) },
+      paths: committing,
+      staged: staging !== null,
+    }),
+  );
+
+  async function refreshWorking(): Promise<void> {
+    try {
+      working = await git.workingCopy();
+    } catch (e) {
+      error = describe(e);
+    }
+  }
+  // The staging view needs the working copy; it stays in step with the status.
+  $effect(() => {
+    void status;
+    if (staging) untrack(() => void refreshWorking());
+    else working = null;
+  });
   const tiles = $derived(toolTiles(commands, () => views.open({ kind: "graph" })));
 
   const describe = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -197,7 +232,8 @@
 
   let generation = 0;
   async function refresh(): Promise<void> {
-    if (!app.collection) return;
+    // A set of repository roots has no collection; Git still works on the active repository.
+    if (!app.collection && !app.activeRepository) return;
     const mine = ++generation;
     try {
       const s = await git.status();
@@ -246,6 +282,7 @@
     void app.loadCount;
     void dirtyKey;
     void app.collection;
+    void app.activeRepository;
     untrack(() => {
       findings = [];
       void refresh();
@@ -347,11 +384,12 @@
   const commit = (andPush = false) =>
     withIdentity(() =>
       act("commit", async () => {
-        const paths = selected;
+        const paths = committing;
         findings = await git.scan(paths);
         if (findings.length > 0) return;
         try {
-          await git.commit(message, paths);
+          if (staging) await git.commitStaged({ message });
+          else await git.commit(message, paths);
         } catch (e) {
           if (e instanceof BackendError && e.kind === "secrets-found") {
             findings = await git.scan(paths);
@@ -823,6 +861,14 @@
           </p>
         {:else}
           {#if sit.kind === "empty"}<p class="hint">Commit these files to start the history.</p>{/if}
+          {#if staging && working}
+            {@const Staging = staging.staging.component}
+            <div class="staging" data-testid="git-staging" data-extension={staging.extension} aria-label={staging.staging.title}>
+              <Staging ctx={extensions!.ctx} {repository} workingCopy={working} refresh={refreshWorking} />
+            </div>
+          {:else if staging}
+            <p class="hint"><Spinner size="sm" /> Reading the changes…</p>
+          {:else}
           <ul class="files">
             {#each rows as f (f.path)}
               <li data-testid="git-file" data-path={f.path}>
@@ -841,6 +887,7 @@
               </li>
             {/each}
           </ul>
+          {/if}
         {/if}
         {#if files.length > 0 || status?.merging}
           <form
@@ -863,6 +910,11 @@
                 }
               }}
             />
+            {#if formActions.length > 0}
+              <div class="form-actions" data-testid="git-form-actions">
+                <ExtensionActions actions={formActions} label="Commit message actions" size="sm" variant="ghost" />
+              </div>
+            {/if}
             <div class="commit-button">
               <SplitButton
                 variant="primary"
@@ -880,7 +932,7 @@
                     run: () => commit(true),
                   },
                 ]}
-                onclick={() => canCommit && void commit()}>{commitLabel(selected.length)}</SplitButton
+                onclick={() => canCommit && void commit()}>{commitLabel(committing.length)}</SplitButton
               >
             </div>
           </form>
@@ -889,7 +941,26 @@
       </Section>
     </div>
 
+    {#if stashes.length > 0}
+      <div class="stashes" data-testid="git-stashes">
+        <Section title="Parked changes" count={stashes.length}>
+          <ul class="files">
+            {#each stashes as st (st.index)}
+              <li data-testid="git-stash" data-index={st.index}>
+                <span class="file-title" title={st.files.join(", ")}>{st.message || `Parked changes ${st.index + 1}`}</span>
+                <ExtensionGitActions target={{ kind: "stash", repository, index: st.index }} label="Parked changes actions" />
+                <Button size="sm" variant="ghost" data-testid="git-stash-bring-back" onclick={() => wizard("unstash", { index: st.index })}>Bring back</Button>
+              </li>
+            {/each}
+          </ul>
+        </Section>
+      </div>
+    {/if}
+
     {#if tiles.length > 0}<ToolsGrid {tiles} />{/if}
+    <div class="repo-actions" data-testid="git-repository-actions">
+      <ExtensionGitActions target={{ kind: "repository", repository }} label="Repository actions" />
+    </div>
 
     {#if recent.length > 0}
       <RecentCommits
@@ -1163,6 +1234,20 @@
     flex-direction: column;
     gap: var(--rt-space-4);
     margin-top: var(--rt-space-4);
+  }
+  .staging {
+    min-width: 0;
+  }
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .repo-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .repo-actions:not(:has(*)) {
+    display: none;
   }
   .commit-button {
     display: flex;

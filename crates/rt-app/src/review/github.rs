@@ -10,8 +10,9 @@ use serde_json::{Value, json};
 use super::client::{Client, Reply, items, text};
 use super::time::unix_seconds;
 use super::{
-    CiCheck, CiState, CiStatus, NewReviewComment, PullRequest, PullState, ReviewComment,
-    ReviewError, ReviewProvider, ReviewRepo, ReviewSubmission, ReviewVerdict, combine,
+    CiCheck, CiState, CiStatus, NewPullRequest, NewReviewComment, PullRequest, PullState,
+    ReviewComment, ReviewError, ReviewProvider, ReviewRepo, ReviewSubmission, ReviewVerdict,
+    combine,
 };
 
 /// Pages followed at most (100 per page).
@@ -274,6 +275,23 @@ impl<T: Transport> ReviewProvider for GithubProvider<'_, T> {
                 state: combine(&checks),
                 checks,
             })
+        })
+    }
+
+    fn create<'a>(
+        &'a self,
+        pull: &'a NewPullRequest,
+    ) -> LocalBoxFuture<'a, Result<PullRequest, ReviewError>> {
+        Box::pin(async move {
+            let body = json!({
+                "title": pull.title,
+                "body": pull.body,
+                "head": pull.head,
+                "base": pull.base,
+                "draft": pull.draft,
+            });
+            let reply = self.client.post(&self.url("/pulls"), &body).await?;
+            Ok(self::pull(&reply.body))
         })
     }
 }

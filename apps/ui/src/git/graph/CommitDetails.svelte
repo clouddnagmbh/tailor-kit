@@ -8,9 +8,14 @@
      (`GitChangedFile.collection`). -->
 <script lang="ts">
   import type { CollectionDiff, GitChangedFile, GitDiff, GitGraphCommit, GitRef } from "../../commands/types";
+  import type { GitActionTarget } from "../../extensions";
   import SemanticDiff from "../../diff/SemanticDiff.svelte";
+  import { gitActionEntries } from "../../shell/extension-git";
+  import { getExtensions } from "../../shell/extension-tabs";
+  import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import { getApp } from "../../state/app.svelte";
   import { Avatar, Badge, Button, Chip, Dropdown, EmptyState, Icon, IconButton, SegmentedControl, Skeleton, tooltip } from "../../ui";
+  import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { runAction, toMenu, type ActionHost } from "./actions";
   import FileDiff from "./FileDiff.svelte";
   import { absoluteTime, commitMenu, refLabels, refMenu, relativeTime, semanticFor, shortId, type GraphContext } from "./model";
@@ -36,6 +41,11 @@
   } = $props();
 
   const app = getApp();
+  const extensions = getExtensions();
+  const repository = $derived(app.activeRepository ?? "");
+  const fail = (message: string) => (app.error = message);
+  /** The side the shown file is compared against: the marked commit, else the first parent. */
+  const diffFrom = $derived(base?.oid ?? commit.parents[0] ?? null);
 
   const STATUS = { added: "A", modified: "M", deleted: "D", renamed: "R" } as const;
   const labels = $derived(refLabels(commit.refs, byFull).filter((l) => l.ref.kind !== "head"));
@@ -135,8 +145,35 @@
     (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-path="${CSS.escape(f.path)}"]`)?.focus();
   }
 
-  const commitItems = $derived(toMenu(commitMenu(commit, refLabels(commit.refs, byFull), ctx), host));
+  // Extensions' actions: on the commit (or on the two marked commits) at the end of its menu.
+  const commitTarget = $derived<GitActionTarget>(
+    base ? { kind: "commits", repository, commits: [commit.oid, base.oid] } : { kind: "commit", repository, commit: commit.oid },
+  );
+  const commitItems = $derived([
+    ...toMenu(commitMenu(commit, refLabels(commit.refs, byFull), ctx), host),
+    ...gitActionEntries(extensions, commitTarget, fail),
+  ]);
+  const refItems = (ref: GitRef) => [
+    ...toMenu(refMenu(ref, ctx), host),
+    ...gitActionEntries(extensions, { kind: "ref", repository, ref: ref.full }, fail),
+  ];
 </script>
+
+{#snippet diffBody()}
+        {#if showSemantic}
+          {#if semanticError}
+            <p class="error" role="alert">{semanticError}</p>
+          {:else if !fileSemantic}
+            <Skeleton lines={4} label="Loading the request changes" />
+          {:else if fileSemantic.changes.length === 0 && fileSemantic.files.length === 0}
+            <EmptyState size="sm" icon="check" title="No request changes" text="Only formatting or comments changed. Switch to Lines to see them." />
+          {:else}
+            <div data-testid="graph-semantic-diff"><SemanticDiff diff={fileSemantic} /></div>
+          {/if}
+        {:else}
+          <FileDiff diff={lineDiff} error={lineError} />
+        {/if}
+{/snippet}
 
 <section class="details" aria-label="Commit details" data-testid="graph-details">
   {#if base}
@@ -151,6 +188,7 @@
 
   <header class="head">
     <h2 class="summary" data-testid="graph-details-summary">{commit.summary}</h2>
+    <ExtensionGitActions target={commitTarget} label="Commit actions" />
     <Dropdown items={commitItems} menuLabel="Commit actions" placement="bottom-end">
       {#snippet trigger(props)}
         <IconButton icon="more" label="Commit actions" size="sm" {...props} data-testid="graph-details-menu" />
@@ -196,7 +234,7 @@
       <dt>At</dt>
       <dd class="chips">
         {#each labels as l (l.ref.full)}
-          <Dropdown items={toMenu(refMenu(l.ref, ctx), host)} menuLabel="{l.ref.name} actions">
+          <Dropdown items={refItems(l.ref)} menuLabel="{l.ref.name} actions">
             {#snippet trigger(props)}<RefLabel label={l} size="sm" trigger={props} />{/snippet}
           </Dropdown>
         {/each}
@@ -250,6 +288,7 @@
           <Button size="sm" variant="ghost" icon="file-text" data-testid="graph-file-blame" onclick={() => host.views.open({ kind: "blame", path: file.path, rev: commit.oid })}>Blame</Button>
         {/if}
         <Button size="sm" variant="ghost" icon="history" data-testid="graph-file-history" onclick={() => host.views.open({ kind: "file-history", path: file.path })}>File history</Button>
+        <ExtensionGitActions target={{ kind: "file", repository, path: file.path, rev: commit.oid }} label="File actions" />
         {#if semanticHere}
           <SegmentedControl
             size="sm"
@@ -271,18 +310,10 @@
         </div>
       {/if}
       <div class="diff" data-testid="graph-diff">
-        {#if showSemantic}
-          {#if semanticError}
-            <p class="error" role="alert">{semanticError}</p>
-          {:else if !fileSemantic}
-            <Skeleton lines={4} label="Loading the request changes" />
-          {:else if fileSemantic.changes.length === 0 && fileSemantic.files.length === 0}
-            <EmptyState size="sm" icon="check" title="No request changes" text="Only formatting or comments changed. Switch to Lines to see them." />
-          {:else}
-            <div data-testid="graph-semantic-diff"><SemanticDiff diff={fileSemantic} /></div>
-          {/if}
+        {#if diffFrom && !showSemantic && !file.binary}
+          <FileEditorSwitch path={file.path} from={diffFrom} to={commit.oid}>{@render diffBody()}</FileEditorSwitch>
         {:else}
-          <FileDiff diff={lineDiff} error={lineError} />
+          {@render diffBody()}
         {/if}
       </div>
     {/if}

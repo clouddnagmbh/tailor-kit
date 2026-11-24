@@ -9,6 +9,7 @@
 import type { MenuEntry } from "../../ui";
 import type { AppState } from "../../state/app.svelte";
 import type { GitViews } from "../views.svelte";
+import { openNewPull } from "../../review/open-new-pull";
 import { openGitWizard } from "../wizards/open";
 import type { GraphAction, GraphMenuEntry } from "./model";
 
@@ -44,6 +45,10 @@ export async function runAction(host: ActionHost, action: GraphAction): Promise<
       return;
     case "select":
       host.select(action.rev);
+      return;
+    case "pull-request":
+      await openNewPull(host.app, { head: action.head });
+      host.reload();
       return;
   }
 }

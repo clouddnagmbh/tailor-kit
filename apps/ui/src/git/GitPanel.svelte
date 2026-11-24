@@ -153,7 +153,9 @@
   /** Branches to compare the current one with, field by field ("Compare with" in the branch menu). */
   const compareTargets = $derived(branches.filter((b) => b.name !== current && !b.name.endsWith("/HEAD")));
   const origin = $derived(remotes?.find((r) => r.name === "origin") ?? remotes?.[0] ?? null);
-  const name = $derived(repoName(origin?.url ?? null, app.collection?.location ?? null));
+  // A repository root has no collection of its own: the name comes from the active repository.
+  const here = $derived(app.repositories.find((r) => r.id === app.activeRepository));
+  const name = $derived(repoName(origin?.url ?? null, here?.location ?? app.collection?.location ?? null));
   /** Other collections of the set in the same repository (strand A fills `repo`). */
   const siblings = $derived.by(() => {
     const mine = app.collections.find((c) => c.id === app.activeCollection);

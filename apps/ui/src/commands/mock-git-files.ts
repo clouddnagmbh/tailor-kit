@@ -15,7 +15,7 @@ import { BackendError } from "./backend";
 import { DEMO_ID } from "./mock-collections";
 import type { MockGit } from "./mock-git";
 import type { GitBlob, GitFileState, GitTreeEntry, GitWorkingCopy, GitWorkingFile } from "./types";
-import type { GitWorkingMethods } from "./wave15-stubs";
+import type { GitWorkingMethods } from "./git-methods";
 
 /** The id of the mock repository (`mock-collections.ts`). */
 export const MOCK_REPOSITORY = "mock://demo";

@@ -25,7 +25,7 @@ import type {
   GitReflogEntry,
   RequestSpec,
 } from "./types";
-import type { GitHistoryMethods } from "./wave15-stubs";
+import type { GitHistoryMethods } from "./git-methods";
 import { dateOrder } from "../git/graph/order";
 
 type Tree = Map<string, RequestSpec>;

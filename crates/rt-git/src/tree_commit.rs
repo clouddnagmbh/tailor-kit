@@ -107,14 +107,15 @@ impl Repo {
             return Err(fail("nothing to commit: the files are unchanged"));
         }
         let signature = signature(&identity);
-        let mut time = gix::date::parse::TimeBuf::default();
-        let sig = signature.to_ref(&mut time);
         // A missing branch is created; an existing one must still be at `tip`.
-        let id = self
-            .repo
-            .commit_as(sig, sig, full, message, tree, [parent])
-            .ctx("cannot commit")?
-            .detach();
+        let id = self.commit_on(
+            &full.as_bstr().to_str_lossy(),
+            &signature,
+            &signature,
+            message,
+            tree,
+            vec![parent],
+        )?;
         describe(&self.repo, id)
     }
 }

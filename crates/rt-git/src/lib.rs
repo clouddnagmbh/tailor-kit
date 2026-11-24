@@ -119,9 +119,11 @@ mod file_tree;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
 mod history_search;
+mod index_ops;
 mod merge;
 mod net;
 mod pack;
+mod patch;
 mod plumbing;
 mod reflog;
 mod remote;
@@ -139,6 +141,7 @@ pub mod rewrite;
 mod rewrite_branch;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
 pub mod sign;
+mod signing;
 mod stash;
 mod status;
 mod tags;

@@ -48,7 +48,7 @@ impl Repo {
         let id = self.resolve_rev(rev)?;
         let commit = self.repo.find_commit(id).ctx("cannot read a commit")?;
         let decoded = commit.decode().ctx("cannot read a commit")?;
-        let signed = decoded.extra_headers().find("gpgsig").is_some();
+        let signed = crate::signing::has_signature(&decoded);
         Ok(GitCommitDetails {
             oid: id.to_string(),
             tree: commit.tree_id().ctx("cannot read a commit")?.to_string(),
@@ -239,10 +239,6 @@ impl Repo {
             message: write.message.as_str().into(),
             extra_headers: Vec::new(),
         };
-        Ok(self
-            .repo
-            .write_object(&commit)
-            .ctx("cannot write a commit")?
-            .to_string())
+        Ok(self.write_commit_object(commit)?.to_string())
     }
 }

@@ -54,15 +54,20 @@ export function relativeTime(unixSeconds: number, nowMs = Date.now()): string {
   return dateOnly(unixSeconds, nowMs);
 }
 
+// `toLocale*String(locale, options)` builds a new Intl formatter on every call, which cost more
+// than everything else while scrolling (two calls per row). The formatters are made once.
+const SAME_YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const OTHER_YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+const FULL = new Intl.DateTimeFormat("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
 function dateOnly(unixSeconds: number, nowMs: number): string {
   const d = new Date(unixSeconds * 1000);
-  const sameYear = d.getFullYear() === new Date(nowMs).getFullYear();
-  return d.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  return (d.getFullYear() === new Date(nowMs).getFullYear() ? SAME_YEAR : OTHER_YEAR).format(d);
 }
 
 /** The full date and time, for tooltips and the details. */
 export function absoluteTime(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toLocaleString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return FULL.format(new Date(unixSeconds * 1000));
 }
 
 /** Whether `commit` matches the search `query`: words of the message, the author, an id

@@ -41,7 +41,7 @@
   const LANE = 14;
   /** Lanes drawn at most; wider histories are cut at the right edge of the graph column. */
   const MAX_LANES = 16;
-  const OVERSCAN = 10;
+  const OVERSCAN = 4;
   /** Load the next page when this few rows are left below the view. */
   const AHEAD = 300;
 

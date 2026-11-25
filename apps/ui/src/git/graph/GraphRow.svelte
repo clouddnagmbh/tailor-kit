@@ -13,6 +13,8 @@
 
   let {
     id,
+    position,
+    total,
     commit,
     row,
     labels,
@@ -30,6 +32,8 @@
     ondragstate,
   }: {
     id: string;
+    position: number;
+    total: number;
     commit: GitGraphCommit;
     row: LaneRow;
     labels: Label[];
@@ -79,6 +83,8 @@
   role="option"
   tabindex="-1"
   aria-selected={selected}
+  aria-posinset={position}
+  aria-setsize={total}
   aria-label="{commit.summary}, {commit.author}, {relativeTime(commit.time, now)}"
   data-testid="graph-row"
   data-oid={commit.oid}

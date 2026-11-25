@@ -83,7 +83,13 @@
   const lanes = $derived(Math.min(MAX_LANES, Math.max(2, data.maxWidth)));
   const first = $derived(Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN));
   const last = $derived(Math.min(n, Math.ceil((scrollTop + viewport) / ROW) + OVERSCAN));
-  const visible = $derived(Array.from({ length: Math.max(0, last - first) }, (_, k) => first + k));
+  // Rows are recycled: row `i` always lives in slot `i % pool`, so scrolling re-targets mounted
+  // rows (props change) instead of destroying and mounting them. The pool is larger than the
+  // window, so slots never collide; the array is in slot order, so the DOM never moves nodes.
+  const pool = $derived(Math.ceil(viewport / ROW) + 2 * OVERSCAN + 8);
+  const visible = $derived(
+    Array.from({ length: Math.max(0, last - first) }, (_, k) => first + k).sort((a, b) => (a % pool) - (b % pool)),
+  );
   const hits = $derived(query.trim() ? data.commits.flatMap((c, i) => (matches(c, data.byFull, query) ? [i] : [])) : []);
   const hitSet = $derived(new Set(hits));
   const hitPos = $derived(hits.indexOf(selectedIndex));
@@ -417,10 +423,12 @@
           onkeydown={onListKey}
         >
           <div class="spacer-rows" style:height="{n * ROW}px">
-            {#each visible as i (data.commits[i]!.oid)}
+            {#each visible as i (i % pool)}
               {@const commit = data.commits[i]!}
               <GraphRow
                 id="graph-row-{commit.oid}"
+                position={i + 1}
+                total={n}
                 {commit}
                 row={data.rows[i]!}
                 labels={refLabels(commit.refs, data.byFull)}

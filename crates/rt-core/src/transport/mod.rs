@@ -199,6 +199,14 @@ pub enum TransportError {
 /// use the concrete native transport type.
 pub trait Transport {
     fn send(&self, request: HttpRequest) -> impl Future<Output = Result<Response, TransportError>>;
+
+    /// What the transport learned about the TLS connection that answered a request to `url`
+    /// (wave 19, strand R; additive). Only the native transport knows; the default (and the
+    /// browser) say nothing. Called after the response, so it costs the wire nothing.
+    fn tls_info(&self, url: &str) -> Option<TlsInfo> {
+        let _ = url;
+        None
+    }
 }
 
 /// A response read to the end.

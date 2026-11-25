@@ -26,6 +26,7 @@
 //! the request is ignored: the length always comes from the actual body.
 
 mod body;
+mod certinfo;
 mod connector;
 /// Wave 8, strand B.
 mod grpc;
@@ -52,6 +53,7 @@ use hyper_util::rt::{TokioExecutor, TokioTimer};
 use web_time::Instant;
 
 use self::body::NativeBody;
+use self::certinfo::TlsRegistry;
 use self::connector::{ConnInfo, Connector};
 use self::redirect::NextMethod;
 use self::tls::TlsSetup;
@@ -76,6 +78,8 @@ pub struct NativeTransport {
     tls: Arc<TlsSetup>,
     /// One pool per client certificate in use.
     identities: Arc<Mutex<Vec<(ClientIdentity, HttpClient)>>>,
+    /// The TLS details of the connections made (wave 19, strand R).
+    seen: Arc<TlsRegistry>,
 }
 
 impl std::fmt::Debug for NativeTransport {
@@ -111,10 +115,12 @@ impl NativeTransport {
 
     fn with_tls(tls: TlsSetup) -> Self {
         let tls = Arc::new(tls);
+        let seen = Arc::<TlsRegistry>::default();
         Self {
-            client: build_client(tls.clone()),
+            client: build_client(tls.clone(), seen.clone()),
             tls,
             identities: Arc::default(),
+            seen,
         }
     }
 
@@ -128,7 +134,7 @@ impl NativeTransport {
             return client.clone();
         }
         let tls = TlsSetup::with_identity(self.tls.extra_roots().to_vec(), Some(identity.clone()));
-        let client = build_client(Arc::new(tls));
+        let client = build_client(Arc::new(tls), self.seen.clone());
         if pools.len() >= MAX_IDENTITY_POOLS {
             pools.remove(0);
         }
@@ -265,6 +271,10 @@ impl crate::stream::StreamTransport for NativeTransport {
 }
 
 impl Transport for NativeTransport {
+    fn tls_info(&self, url: &str) -> Option<super::TlsInfo> {
+        self.seen.lookup(url)
+    }
+
     async fn send(&self, request: HttpRequest) -> Result<Response, TransportError> {
         let deadline = request
             .options
@@ -280,12 +290,12 @@ impl Transport for NativeTransport {
     }
 }
 
-fn build_client(tls: Arc<TlsSetup>) -> HttpClient {
+fn build_client(tls: Arc<TlsSetup>, seen: Arc<TlsRegistry>) -> HttpClient {
     Client::builder(TokioExecutor::new())
         .timer(TokioTimer::new())
         .pool_timer(TokioTimer::new())
         .pool_idle_timeout(POOL_IDLE_TIMEOUT)
-        .build(Connector::new(tls))
+        .build(Connector::new(tls, seen))
 }
 
 fn parse_url(url: &str) -> Result<Uri, TransportError> {

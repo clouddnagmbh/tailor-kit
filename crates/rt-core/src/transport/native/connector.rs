@@ -20,6 +20,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
 use web_time::Instant;
 
+use super::certinfo::{self, TlsRegistry};
 use super::tls::TlsSetup;
 use crate::transport::TransportError;
 
@@ -37,11 +38,13 @@ pub(super) struct ConnInfo {
 #[derive(Clone)]
 pub(super) struct Connector {
     tls: Arc<TlsSetup>,
+    /// Where the TLS details of each new connection are kept (wave 19, strand R).
+    seen: Arc<TlsRegistry>,
 }
 
 impl Connector {
-    pub fn new(tls: Arc<TlsSetup>) -> Self {
-        Self { tls }
+    pub fn new(tls: Arc<TlsSetup>, seen: Arc<TlsRegistry>) -> Self {
+        Self { tls, seen }
     }
 }
 
@@ -58,11 +61,16 @@ impl tower_service::Service<Uri> for Connector {
 
     fn call(&mut self, uri: Uri) -> Self::Future {
         let tls = self.tls.clone();
-        Box::pin(connect(tls, uri))
+        let seen = self.seen.clone();
+        Box::pin(connect(tls, seen, uri))
     }
 }
 
-async fn connect(tls: Arc<TlsSetup>, uri: Uri) -> Result<Conn, TransportError> {
+async fn connect(
+    tls: Arc<TlsSetup>,
+    seen: Arc<TlsRegistry>,
+    uri: Uri,
+) -> Result<Conn, TransportError> {
     let https = match uri.scheme_str() {
         Some("http") => false,
         Some("https") => true,
@@ -134,7 +142,20 @@ async fn connect(tls: Arc<TlsSetup>, uri: Uri) -> Result<Conn, TransportError> {
         .await
         .map_err(|e| tls_error(host, e))?;
     let tls_time = started.elapsed();
-    let h2 = stream.get_ref().1.alpn_protocol() == Some(b"h2");
+    let session = stream.get_ref().1;
+    let h2 = session.alpn_protocol() == Some(b"h2");
+    seen.record(
+        host,
+        port,
+        certinfo::info_of(
+            session.protocol_version(),
+            session.negotiated_cipher_suite(),
+            session
+                .peer_certificates()
+                .and_then(|chain| chain.first())
+                .map(|leaf| leaf.as_ref()),
+        ),
+    );
     Ok(Conn {
         io: Stream::Tls(Box::new(TokioIo::new(stream))),
         h2,

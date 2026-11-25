@@ -71,7 +71,7 @@ pub(super) async fn open<'a>(
     let uri = super::parse_url(&full_url)?;
 
     let connect = async {
-        let mut connector = Connector::new(transport.tls.clone());
+        let mut connector = Connector::new(transport.tls.clone(), transport.seen.clone());
         let conn = connector.call(uri.clone()).await?;
         if !conn.connected().is_negotiated_h2() && uri.scheme_str() == Some("https") {
             return Err(TransportError::Other(format!(

@@ -78,6 +78,25 @@
     selected: !selected ? 0 : base && base !== selected ? 2 : 1,
     dragging,
   });
+  // The details pane follows the selection once it has been still for a moment: while a key is
+  // held, only the highlighted row changes (the details of every commit passed would be
+  // rendered and dropped again). The first commit shows at once.
+  const DETAILS_DELAY = 120;
+  let detailsOid = $state<string | null>(null);
+  $effect(() => {
+    const oid = selected;
+    if (oid === detailsOid) return;
+    if (detailsOid === null || !data.index.has(detailsOid)) {
+      detailsOid = oid;
+      return;
+    }
+    const t = setTimeout(() => (detailsOid = oid), DETAILS_DELAY);
+    return () => clearTimeout(t);
+  });
+  const detailsCommit = $derived.by(() => {
+    const i = detailsOid ? (data.index.get(detailsOid) ?? -1) : -1;
+    return i >= 0 ? data.commits[i]! : null;
+  });
   const baseCommit = $derived(base ? (data.commits[data.index.get(base) ?? -1] ?? null) : null);
   const ctx: GraphContext = $derived({ head: data.head, branch: data.branch });
   const lanes = $derived(Math.min(MAX_LANES, Math.max(2, data.maxWidth)));
@@ -451,8 +470,8 @@
         </div>
       </div>
       <aside class="details-pane">
-        {#if selectedCommit}
-          <CommitDetails commit={selectedCommit} base={baseCommit} byFull={data.byFull} {ctx} {host} {now} onclearbase={() => (base = null)} />
+        {#if detailsCommit}
+          <CommitDetails commit={detailsCommit} base={baseCommit} byFull={data.byFull} {ctx} {host} {now} onclearbase={() => (base = null)} />
         {:else}
           <EmptyState size="sm" icon="commit" title="Pick a commit" text="Its message, author and changed files show here." />
         {/if}

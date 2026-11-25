@@ -112,10 +112,12 @@ describe("tools", () => {
         cmd("git:compare", "Compare revisions…"),
         cmd("merge-conflicts", "Resolve merge conflicts"),
         cmd("new:thing", "Something new: with a long label"),
+        cmd("git-history-lost", "Git: Lost work (reflog)"),
+        cmd("git:other", "Git: Other thing"),
       ],
       () => undefined,
     );
-    expect(tiles.map((t) => t.label)).toEqual(["Graph", "Compare", "Contract", "Something new"]);
+    expect(tiles.map((t) => t.label)).toEqual(["Graph", "Compare", "Contract", "Lost work", "Something new", "Other thing"]);
     for (const t of tiles) {
       expect(t.label.length).toBeLessThanOrEqual(14);
       expect(t.tip.length).toBeGreaterThan(t.label.length);

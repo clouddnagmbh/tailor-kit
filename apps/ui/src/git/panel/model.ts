@@ -219,7 +219,17 @@ const TOOLS: { id: string; label: string; icon: string; tip: string }[] = [
   { id: "git:review-create", label: "New PR", icon: "review", tip: "Open a pull or merge request from a branch on GitHub or GitLab: it asks you to publish the branch first if it is not on the server." },
   { id: "contract:open", label: "Contract", icon: "contract", tip: "Check the requests against the OpenAPI spec and list breaking changes between versions." },
   { id: "git:rescue", label: "Secrets", icon: "shield-secret", tip: "Scan the whole history for passwords and tokens that were committed, and move them out safely." },
+  { id: "git-history-search", label: "Search", icon: "search", tip: "Search the history by message, author, file or changed text." },
+  { id: "git-history-file", label: "File history", icon: "history", tip: "Every commit that changed the open request, following renames." },
+  { id: "git-history-blame", label: "Blame", icon: "user", tip: "Who last changed each line of the open request, and in which commit." },
+  { id: "git-history-lost", label: "Lost work", icon: "undo", tip: "Branches and commits you lost, from the reflog: restore them with a backup and undo." },
 ];
+
+/** A short tile label from a palette label: without the "Git:" prefix, cut at the first ":", "…" or "(". */
+export function shortLabel(label: string): string {
+  const bare = label.replace(/^Git:\s*/, "");
+  return bare.replace(/[:…(].*$/, "").trim() || bare;
+}
 
 /** Palette entries that the panel shows elsewhere, not as tiles. */
 const NOT_TILES = new Set(["diff-working", "diff-head", "merge-conflicts"]);
@@ -235,7 +245,7 @@ export function toolTiles(commands: Command[], openGraph: () => void): ToolTile[
   }
   for (const c of commands) {
     if (NOT_TILES.has(c.id) || c.id.startsWith("git-wizard:") || TOOLS.some((t) => t.id === c.id)) continue;
-    tiles.push({ id: c.id, label: c.label.replace(/[:…(].*$/, "").trim() || c.label, icon: "settings", tip: c.label, run: c.run });
+    tiles.push({ id: c.id, label: shortLabel(c.label), icon: "settings", tip: c.label, run: c.run });
   }
   return tiles;
 }

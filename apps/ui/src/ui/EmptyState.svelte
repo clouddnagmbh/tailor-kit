@@ -46,7 +46,9 @@
     align-items: center;
     justify-content: center;
     gap: var(--rt-space-3);
+    width: 100%;
     max-width: 380px;
+    box-sizing: border-box;
     margin: 0 auto;
     padding: var(--rt-space-8) var(--rt-space-6);
     text-align: center;

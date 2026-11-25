@@ -80,6 +80,8 @@
     gap: var(--rt-space-3);
     height: var(--btn-h);
     min-width: var(--btn-h);
+    /* Never wider than the container: a long label ends in an ellipsis instead of overflowing. */
+    max-width: 100%;
     padding: 0 var(--btn-px);
     border: 1px solid transparent;
     border-radius: var(--rt-radius-md);

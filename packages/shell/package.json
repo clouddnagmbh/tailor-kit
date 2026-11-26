@@ -1,0 +1,36 @@
+{
+  "name": "@tailor-kit/shell",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Shared app-shell building blocks: command palette, dialog host, resizer, fuzzy search, shortcut table matching, storage, theme, hint store, tab fitting (source package, no build step).",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./*.svelte": {
+      "types": "./src/*.svelte",
+      "svelte": "./src/*.svelte",
+      "default": "./src/*.svelte"
+    }
+  },
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tailor-kit/ui": "0.0.0",
+    "svelte": "^5.59.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte-check": "^4.7.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

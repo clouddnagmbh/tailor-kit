@@ -31,7 +31,7 @@ import type {
   RequestSpec,
 } from "./types";
 import type { GitActionMethods } from "./wave14-stubs";
-import { refNameProblem } from "../git/wizards/refname";
+import { refNameProblem } from "@tailor-kit/git-ui";
 
 type Tree = Map<string, RequestSpec>;
 

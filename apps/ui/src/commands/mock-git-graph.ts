@@ -15,8 +15,7 @@ import { DEMO_ID } from "./mock-collections";
 import { lineDiff, type MockGit } from "./mock-git";
 import type { GitChangedFile, GitDiff, GitFileChange, GitRef, RequestSpec } from "./types";
 import type { GitGraphMethods } from "./wave14-stubs";
-import { dateOrder, graphPage, reachable, sortChanges, sortRefs, type GraphSource } from "../git/graph/order";
-import { syntheticRepo } from "../git/graph/synthetic";
+import { dateOrder, graphPage, reachable, sortChanges, sortRefs, syntheticRepo, type GraphSource } from "@tailor-kit/git-ui";
 
 /** What `graphData()` has since strand G (tags, a detached `HEAD`); optional until then. */
 interface GraphDataExtra {

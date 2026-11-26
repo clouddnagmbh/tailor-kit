@@ -59,6 +59,9 @@ pub struct Repo {
     /// What merges files on their model (seam N1); RequestTailor's collections by default,
     /// `None`: Git's line merge for every file.
     pub(crate) merger: Option<std::sync::Arc<dyn tk_git_types::FileMerger>>,
+    /// What checks the files of a commit (seam N2); RequestTailor's secret scanner by
+    /// default, `None`: nothing is checked.
+    pub(crate) scanner: Option<std::sync::Arc<dyn tk_git_types::CommitScanner>>,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -106,6 +109,7 @@ impl Repo {
             signing: crate::sign::Signing::default(),
             namespace: rt_app::git::REF_NAMESPACE,
             merger: Some(std::sync::Arc::new(crate::CollectionMerger)),
+            scanner: Some(std::sync::Arc::new(crate::SecretScanner)),
         }))
     }
 
@@ -114,9 +118,14 @@ impl Repo {
         Self::open(root, options)?.ok_or_else(|| fail("the collection is not in a Git repository"))
     }
 
-    /// The same repository opened again (after its configuration changed on disk).
+    /// The same repository opened again (after its configuration changed on disk), with the
+    /// same plugged-in parts.
     pub(crate) fn reopen(&self) -> Result<Self> {
-        Ok(Self::require(&self.root, &self.options)?.with_signing(self.signing.clone()))
+        Ok(Self::require(&self.root, &self.options)?
+            .with_signing(self.signing.clone())
+            .with_namespace(self.namespace)
+            .with_merger(self.merger.clone())
+            .with_scanner(self.scanner.clone()))
     }
 
     /// Signs and verifies commits with `signing` (a distribution's hook, `sign`); without it
@@ -141,6 +150,25 @@ impl Repo {
     ) -> Self {
         self.merger = merger;
         self
+    }
+
+    /// Checks the files of every commit with `scanner` (seam N2) instead of RequestTailor's
+    /// secret scanner; `None` checks nothing.
+    pub fn with_scanner(
+        mut self,
+        scanner: Option<std::sync::Arc<dyn tk_git_types::CommitScanner>>,
+    ) -> Self {
+        self.scanner = scanner;
+        self
+    }
+
+    /// Refuses a commit of `files` (path, content as committed) when the scanner does
+    /// (`GitError::SecretsFound`).
+    pub(crate) fn scan_commit(&self, files: &[(&str, &[u8])]) -> Result<()> {
+        match self.scanner.as_ref().and_then(|s| s.refusal(files)) {
+            Some(message) => Err(crate::GitError::SecretsFound(message)),
+            None => Ok(()),
+        }
     }
 
     /// Where the app's own refs and files live.
@@ -304,6 +332,7 @@ impl Repo {
             signing: self.signing.clone(),
             namespace: self.namespace,
             merger: self.merger.clone(),
+            scanner: self.scanner.clone(),
         })
     }
 

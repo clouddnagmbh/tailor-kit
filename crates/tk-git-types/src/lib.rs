@@ -12,12 +12,16 @@
 //!
 //! Seam N1: a [`FileMerger`] merges files on their content model; without one, Git's line
 //! merge decides.
+//!
+//! Seam N2: a [`CommitScanner`] checks the files of a commit (secrets) before it is written.
 
 mod merge;
 mod namespace;
+mod scan;
 
 pub use merge::{FileMerger, GroupFiles, GroupMerge};
 pub use namespace::RefNamespace;
+pub use scan::CommitScanner;
 
 /// A failed or refused Git operation.
 #[derive(Debug, thiserror::Error)]

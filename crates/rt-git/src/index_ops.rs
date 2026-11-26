@@ -17,12 +17,11 @@ use gix::bstr::{BStr, BString, ByteSlice};
 use gix::index::entry::{Flags, Mode, Stage, Stat};
 use rt_app::git::index::{GitIndexDiff, GitPatchRequest, GitPatchSide, GitStagedCommit};
 use rt_app::git::{GitCommit, text_diff};
-use rt_app::secret_scan;
 
 use crate::commit::{describe, signature};
 use crate::patch::Selection;
 use crate::repo::Repo;
-use crate::util::{Context, GitError, Result, blob_bytes, fail};
+use crate::util::{Context, Result, blob_bytes, fail};
 use crate::worktree::{fs_path, stat_of};
 
 /// One side of a file: its blob and what it holds.
@@ -403,9 +402,8 @@ impl Repo {
         Ok(())
     }
 
-    /// The staged files that differ from `HEAD`, as text where they are text (for the secret
-    /// scan), by repository path.
-    fn staged_texts(&self, index: &gix::index::State) -> Result<Vec<(String, String)>> {
+    /// The staged files that differ from `HEAD` (for the commit scanner), by API path.
+    fn staged_files(&self, index: &gix::index::State) -> Result<Vec<(String, Vec<u8>)>> {
         let head = crate::util::flatten(&self.repo, self.head_tree()?)?;
         let mut out = Vec::new();
         for entry in index.entries() {
@@ -416,18 +414,15 @@ impl Repo {
             if head.get(path).is_some_and(|b| b.id == entry.id) {
                 continue;
             }
-            let bytes = blob_bytes(&self.repo, entry.id)?;
-            if let Some(text) = secret_scan::text_of(&bytes) {
-                out.push((self.api_path(path), text.to_owned()));
-            }
+            out.push((self.api_path(path), blob_bytes(&self.repo, entry.id)?));
         }
         Ok(out)
     }
 
     /// Commits exactly what the index holds on top of `HEAD` (while a merge, cherry-pick or
-    /// revert is underway: concluding it). The staged files go through the secret scanner
-    /// first (`AppError::SecretsFound`). The identity comes from the Git configuration, else
-    /// `fallback`.
+    /// revert is underway: concluding it). The staged files go through the commit scanner
+    /// first (seam N2, `GitError::SecretsFound`). The identity comes from the Git
+    /// configuration, else `fallback`.
     pub fn commit_staged(
         &self,
         commit: &GitStagedCommit,
@@ -452,15 +447,12 @@ impl Repo {
         if !underway && tree == self.head_tree()? {
             return Err(fail("nothing is staged"));
         }
-        let texts = self.staged_texts(&index)?;
-        let files: Vec<(&str, &str)> = texts
+        let staged = self.staged_files(&index)?;
+        let files: Vec<(&str, &[u8])> = staged
             .iter()
-            .map(|(p, t)| (p.as_str(), t.as_str()))
+            .map(|(p, b)| (p.as_str(), b.as_slice()))
             .collect();
-        let findings = secret_scan::scan(&files);
-        if !findings.is_empty() {
-            return Err(GitError::SecretsFound(secret_scan::refusal(&findings)));
-        }
+        self.scan_commit(&files)?;
         let identity = self.identity_or(fallback)?;
         let sig = signature(&identity);
         let parents: Vec<ObjectId> = head.into_iter().chain(merge_parent).collect();

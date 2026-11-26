@@ -58,7 +58,9 @@ impl Repo {
     /// Commits exactly `paths` (new, changed or deleted files of the collection) as they are
     /// in the working tree, on top of `HEAD`. While a merge is in progress the merge result
     /// (the index) is the base and the commit gets both parents; `paths` may then be empty.
-    /// The identity comes from the Git configuration, else `fallback`.
+    /// The new and changed files go through the commit scanner first (seam N2,
+    /// `GitError::SecretsFound`). The identity comes from the Git configuration, else
+    /// `fallback`.
     pub fn commit(
         &self,
         message: &str,
@@ -90,7 +92,6 @@ impl Repo {
         } else if paths.is_empty() {
             return Err(fail("select the files to commit"));
         }
-        let identity = self.identity_or(fallback)?;
         let head = self.head_commit()?;
         let head_tree = self.head_tree()?;
 
@@ -132,6 +133,15 @@ impl Repo {
                 }
             }
         }
+        let mut contents = Vec::new();
+        for (path, (_, object)) in paths.iter().zip(&updates) {
+            if let Some((id, _)) = object {
+                contents.push((path.as_str(), crate::util::blob_bytes(&self.repo, *id)?));
+            }
+        }
+        let files: Vec<(&str, &[u8])> = contents.iter().map(|(p, b)| (*p, b.as_slice())).collect();
+        self.scan_commit(&files)?;
+        let identity = self.identity_or(fallback)?;
         let tree = editor.write().ctx("cannot write the tree")?.detach();
         if !underway && tree == head_tree {
             return Err(fail("nothing to commit: the selected files are unchanged"));

@@ -1,0 +1,57 @@
+{
+  "name": "@tailor-kit/git-ui",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The Git views: commit graph, changes, files, history, wizards, conflicts, pull-request review, behind a GitHost interface (source package, no build step).",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./api": {
+      "types": "./src/api.ts",
+      "default": "./src/api.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./views": {
+      "types": "./src/views.svelte.ts",
+      "default": "./src/views.svelte.ts"
+    },
+    "./diff/textdiff": {
+      "types": "./src/diff/textdiff.ts",
+      "default": "./src/diff/textdiff.ts"
+    },
+    "./diff/worddiff": {
+      "types": "./src/diff/worddiff.ts",
+      "default": "./src/diff/worddiff.ts"
+    },
+    "./*.svelte": {
+      "types": "./src/*.svelte",
+      "svelte": "./src/*.svelte",
+      "default": "./src/*.svelte"
+    }
+  },
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tailor-kit/shell": "0.0.0",
+    "@tailor-kit/ui": "0.0.0",
+    "svelte": "^5.59.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "svelte-check": "^4.7.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

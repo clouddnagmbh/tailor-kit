@@ -14,7 +14,7 @@
 // Starts as a repository on `main` with one commit of all requests, in sync with origin.
 
 import { BackendError, type CollectionInfo, type GitApi } from "./backend";
-import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "./clone-source";
+import { LOCAL_CLONE_UNSUPPORTED, looksLocal } from "@tailor-kit/git-ui";
 import { mockRefusal, mockScan } from "./mock-secret-scan";
 import { mockGitActions, type MockJournalEntry, type MockStash } from "./mock-git-actions";
 import { mockGitFiles } from "./mock-git-files";

@@ -26,7 +26,7 @@ import type {
   RequestSpec,
 } from "./types";
 import type { GitHistoryMethods } from "./git-methods";
-import { dateOrder } from "../git/graph/order";
+import { dateOrder } from "@tailor-kit/git-ui";
 
 type Tree = Map<string, RequestSpec>;
 

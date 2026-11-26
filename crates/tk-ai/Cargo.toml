@@ -11,7 +11,6 @@ publish.workspace = true
 # text and tools, never a product's model.
 
 [dependencies]
-base64 = "0.22"
 # Bodies of the providers and the streamed answer of `tk_net::transport::Transport`.
 bytes = "1"
 futures-core = "0.3"
@@ -23,6 +22,9 @@ tk-secrets = { path = "../tk-secrets" }
 url = "2"
 # std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
 web-time = "1"
+
+[dev-dependencies]
+base64 = "0.22"
 
 [lints]
 workspace = true

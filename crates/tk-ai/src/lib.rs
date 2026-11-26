@@ -207,15 +207,8 @@ pub trait AiProvider {
     }
 }
 
-/// Replaces every occurrence of each non-empty secret value with `***` (longest first), the
-/// same rule as report masking. Applied to the whole serialized payload before it leaves.
-///
-/// Besides the raw value it replaces the forms a value takes in text that reaches a model:
-/// JSON- and Debug-escaped, percent-encoded (`%20` and `+` for spaces), and base64 (standard
-/// and URL-safe, with and without padding; values of 6 characters or more).
-pub fn redact(text: &str, secrets: &[String]) -> String {
-    mask::redact(text, secrets)
-}
+/// Masks every secret value in all the forms it takes in text; see [`tk_secrets::redact`].
+pub use tk_secrets::redact;
 
 /// `e` with every secret in its message replaced by `***`.
 pub fn mask_error(e: AiError, secrets: &[String]) -> AiError {

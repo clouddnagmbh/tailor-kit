@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use tk_secrets::MASK;
 
-/// See [`crate::ai::redact`].
+/// See [`crate::redact`].
 pub use tk_secrets::redact;
 
 /// Whether a header, parameter, field or variable name names a credential.

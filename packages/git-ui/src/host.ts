@@ -15,7 +15,7 @@ import { getContext, setContext, type Component } from "svelte";
 
 import type { GitHostBackend, GitOwnerInfo } from "./api";
 import type { ProvidedGitExtensions } from "./extensions";
-import type { CollectionDiff, MergeState, RepositoryEntry, ReviewRepo, TreeNode } from "./types";
+import type { ContentDiff, MergeState, RepositoryEntry, ReviewRepo, TreeNode } from "./types";
 import type { GitView, GitViews } from "./views.svelte";
 
 /** The parts of the product's name the views print or send. */
@@ -26,6 +26,12 @@ export interface GitBrand {
   commitMime: string;
   /** `refs/<namespace>/backup/…`: where the product keeps its safety copies. */
   refNamespace: string;
+  /** What the product calls the unit it works on, singular and lower case ("collection",
+   *  "repository"): "never in the {scopeNoun}", "Opens the clone as the {scopeNoun}". */
+  scopeNoun: string;
+  /** Shown in the Git panel in the browser, where the app cannot see the folders above the
+   *  repository; `null`: nothing to say. */
+  webRepositoryHint: string | null;
 }
 
 /** What a dialog component gets from `GitHost.showDialog`. */
@@ -76,11 +82,11 @@ export interface GitPullViewProps {
 /** The field-level diffs a product with owned content can compute. */
 export interface GitContentDiffs {
   /** The saved files against `HEAD`. */
-  working(): Promise<CollectionDiff>;
+  working(): Promise<ContentDiff>;
   /** A commit against its first parent. */
-  commit(rev: string): Promise<CollectionDiff>;
+  commit(rev: string): Promise<ContentDiff>;
   /** `from` → `to` (branch compare, PR review: merge base → head). */
-  between(from: string, to: string): Promise<CollectionDiff>;
+  between(from: string, to: string): Promise<ContentDiff>;
 }
 
 /** The field-level merge state of a product with owned content. */
@@ -89,11 +95,33 @@ export interface GitContentMerges {
   conflicts(): Promise<MergeState>;
 }
 
+/** The words of the views around files of an owner (tags, tooltips, buttons) and the test id of
+ *  the button that opens the owner; the product supplies them with `GitContent`. */
+export interface GitContentTexts {
+  /** The short tag next to a file of the active owner in the changes list ("API"). */
+  ownedTag: string;
+  /** Its tooltip. */
+  ownedTagTitle: string;
+  /** The button on a file of another owner in the changes list. */
+  openOwner: string;
+  /** Its test id. */
+  openOwnerTestId: string;
+  /** The tooltip of the owner's icon on a file in the commit details. */
+  ownedFileTitle: string;
+  /** The note on a file of another owner: `before`, the owner's name in bold, `after`. */
+  otherOwnerBefore: string;
+  otherOwnerAfter: string;
+}
+
 /** What only a product with owned content (RequestTailor collections) adds. All reads are
  *  reactive when the product's state is. */
 export interface GitContent {
   /** The active owner (`GitOwner.id`) or `null`. */
   readonly activeOwner: string | null;
+  /** The owner a changed file says it belongs to (`GitOwner.id`), if any. `file` is a
+   *  `GitWorkingFile` or `GitChangedFile` as the backend returned it. */
+  ownerOf(file: object): string | undefined;
+  readonly texts: GitContentTexts;
   /** All owners, in sidebar order. */
   readonly owners: readonly GitOwner[];
   /** Makes `owner` the active one (the field view works on the active owner). */
@@ -102,7 +130,7 @@ export interface GitContent {
   readonly tree: TreeNode | null;
   /** The file the user has open, for "blame this request" and "file history of this request". */
   readonly activeFile: string | null;
-  /** Semantic diffs (`CollectionDiff`) of the working copy, a commit and two revisions. */
+  /** Semantic diffs (`ContentDiff`) of the working copy, a commit and two revisions. */
   readonly diffs: GitContentDiffs;
   /** The merge in progress, per field. */
   readonly merges: GitContentMerges;
@@ -111,8 +139,8 @@ export interface GitContent {
   /** Shows the owner a clone created (the old `git.clone`). */
   adopt(info: GitOwnerInfo): Promise<void>;
   readonly components: {
-    /** A field-by-field diff of `CollectionDiff`. */
-    SemanticDiff: Component<{ diff: CollectionDiff }>;
+    /** A field-by-field diff of `ContentDiff`. */
+    SemanticDiff: Component<{ diff: ContentDiff }>;
     /** The per-field decisions of a merge. */
     MergeFields: Component<GitMergeFieldsProps>;
     /** One pull request, opened from the review list. */

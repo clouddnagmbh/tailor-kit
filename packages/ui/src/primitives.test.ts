@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { colourIndex, initials } from "./avatar";
-import { ICON_NAMES, iconFor, ICONS, isIconName } from "./icons";
+import { ICON_NAMES, iconFor, ICONS, isIconName, registerIconAliases } from "./icons";
 import { formatKeys } from "./keys";
 
 describe("icons", () => {
@@ -22,6 +22,14 @@ describe("icons", () => {
     expect(iconFor(undefined, "folder")).toBe(ICONS.folder);
     expect(iconFor("commit")).toBe(ICONS.commit);
     expect(isIconName("toString")).toBe(false);
+  });
+
+  it("resolves aliases a product registers, without shadowing real names", () => {
+    expect(isIconName("alias-of-folder")).toBe(false);
+    registerIconAliases({ "alias-of-folder": "folder", commit: "folder" });
+    expect(iconFor("alias-of-folder")).toBe(ICONS.folder);
+    expect(isIconName("alias-of-folder")).toBe(true);
+    expect(iconFor("commit")).toBe(ICONS.commit);
   });
 });
 

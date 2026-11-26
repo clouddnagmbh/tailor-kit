@@ -7,7 +7,7 @@
      ignore rule covers never appear. The default commit stays "without staging" (the Git
      panel); this view reads. `j`/`k` and the arrows move, Enter opens the file. -->
 <script lang="ts">
-  import type { CollectionDiff, GitWorkingCopy, GitWorkingFile } from "../types";
+  import type { ContentDiff, GitWorkingCopy, GitWorkingFile } from "../types";
   import type { GitActionTarget, GitHintTarget } from "../extensions";
   import { gitActionEntries } from "../extension-git";
   import { getGitExtensions } from "../host";
@@ -29,7 +29,7 @@
   let filter = $state<ChangeFilter>({ ...NO_FILTER });
   let selected = $state<string | null>(null);
   let mode = $state("fields");
-  let diff = $state<CollectionDiff | null>(null);
+  let diff = $state<ContentDiff | null>(null);
   let reload = $state(0);
   let load = 0;
   // Extensions: the hints know how many hunks the busiest opened file has, actions sit on
@@ -103,10 +103,10 @@
   }
   const pair = $derived(current ? sides(current) : null);
 
-  // The field-by-field diff of the active collection's saved changes, for collection files.
-  const collectionFile = $derived(current?.collection ? current : null);
-  const ownership = $derived(fileOwnership(host, collectionFile?.collection));
-  const semantic = $derived(collectionFile !== null && ownership.semantic);
+  // The field-by-field diff of the active owner's saved changes, for the owner's files.
+  const ownedFile = $derived(current && host.content?.ownerOf(current) ? current : null);
+  const ownership = $derived(fileOwnership(host, ownedFile ? host.content?.ownerOf(ownedFile) : undefined));
+  const semantic = $derived(ownedFile !== null && ownership.semantic);
   const SemanticDiff = $derived(host.content?.components.SemanticDiff);
   $effect(() => {
     void reload;
@@ -125,7 +125,7 @@
       live = false;
     };
   });
-  const fileDiff = $derived.by((): CollectionDiff | null => {
+  const fileDiff = $derived.by((): ContentDiff | null => {
     if (!diff || !current) return null;
     const mine = (file: string) => current.path === `/${file}` || current.path.endsWith(`/${file}`);
     return { ...diff, changes: diff.changes.filter((c) => mine(c.file)), files: diff.files.filter((f) => mine(f.path)) };
@@ -216,7 +216,7 @@
                 <span class="name">{fileName(f.path)}</span>
                 {#if f.from}<span class="from" data-testid="changes-from">← {f.from}</span>{/if}
                 {#if f.staged}<span class="staged" title="In the index">staged</span>{/if}
-                {#if f.collection}<span class="tag" title="A collection file: shown field by field">API</span>{/if}
+                {#if host.content?.ownerOf(f)}<span class="tag" title={host.content.texts.ownedTagTitle}>{host.content.texts.ownedTag}</span>{/if}
               </button>
             {/each}
           {/each}
@@ -240,7 +240,7 @@
                   bind:value={mode}
                 />
               {:else if ownership.activatable}
-                <Button size="sm" data-testid="changes-open-collection" onclick={() => void host.content?.activate(ownership.activatable!)}>Open its collection for the field view</Button>
+                <Button size="sm" data-testid={host.content?.texts.openOwnerTestId} onclick={() => void host.content?.activate(ownership.activatable!)}>{host.content?.texts.openOwner}</Button>
               {/if}
               <ExtensionGitActions target={{ kind: "file", repository, path: current.path }} label="File actions" />
               <Button size="sm" icon="file-text" data-testid="changes-open" onclick={() => views.open({ kind: "file", path: current.path })}>Open file</Button>

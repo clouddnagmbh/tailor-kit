@@ -68,7 +68,7 @@
   const extensions = getGitExtensions();
   const rangeActions = $derived(
     base && selected && base !== selected
-      ? extensionRangeActions(extensions, { collection: host.content?.activeOwner ?? null, from: base, to: selected, source: "graph" })
+      ? extensionRangeActions(extensions, { owner: host.content?.activeOwner ?? null, from: base, to: selected, source: "graph" })
       : [],
   );
   const hintTarget = $derived<GitHintTarget>({

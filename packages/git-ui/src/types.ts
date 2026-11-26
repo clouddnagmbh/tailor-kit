@@ -6,8 +6,13 @@
 // JSON of the Rust side (provenance: RequestTailor `apps/ui/src/commands/types.ts`, moved here in
 // step K3). A product keeps its contract test, which annotates real serialized values with these
 // types, so `npm run check` fails on any drift. Changing these types is an interface change.
-// `CollectionDiff`, `MergeState` and `TreeNode` are the field-level diff, merge and file-tree
+// `ContentDiff`, `MergeState` and `TreeNode` are the field-level diff, merge and file-tree
 // shapes the views read when the host provides owned content (`GitContent`).
+//
+// Where the JSON of a product carries a field the kit does not know (RequestTailor: the owner of
+// a file), the type takes an extension parameter that defaults to `{}`: `GitWorkingFile<E>`,
+// `GitChangedFile<E>`, `RepositoryEntry<E>`, `GitWorkingCopy<E>`. The product binds it in its own
+// `types.ts` and the kit views, which never read such a field, work with the default.
 
 export type TreeNode =
   | { kind: "folder"; name: string; path: string; children: TreeNode[] }
@@ -123,11 +128,10 @@ export interface GitFileCommit {
 /** A model field, e.g. `["headers", "Authorization"]` (see `rt_format::diff`). */
 export type FieldPath = string[];
 
-export type ChangeTarget =
-  | { kind: "collection" }
-  | { kind: "folder"; path: string }
-  | { kind: "request"; path: string }
-  | { kind: "environment"; name: string };
+/** What a field-level change is about; the product defines the kinds (the kit only passes it on). */
+export interface ChangeTarget {
+  kind: string;
+}
 
 export type ChangeKind =
   | { kind: "added" }
@@ -149,8 +153,8 @@ export interface FieldChange {
   line?: number;
 }
 
-export interface ModelChange {
-  target: ChangeTarget;
+export interface ModelChange<T extends ChangeTarget = ChangeTarget> {
+  target: T;
   change: ChangeKind;
   file: string;
   name: string;
@@ -166,8 +170,9 @@ export interface ChangedFile {
   covered: boolean;
 }
 
-export interface CollectionDiff {
-  changes: ModelChange[];
+/** The field-level diff of the files a product understands (RequestTailor: `CollectionDiff`). */
+export interface ContentDiff<T extends ChangeTarget = ChangeTarget> {
+  changes: ModelChange<T>[];
   files: ChangedFile[];
 }
 
@@ -177,8 +182,8 @@ export type DiffScope =
   | { kind: "commit"; rev: string }
   | { kind: "between"; from: string; to: string };
 
-export interface FieldConflict {
-  target: ChangeTarget;
+export interface FieldConflict<T extends ChangeTarget = ChangeTarget> {
+  target: T;
   file: string;
   field: FieldPath;
   base: DiffValue | null;
@@ -186,9 +191,9 @@ export interface FieldConflict {
   theirs: DiffValue | null;
 }
 
-export interface MergeState {
+export interface MergeState<T extends ChangeTarget = ChangeTarget> {
   merging: boolean;
-  conflicts: FieldConflict[];
+  conflicts: FieldConflict<T>[];
   text_conflicts: string[];
   /** Files Git left conflicted that merge cleanly on the model; `resolve` writes them too. */
   clean?: string[];
@@ -318,14 +323,12 @@ export interface GitGraphPage {
   more: boolean;
 }
 
-export interface GitChangedFile {
+export type GitChangedFile<E extends object = {}> = {
   path: string;
   change: GitFileChange;
   from?: string;
   binary: boolean;
-  /** `CollectionEntry.id` when the file belongs to a collection of the set. */
-  collection?: string;
-}
+} & E;
 
 export type GitResetMode = "keep-changes" | "discard";
 
@@ -461,19 +464,17 @@ export interface GitStash {
 }
 
 /** A repository of the set (strand A). */
-export interface RepositoryEntry {
-  /** Same string as `CollectionEntry.repo` of its collections. */
+export type RepositoryEntry<E extends object = {}> = {
+  /** The id the product's own entries name the repository by. */
   id: string;
   name: string;
   /** For display only. */
   location: string;
   /** The root it was found through. */
   root: string;
-  /** Collections of the set inside it, in sidebar order (empty for a repository root). */
-  collections: string[];
   /** A linked worktree or a submodule's checkout. */
   linked: boolean;
-}
+} & E;
 
 /** A merge, cherry-pick, revert or rebase that stopped half way. */
 export type GitOperation = "merge" | "cherry-pick" | "revert" | "rebase";
@@ -503,7 +504,7 @@ export interface GitCloneRequest {
 export type GitEntryKind = "file" | "dir" | "symlink" | "submodule";
 
 /** A changed file of the working copy (strand B). */
-export interface GitWorkingFile {
+export type GitWorkingFile<E extends object = {}> = {
   path: string;
   /** `HEAD` → working tree. */
   state: GitFileState;
@@ -515,10 +516,9 @@ export interface GitWorkingFile {
   staged?: GitFileChange;
   /** The working tree differs from the index. */
   unstaged: boolean;
-  collection?: string;
-}
+} & E;
 
-export interface GitWorkingCopy {
+export interface GitWorkingCopy<E extends object = {}> {
   repository: string;
   branch: string | null;
   upstream: string | null;
@@ -528,7 +528,7 @@ export interface GitWorkingCopy {
   detached: boolean;
   operation?: GitOperation;
   /** Sorted by path; ignored files left out; at most 10 000 (`truncated`). */
-  files: GitWorkingFile[];
+  files: GitWorkingFile<E>[];
   truncated: boolean;
 }
 

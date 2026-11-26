@@ -159,7 +159,7 @@ pub enum AiError {
     #[error("cancelled")]
     Cancelled,
     /// Wave 16: the assistant is off for this project (the product's opt-out).
-    #[error("the AI assistant is off for this collection")]
+    #[error("the AI assistant is off for this project")]
     OptedOut,
 }
 

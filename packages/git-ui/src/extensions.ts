@@ -31,8 +31,9 @@ export interface ExtensionAction {
 /** Two revisions selected together (since wave 16): two commits or tags in the commit graph, or
  *  the sides of the comparison and of the diff of two revisions. */
 export interface RevisionRangeTarget {
-  /** The active collection, if the repository has one. */
-  collection: string | null;
+  /** The active owner (`GitOwner.id`), if the repository has one. A product that wants more
+   *  fields on the target adds them with `ProvidedGitExtensions.rangeTarget`. */
+  owner: string | null;
   /** Older side: a commit, branch or tag. */
   from: string;
   /** Newer side. */
@@ -227,4 +228,7 @@ export interface GitExtension<Ctx = GitExtensionContext> {
 export interface ProvidedGitExtensions<Ctx = GitExtensionContext> {
   readonly extensions: readonly GitExtension<Ctx>[];
   readonly ctx: Ctx;
+  /** Adds the product's own fields to a range target before extensions see it (RequestTailor:
+   *  `collection`); absent: the target as the views built it. */
+  rangeTarget?(target: RevisionRangeTarget): RevisionRangeTarget;
 }

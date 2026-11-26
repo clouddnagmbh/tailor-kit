@@ -5,3 +5,8 @@
 // re-export keeps `from "../ui"` working across RequestTailor.
 
 export * from "@tailor-kit/ui";
+
+import { registerIconAliases } from "@tailor-kit/ui";
+
+// Extensions name the icon `collection`; the kit calls it `library`.
+registerIconAliases({ collection: "library" });

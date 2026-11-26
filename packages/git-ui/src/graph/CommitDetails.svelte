@@ -3,11 +3,11 @@
 <!-- Wave 14, strand F: the details of the selected commit (or of two marked commits): message,
      author, dates, id, parents (click to go there), its branches and tags (each a menu), the
      changed files with their status, and the diff of the chosen file: request changes
-     (`SemanticDiff`) for files of the active collection, lines (`FileDiff`) for everything else
-     and on request. Any repository: a file belongs to a collection only when the shell says so
-     (`GitChangedFile.collection`). -->
+     (`SemanticDiff`) for files of the active owner, lines (`FileDiff`) for everything else
+     and on request. Any repository: a file belongs to an owner only when the host says so
+     (`GitContent.ownerOf`). -->
 <script lang="ts">
-  import type { CollectionDiff, GitChangedFile, GitDiff, GitGraphCommit, GitRef } from "../types";
+  import type { ContentDiff, GitChangedFile, GitDiff, GitGraphCommit, GitRef } from "../types";
   import type { GitActionTarget } from "../extensions";
   import { gitActionEntries } from "../extension-git";
   import { getGitExtensions } from "../host";
@@ -56,18 +56,18 @@
   let mode = $state<"changes" | "lines">("changes");
   let lineDiff = $state<GitDiff | null>(null);
   let lineError = $state<string | null>(null);
-  let semantic = $state<CollectionDiff | null>(null);
+  let semantic = $state<ContentDiff | null>(null);
   let semanticError = $state<string | null>(null);
   let semanticKey = "";
   let token = 0;
 
   const file = $derived(files?.find((f) => f.path === chosen) ?? null);
   const active = $derived(host.content?.activeOwner ?? null);
-  const ownership = $derived(fileOwnership(host, file?.collection));
+  const ownership = $derived(fileOwnership(host, file ? host.content?.ownerOf(file) : undefined));
   /** Request changes are shown for files of the active collection (the semantic diff reads it);
    *  a host without content shows lines only. */
   const semanticHere = $derived(Boolean(file && !file.binary && ownership.semantic));
-  const otherCollection = $derived(ownership.other);
+  const otherOwner = $derived(ownership.other);
   const SemanticDiff = $derived(host.content?.components.SemanticDiff);
   const showSemantic = $derived(semanticHere && mode === "changes");
 
@@ -275,7 +275,7 @@
             <span class="path" title={f.from ? `${f.from} → ${f.path}` : f.path}>
               {#if f.from}<span class="dir">{f.from.replace(/^\//, "")} → </span>{/if}<span class="dir">{parts.dir}</span><span class="name">{parts.name}</span>
             </span>
-            {#if f.collection}<span class="tag" use:tooltip={"A file of a collection: the app shows what changed in its requests"}><Icon name="collection" size="sm" /></span>{/if}
+            {#if host.content?.ownerOf(f)}<span class="tag" use:tooltip={host.content.texts.ownedFileTitle}><Icon name="library" size="sm" /></span>{/if}
             {#if f.binary}<Badge value="binary" />{/if}
           </button>
         </li>
@@ -304,11 +304,11 @@
           />
         {/if}
       </div>
-      {#if otherCollection}
+      {#if otherOwner}
         <div class="note">
           <Icon name="info" size="sm" />
-          <span>This file belongs to <strong>{otherCollection.name}</strong>. Make it the active collection to see what changed in its requests.</span>
-          <Button size="sm" variant="ghost" onclick={() => void host.content?.activate(otherCollection.id)}>Make active</Button>
+          <span>{host.content?.texts.otherOwnerBefore}<strong>{otherOwner.name}</strong>{host.content?.texts.otherOwnerAfter}</span>
+          <Button size="sm" variant="ghost" onclick={() => void host.content?.activate(otherOwner.id)}>Make active</Button>
         </div>
       {/if}
       <div class="diff" data-testid="graph-diff">

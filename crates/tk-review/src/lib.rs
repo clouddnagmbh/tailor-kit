@@ -33,14 +33,14 @@ pub use gitlab::GitlabProvider;
 
 /// [`SecretSlot::space`] of review tokens (app-wide). The strings are what existing keychains
 /// hold: they must never change.
-pub const TOKEN_COLLECTION: &str = "review:tokens";
+pub const TOKEN_SPACE: &str = "review:tokens";
 /// [`SecretSlot::name`] of review tokens.
 pub const TOKEN_VARIABLE: &str = "token";
 
 /// Where the token for `host` (e.g. `github.com`, `gitlab.example.com:8443`) is kept.
 pub fn token_slot(host: &str) -> SecretSlot {
     SecretSlot {
-        space: TOKEN_COLLECTION.to_owned(),
+        space: TOKEN_SPACE.to_owned(),
         group: host.to_owned(),
         name: TOKEN_VARIABLE.to_owned(),
     }

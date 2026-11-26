@@ -21,7 +21,7 @@
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionActions from "../../shell/ExtensionActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Button, EmptyState, IconButton, Menu, SegmentedControl, Skeleton, TextField, type MenuEntry } from "../../ui";
   import { getGitViews } from "../views.svelte";
   import { toMenu, type ActionHost } from "./actions";
@@ -32,9 +32,9 @@
 
   let { select }: { select?: string } = $props();
 
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
-  const data = new GraphData(() => app.backend.git);
+  const data = new GraphData(() => host.backend.git);
 
   /** Row height and lane width, px. */
   const ROW = 28;
@@ -68,12 +68,12 @@
   const extensions = getExtensions();
   const rangeActions = $derived(
     base && selected && base !== selected
-      ? extensionRangeActions(extensions, { collection: app.activeCollection, from: base, to: selected, source: "graph" })
+      ? extensionRangeActions(extensions, { collection: host.content?.activeOwner ?? null, from: base, to: selected, source: "graph" })
       : [],
   );
   const hintTarget = $derived<GitHintTarget>({
     place: "git",
-    repository: app.activeRepository ?? "",
+    repository: host.activeRepository ?? "",
     view: "graph",
     selected: !selected ? 0 : base && base !== selected ? 2 : 1,
     dragging,
@@ -114,8 +114,8 @@
   const hitPos = $derived(hits.indexOf(selectedIndex));
   const hexQuery = $derived(/^[0-9a-f]{4,40}$/i.test(query.trim()));
 
-  const host: ActionHost = {
-    app,
+  const actions: ActionHost = {
+    gitHost: host,
     views,
     reload: () => void reload(),
     select: (rev) => void goTo(rev),
@@ -139,7 +139,7 @@
     const target = selectTarget(rev, data.refs) ?? rev;
     const i = await data.find(target);
     if (i < 0) {
-      host.notify?.(`${rev} is not in this history`);
+      actions.notify?.(`${rev} is not in this history`);
       return false;
     }
     selected = data.commits[i]!.oid;
@@ -171,7 +171,7 @@
   // The active collection's repository: load again when it changes.
   let loadedFor: string | null | undefined;
   $effect(() => {
-    const id = app.activeCollection;
+    const id = host.cacheScope;
     if (id === loadedFor) return;
     loadedFor = id;
     base = null;
@@ -231,15 +231,15 @@
   }
 
   function openMenu(commit: GitGraphCommit, anchor: HTMLElement | { x: number; y: number }) {
-    const repository = app.activeRepository ?? "";
-    const fail = (message: string) => (app.error = message);
+    const repository = host.activeRepository ?? "";
+    const fail = (message: string) => host.notifyError(message);
     // The extensions' actions on this commit (or on the two marked commits) close the menu,
     // those on a branch or tag sit in that label's submenu.
     const target: GitActionTarget =
       base && base !== commit.oid && selected === commit.oid
         ? { kind: "commits", repository, commits: [commit.oid, base] }
         : { kind: "commit", repository, commit: commit.oid };
-    const own = withRefActions(extensions, repository, toMenu(commitMenu(commit, refLabels(commit.refs, data.byFull), ctx), host), fail);
+    const own = withRefActions(extensions, repository, toMenu(commitMenu(commit, refLabels(commit.refs, data.byFull), ctx), actions), fail);
     menu = { items: [...own, ...gitActionEntries(extensions, target, fail)], anchor, label: `Commit ${commit.oid.slice(0, 7)} actions` };
     menuOpen = true;
   }
@@ -387,7 +387,7 @@
     </div>
     <IconButton icon="chevron-up" size="sm" label="Previous match" shortcut="Shift+Enter" disabled={hits.length === 0} onclick={() => jumpHit(-1)} />
     <IconButton icon="chevron-down" size="sm" label="Next match" shortcut="Enter" disabled={hits.length === 0} onclick={() => jumpHit(1)} />
-    <Button size="sm" variant="ghost" icon="search" data-testid="graph-search-all" onclick={() => host.views.open({ kind: "search", query: query.trim() ? { message: query.trim() } : undefined })}>Search all history</Button>
+    <Button size="sm" variant="ghost" icon="search" data-testid="graph-search-all" onclick={() => views.open({ kind: "search", query: query.trim() ? { message: query.trim() } : undefined })}>Search all history</Button>
     <span class="spacer"></span>
     {#if notice}<span class="notice" role="status" data-testid="graph-notice">{notice}</span>{/if}
     <ExtensionActions actions={rangeActions} label="Range actions" />
@@ -471,7 +471,7 @@
       </div>
       <aside class="details-pane">
         {#if detailsCommit}
-          <CommitDetails commit={detailsCommit} base={baseCommit} byFull={data.byFull} {ctx} {host} {now} onclearbase={() => (base = null)} />
+          <CommitDetails commit={detailsCommit} base={baseCommit} byFull={data.byFull} {ctx} {actions} {now} onclearbase={() => (base = null)} />
         {:else}
           <EmptyState size="sm" icon="commit" title="Pick a commit" text="Its message, author and changed files show here." />
         {/if}

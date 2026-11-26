@@ -9,7 +9,7 @@
   import type { GitDiff, GitFileCommit } from "../../commands/types";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Avatar, Badge, Button, EmptyState, Skeleton } from "../../ui";
   import FileDiff from "../graph/FileDiff.svelte";
   import { relativeTime, shortId } from "../graph/model";
@@ -18,7 +18,7 @@
 
   let { path }: { path: string } = $props();
 
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
   /** Entries asked for at a time. */
   const PAGE = 100;
@@ -42,7 +42,7 @@
     const mine = ++token;
     error = null;
     try {
-      const list = await app.backend.git.fileLog(file, count + 1);
+      const list = await host.backend.git.fileLog(file, count + 1);
       if (mine !== token) return;
       more = list.length > count;
       entries = list.slice(0, count);
@@ -56,7 +56,7 @@
 
   let key = "";
   $effect(() => {
-    const k = `${app.activeCollection}\0${path}`;
+    const k = `${host.cacheScope}\0${path}`;
     if (k === key) return;
     key = k;
     limit = PAGE;
@@ -71,7 +71,7 @@
     diffError = null;
     if (!e) return;
     const mine = e.commit.oid;
-    app.backend.git
+    host.backend.git
       .fileDiff(null, e.commit.oid, e.path)
       .then((d) => {
         if (chosen === mine) diff = d;
@@ -92,7 +92,7 @@
   }
 
   async function restore(e: GitFileCommit) {
-    await openGitWizard(app, { kind: "restore-files", preset: { rev: e.commit.oid, paths: [e.path.startsWith("/") ? e.path : `/${e.path}`] } });
+    await openGitWizard(host, { kind: "restore-files", preset: { rev: e.commit.oid, paths: [e.path.startsWith("/") ? e.path : `/${e.path}`] } });
     await load(path, limit);
   }
 
@@ -103,12 +103,12 @@
 </script>
 
 <div class="history" data-testid="file-history" data-path={path}>
-  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
+  <ExtensionGitHint target={{ place: "git", repository: host.activeRepository ?? "", view: "history" }} />
   <div class="toolbar">
     <span class="file" title={path}>{name}</span>
     {#if entries}<span class="count" data-testid="file-history-count">{entries.length}{more ? "+" : ""} commit{entries.length === 1 && !more ? "" : "s"}</span>{/if}
     <span class="spacer"></span>
-    <ExtensionGitActions target={{ kind: "file", repository: app.activeRepository ?? "", path }} label="File actions" />
+    <ExtensionGitActions target={{ kind: "file", repository: host.activeRepository ?? "", path }} label="File actions" />
     <Button size="sm" variant="ghost" icon="file-text" data-testid="file-history-blame" onclick={() => views.open({ kind: "blame", path })}>Blame</Button>
   </div>
 
@@ -157,7 +157,7 @@
       <section class="detail" aria-label="What the commit changed in the file">
         {#if entry}
           <div class="actions">
-            <ExtensionGitActions target={{ kind: "commit", repository: app.activeRepository ?? "", commit: entry.commit.oid }} label="Commit actions" />
+            <ExtensionGitActions target={{ kind: "commit", repository: host.activeRepository ?? "", commit: entry.commit.oid }} label="Commit actions" />
             <Button size="sm" variant="secondary" icon="file-text" data-testid="file-history-blame-at" onclick={() => views.open({ kind: "blame", path: entry.path.startsWith("/") ? entry.path : `/${entry.path}`, rev: entry.commit.oid })}>Blame here</Button>
             <Button size="sm" variant="secondary" icon="graph" data-testid="file-history-show" onclick={() => views.open({ kind: "graph", select: entry.commit.oid })}>Show in the history</Button>
             {#if entry.change !== "deleted"}

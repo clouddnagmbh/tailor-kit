@@ -5,6 +5,8 @@
 // graph (strand F), the wizards and the Git panel (strand G) and the comparison (strand H). One
 // list, so every view explains a word the same way. Strand G owns the texts; adding terms is fine.
 
+import type { GitBrand } from "./host";
+
 export type GitTerm =
   | "repository"
   | "commit"
@@ -72,7 +74,7 @@ export const GLOSSARY: Record<GitTerm, GitGloss> = {
   revert: { label: "Undo a commit", git: "revert", text: "Makes a new commit that takes back what an earlier commit did. History stays as it is." },
   "cherry-pick": { label: "Copy a commit here", git: "cherry-pick", text: "Applies the changes of one commit from another branch to the current one, as a new commit." },
   reset: { label: "Move branch back", git: "reset", text: "Moves the current branch to an earlier commit. The app keeps a backup, so you can undo it." },
-  backup: { label: "Backup", git: "refs/requesttailor/backup", text: "Before anything that changes history or your files, the app saves where everything was, so Undo can put it back." },
+  backup: { label: "Backup", git: "refs/{namespace}/backup", text: "Before anything that changes history or your files, the app saves where everything was, so Undo can put it back." },
   clone: { label: "Clone", git: "clone", text: "Copies a repository from a server (or a folder) to this computer, with its whole history." },
   amend: { label: "Change last commit", git: "commit --amend", text: "Replaces your most recent commit with a new one: a better message, or files you forgot. Only for commits that are not on the server yet." },
   abort: { label: "Stop and go back", git: "merge --abort", text: "Stops a merge or copy that needs your decision and puts your files back as they were before it started." },
@@ -80,3 +82,8 @@ export const GLOSSARY: Record<GitTerm, GitGloss> = {
   rewrite: { label: "Rewrite history", git: "rebase", text: "Replaces some of a branch's commits with new ones, for example to drop or combine them. Only for commits that are not on the server yet." },
   published: { label: "On the server", git: "pushed", text: "Commits that others may have already. Changing them would make their copies disagree with yours, so the app does not." },
 };
+
+/** What the word is called in Git; `{namespace}` is the product's `GitBrand.refNamespace`. */
+export function gitWord(term: GitTerm, brand: GitBrand): string {
+  return GLOSSARY[term].git.replace("{namespace}", brand.refNamespace);
+}

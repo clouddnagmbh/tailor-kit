@@ -8,13 +8,12 @@
      panel); this view reads. `j`/`k` and the arrows move, Enter opens the file. -->
 <script lang="ts">
   import type { CollectionDiff, GitWorkingCopy, GitWorkingFile } from "../../commands/types";
-  import SemanticDiff from "../../diff/SemanticDiff.svelte";
   import type { GitActionTarget, GitHintTarget } from "../../extensions";
   import { gitActionEntries } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { fileOwnership, getGitHost } from "../host";
   import { Badge, Banner, Button, Chip, EmptyState, Icon, IconButton, Menu, SegmentedControl, Spinner, TextField, type MenuEntry } from "../../ui";
   import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { getGitViews } from "../views.svelte";
@@ -22,7 +21,7 @@
   import type { Side } from "../viewers/model";
   import { countStates, fileName, filterFiles, groupByFolder, NO_FILTER, statusLetter, summaryText, visibleFiles, type ChangeFilter, type StateFilter } from "./model";
 
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
 
   let copy = $state<GitWorkingCopy | null>(null);
@@ -43,7 +42,7 @@
   async function refresh() {
     const token = ++load;
     try {
-      const next = await app.backend.git.workingCopy();
+      const next = await host.backend.git.workingCopy();
       if (token !== load) return;
       copy = next;
       error = null;
@@ -57,14 +56,14 @@
 
   // Saved edits, a reload and the active repository change the working copy.
   $effect(() => {
-    void app.loadCount;
-    void app.dirty.length;
-    void app.activeRepository;
+    void host.reloadCount;
+    void host.unsaved().length;
+    void host.activeRepository;
     void refresh();
   });
 
   const files = $derived(copy ? visibleFiles(copy.files) : []);
-  const repository = $derived(app.activeRepository ?? copy?.repository ?? "");
+  const repository = $derived(host.activeRepository ?? copy?.repository ?? "");
   const hintTarget = $derived<GitHintTarget>({
     place: "git",
     repository,
@@ -74,7 +73,7 @@
   const changesTarget = $derived<GitActionTarget>({ kind: "changes", repository, paths: files.map((f) => f.path) });
 
   function fileMenu(file: GitWorkingFile, e: MouseEvent) {
-    const items = gitActionEntries(extensions, { kind: "file", repository, path: file.path }, (m) => (app.error = m)).slice(1);
+    const items = gitActionEntries(extensions, { kind: "file", repository, path: file.path }, (m) => host.notifyError(m)).slice(1);
     if (items.length === 0) return;
     e.preventDefault();
     selected = file.path;
@@ -106,13 +105,15 @@
 
   // The field-by-field diff of the active collection's saved changes, for collection files.
   const collectionFile = $derived(current?.collection ? current : null);
-  const semantic = $derived(collectionFile !== null && collectionFile.collection === app.activeCollection);
+  const ownership = $derived(fileOwnership(host, collectionFile?.collection));
+  const semantic = $derived(collectionFile !== null && ownership.semantic);
+  const SemanticDiff = $derived(host.content?.components.SemanticDiff);
   $effect(() => {
     void reload;
     diff = null;
     if (!semantic) return;
     let live = true;
-    app.backend.diffs.working().then(
+    host.content!.diffs.working().then(
       (d) => {
         if (live) diff = d;
       },
@@ -238,14 +239,14 @@
                   ]}
                   bind:value={mode}
                 />
-              {:else if collectionFile?.collection}
-                <Button size="sm" data-testid="changes-open-collection" onclick={() => void app.activate(collectionFile.collection!)}>Open its collection for the field view</Button>
+              {:else if ownership.activatable}
+                <Button size="sm" data-testid="changes-open-collection" onclick={() => void host.content?.activate(ownership.activatable!)}>Open its collection for the field view</Button>
               {/if}
               <ExtensionGitActions target={{ kind: "file", repository, path: current.path }} label="File actions" />
               <Button size="sm" icon="file-text" data-testid="changes-open" onclick={() => views.open({ kind: "file", path: current.path })}>Open file</Button>
             </div>
             <div class="viewer">
-              {#if fieldMode && fileDiff}
+              {#if fieldMode && fileDiff && SemanticDiff}
                 <SemanticDiff diff={fileDiff} />
               {:else if pair.before && pair.after}
                 <FileEditorSwitch path={current.path} from="HEAD" to={null}>

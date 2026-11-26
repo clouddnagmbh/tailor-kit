@@ -7,11 +7,10 @@
      decided one by one (`merge/MergeFields`); the whole versions stay below. -->
 <script lang="ts">
   import type { GitConflict, GitResolution, MergeState } from "../commands/types";
-  import MergeFields from "../merge/MergeFields.svelte";
   import { extensionFileEditors } from "../shell/extension-git";
   import { getExtensions } from "../shell/extension-tabs";
   import ExtensionGitActions from "../shell/ExtensionGitActions.svelte";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "./host";
   import { chooseEditor } from "./extension/editor-choice";
   import { getGitViews } from "./views.svelte";
 
@@ -26,11 +25,12 @@
     onresolve: (resolution: GitResolution) => void;
     onclose: () => void;
   } = $props();
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
   // Merge editors of extensions: next to the app's own, never instead (the semantic merge of a
   // collection file stays the way in); an editor opens in the line-by-line view of the file.
   const extensions = getExtensions();
+  const MergeFields = $derived(host.content?.components.MergeFields);
   const editors = $derived(extensionFileEditors(extensions, "merge", path));
 
   let conflict = $state<GitConflict | null>(null);
@@ -47,13 +47,13 @@
     error = null;
     merge = null;
     // Field conflicts are an addition: without them (or on an error) the file view stays.
-    app.backend.merges.conflicts().then(
+    host.content?.merges.conflicts().then(
       (m) => {
         if (p === path) merge = m;
       },
       () => {},
     );
-    app.backend.git.conflict(p).then(
+    host.backend.git.conflict(p).then(
       (c) => {
         if (p === path) conflict = c;
       },
@@ -80,7 +80,7 @@
 >
   <header>
     <h2 id="rt-git-conflict-title">Conflict in <code>{path}</code></h2>
-    <ExtensionGitActions target={{ kind: "conflict", repository: app.activeRepository ?? "", path }} label="Conflict actions" />
+    <ExtensionGitActions target={{ kind: "conflict", repository: host.activeRepository ?? "", path }} label="Conflict actions" />
     <button onclick={onclose}>Close</button>
   </header>
   {#if error}
@@ -88,7 +88,7 @@
   {:else if !conflict}
     <p class="hint">Loading…</p>
   {:else}
-    {#if perField && merge}
+    {#if perField && merge && MergeFields}
       <p class="hint">Both sides changed these fields. Pick a side for each; the rest of the file is merged.</p>
       <div class="fields">
         <MergeFields {merge} only={path} {blocked} onresolved={() => onclose()} />

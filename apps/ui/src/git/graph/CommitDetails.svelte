@@ -9,11 +9,10 @@
 <script lang="ts">
   import type { CollectionDiff, GitChangedFile, GitDiff, GitGraphCommit, GitRef } from "../../commands/types";
   import type { GitActionTarget } from "../../extensions";
-  import SemanticDiff from "../../diff/SemanticDiff.svelte";
   import { gitActionEntries } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { fileOwnership, getGitHost } from "../host";
   import { Avatar, Badge, Button, Chip, Dropdown, EmptyState, Icon, IconButton, SegmentedControl, Skeleton, tooltip } from "../../ui";
   import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { runAction, toMenu, type ActionHost } from "./actions";
@@ -26,7 +25,7 @@
     base = null,
     byFull,
     ctx,
-    host,
+    actions,
     now,
     onclearbase,
   }: {
@@ -35,15 +34,15 @@
     base?: GitGraphCommit | null;
     byFull: ReadonlyMap<string, GitRef>;
     ctx: GraphContext;
-    host: ActionHost;
+    actions: ActionHost;
     now: number;
     onclearbase: () => void;
   } = $props();
 
-  const app = getApp();
+  const host = getGitHost();
   const extensions = getExtensions();
-  const repository = $derived(app.activeRepository ?? "");
-  const fail = (message: string) => (app.error = message);
+  const repository = $derived(host.activeRepository ?? "");
+  const fail = (message: string) => host.notifyError(message);
   /** The side the shown file is compared against: the marked commit, else the first parent. */
   const diffFrom = $derived(base?.oid ?? commit.parents[0] ?? null);
 
@@ -63,10 +62,13 @@
   let token = 0;
 
   const file = $derived(files?.find((f) => f.path === chosen) ?? null);
-  const active = $derived(app.activeCollection);
-  /** Request changes are shown for files of the active collection (the semantic diff reads it). */
-  const semanticHere = $derived(Boolean(file && !file.binary && file.collection && file.collection === active));
-  const otherCollection = $derived(file?.collection && file.collection !== active ? app.collections.find((c) => c.id === file.collection) : undefined);
+  const active = $derived(host.content?.activeOwner ?? null);
+  const ownership = $derived(fileOwnership(host, file?.collection));
+  /** Request changes are shown for files of the active collection (the semantic diff reads it);
+   *  a host without content shows lines only. */
+  const semanticHere = $derived(Boolean(file && !file.binary && ownership.semantic));
+  const otherCollection = $derived(ownership.other);
+  const SemanticDiff = $derived(host.content?.components.SemanticDiff);
   const showSemantic = $derived(semanticHere && mode === "changes");
 
   $effect(() => {
@@ -78,7 +80,7 @@
     chosen = null;
     semantic = null;
     semanticKey = "";
-    app.backend.git
+    host.backend.git
       .changes(f, to)
       .then((list) => {
         if (mine !== token) return;
@@ -98,7 +100,7 @@
     const mine = token;
     lineDiff = null;
     lineError = null;
-    app.backend.git
+    host.backend.git
       .fileDiff(f, to, path)
       .then((d) => {
         if (mine === token && chosen === path) lineDiff = d;
@@ -117,7 +119,7 @@
     semanticError = null;
     const to = commit.oid;
     const f = from;
-    (f ? app.backend.diffs.between(f, to) : app.backend.diffs.commit(to))
+    (f ? host.content!.diffs.between(f, to) : host.content!.diffs.commit(to))
       .then((d) => {
         if (semanticKey === key) semantic = d;
       })
@@ -150,11 +152,11 @@
     base ? { kind: "commits", repository, commits: [commit.oid, base.oid] } : { kind: "commit", repository, commit: commit.oid },
   );
   const commitItems = $derived([
-    ...toMenu(commitMenu(commit, refLabels(commit.refs, byFull), ctx), host),
+    ...toMenu(commitMenu(commit, refLabels(commit.refs, byFull), ctx), actions),
     ...gitActionEntries(extensions, commitTarget, fail),
   ]);
   const refItems = (ref: GitRef) => [
-    ...toMenu(refMenu(ref, ctx), host),
+    ...toMenu(refMenu(ref, ctx), actions),
     ...gitActionEntries(extensions, { kind: "ref", repository, ref: ref.full }, fail),
   ];
 </script>
@@ -168,7 +170,7 @@
           {:else if fileSemantic.changes.length === 0 && fileSemantic.files.length === 0}
             <EmptyState size="sm" icon="check" title="No request changes" text="Only formatting or comments changed. Switch to Lines to see them." />
           {:else}
-            <div data-testid="graph-semantic-diff"><SemanticDiff diff={fileSemantic} /></div>
+            <div data-testid="graph-semantic-diff">{#if SemanticDiff}<SemanticDiff diff={fileSemantic} />{/if}</div>
           {/if}
         {:else}
           <FileDiff diff={lineDiff} error={lineError} />
@@ -181,7 +183,7 @@
       <Icon name="compare" size="sm" />
       <span>Changes from <code>{shortId(base.oid)}</code> to <code>{shortId(commit.oid)}</code></span>
       <span class="spacer"></span>
-      <Button size="sm" variant="secondary" data-testid="graph-open-compare" onclick={() => host.views.open({ kind: "compare", from: base.oid, to: commit.oid })}>Run both</Button>
+      <Button size="sm" variant="secondary" data-testid="graph-open-compare" onclick={() => actions.views.open({ kind: "compare", from: base.oid, to: commit.oid })}>Run both</Button>
       <IconButton icon="close" size="sm" label="Stop comparing" onclick={onclearbase} />
     </div>
   {/if}
@@ -211,7 +213,7 @@
     <dt>Commit</dt>
     <dd class="id">
       <code data-testid="graph-details-oid">{commit.oid}</code>
-      <IconButton icon="copy" size="sm" label="Copy commit id" onclick={() => runAction(host, { kind: "copy", text: commit.oid })} />
+      <IconButton icon="copy" size="sm" label="Copy commit id" onclick={() => runAction(actions, { kind: "copy", text: commit.oid })} />
     </dd>
     {#if commit.parents.length > 0}
       <dt>{commit.parents.length > 1 ? "Parents" : "Parent"}</dt>
@@ -224,7 +226,7 @@
             icon="commit"
             data-testid="graph-parent"
             title={i === 0 ? "Go to the commit before this one" : "Go to the merged commit"}
-            onclick={() => host.select(p)}
+            onclick={() => actions.select(p)}
           />
         {/each}
         {#if commit.parents.length > 1}<Badge value="Merge" tone="info" />{/if}
@@ -285,9 +287,9 @@
         <span class="diff-title">{split(file.path).name}</span>
         <span class="spacer"></span>
         {#if !file.binary && file.change !== "deleted"}
-          <Button size="sm" variant="ghost" icon="file-text" data-testid="graph-file-blame" onclick={() => host.views.open({ kind: "blame", path: file.path, rev: commit.oid })}>Blame</Button>
+          <Button size="sm" variant="ghost" icon="file-text" data-testid="graph-file-blame" onclick={() => actions.views.open({ kind: "blame", path: file.path, rev: commit.oid })}>Blame</Button>
         {/if}
-        <Button size="sm" variant="ghost" icon="history" data-testid="graph-file-history" onclick={() => host.views.open({ kind: "file-history", path: file.path })}>File history</Button>
+        <Button size="sm" variant="ghost" icon="history" data-testid="graph-file-history" onclick={() => actions.views.open({ kind: "file-history", path: file.path })}>File history</Button>
         <ExtensionGitActions target={{ kind: "file", repository, path: file.path, rev: commit.oid }} label="File actions" />
         {#if semanticHere}
           <SegmentedControl
@@ -306,7 +308,7 @@
         <div class="note">
           <Icon name="info" size="sm" />
           <span>This file belongs to <strong>{otherCollection.name}</strong>. Make it the active collection to see what changed in its requests.</span>
-          <Button size="sm" variant="ghost" onclick={() => app.activate(otherCollection.id)}>Make active</Button>
+          <Button size="sm" variant="ghost" onclick={() => void host.content?.activate(otherCollection.id)}>Make active</Button>
         </div>
       {/if}
       <div class="diff" data-testid="graph-diff">

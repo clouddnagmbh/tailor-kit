@@ -8,7 +8,7 @@
   import type { GitBlame } from "../../commands/types";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Avatar, Button, EmptyState, IconButton, Skeleton, tooltip } from "../../ui";
   import { absoluteTime, relativeTime, shortId } from "../graph/model";
   import { getGitViews } from "../views.svelte";
@@ -16,7 +16,7 @@
 
   let { path, rev }: { path: string; rev?: string } = $props();
 
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
 
   /** The revisions blamed so far, so "back" returns to the one before. */
@@ -38,7 +38,7 @@
     loading = true;
     error = null;
     try {
-      const git = app.backend.git;
+      const git = host.backend.git;
       const b = await git.blame(target ?? "HEAD", file);
       const text = b.binary ? "" : ((await git.show(b.rev, b.path)) ?? "");
       if (mine !== token) return;
@@ -56,7 +56,7 @@
   // The view opens at `rev`; a new `path` or `rev` (a link from another view) starts over.
   let key = "";
   $effect(() => {
-    const k = `${app.activeCollection}\0${path}\0${rev ?? ""}`;
+    const k = `${host.cacheScope}\0${path}\0${rev ?? ""}`;
     if (k === key) return;
     key = k;
     trail = [];
@@ -67,7 +67,7 @@
   async function before(oid: string) {
     // The commit before this change: its first parent.
     try {
-      const info = await app.backend.git.commitInfo(oid);
+      const info = await host.backend.git.commitInfo(oid);
       const parent = info.parents[0];
       if (!parent) {
         error = "This is the first commit of the file: there is nothing before it.";
@@ -91,14 +91,14 @@
 </script>
 
 <div class="blame" data-testid="blame-view" data-path={path}>
-  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
+  <ExtensionGitHint target={{ place: "git", repository: host.activeRepository ?? "", view: "history" }} />
   <div class="toolbar">
     <IconButton icon="chevron-left" size="sm" label="Back to the later version" disabled={trail.length === 0} onclick={() => void back()} data-testid="blame-back" />
     <span class="file" title={path}>{name}</span>
     <span class="at" data-testid="blame-at">at {at === "HEAD" ? "the latest commit" : shortId(at)}</span>
     {#if blame && !blame.binary}<span class="count">{blame.lines.toLocaleString("en-US")} lines from {commitCount(blame)} commit{commitCount(blame) === 1 ? "" : "s"}</span>{/if}
     <span class="spacer"></span>
-    <ExtensionGitActions target={{ kind: "file", repository: app.activeRepository ?? "", path: blame?.path ?? path, rev: at === "HEAD" ? undefined : at }} label="File actions" />
+    <ExtensionGitActions target={{ kind: "file", repository: host.activeRepository ?? "", path: blame?.path ?? path, rev: at === "HEAD" ? undefined : at }} label="File actions" />
     <Button size="sm" variant="ghost" icon="history" data-testid="blame-file-history" onclick={() => views.open({ kind: "file-history", path: blame?.path ?? path })}>File history</Button>
   </div>
 

@@ -10,7 +10,7 @@
   import type { ExtensionDiffEditorProps } from "../../extensions";
   import { extensionFileEditors } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { chooseEditor, chosenEditor, pickEditor } from "./editor-choice";
   import EditorPicker from "./EditorPicker.svelte";
 
@@ -29,7 +29,7 @@
   } = $props();
 
   const provided = getExtensions();
-  const app = getApp();
+  const host = getGitHost();
   const editors = $derived(extensionFileEditors(provided, "diff", path));
   let choice = $state(chosenEditor("diff"));
   const active = $derived(pickEditor(editors, choice));
@@ -42,7 +42,7 @@
   </div>
 {/if}
 {#if Editor && provided}
-  <Editor ctx={provided.ctx} repository={app.activeRepository ?? ""} {path} {from} {to} close={() => (choice = "")} />
+  <Editor ctx={provided.ctx} repository={host.activeRepository ?? ""} {path} {from} {to} close={() => (choice = "")} />
 {:else}
   {@render children()}
 {/if}

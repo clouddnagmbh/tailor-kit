@@ -5,6 +5,7 @@
      the date and the short id. An option of the graph's listbox; the list handles keys. -->
 <script lang="ts">
   import type { GitGraphCommit } from "../../commands/types";
+  import { getGitHost } from "../host";
   import { Avatar, tooltip } from "../../ui";
   import { laneColor, rowPaths, type LaneRow } from "./layout";
   import type { RefLabel as Label } from "./model";
@@ -54,12 +55,13 @@
     /** The row is being dragged (true) or was dropped or cancelled (false). */
     ondragstate?: (dragging: boolean) => void;
   } = $props();
+  const host = getGitHost();
 
   function dragstart(e: DragEvent) {
     // The commit id travels with the drag: an editor that reorders commits reads it, anything
     // else gets a plain id to paste.
     e.dataTransfer?.setData("text/plain", commit.oid);
-    e.dataTransfer?.setData("application/x-requesttailor-commit", commit.oid);
+    e.dataTransfer?.setData(host.brand.commitMime, commit.oid);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
     ondragstate?.(true);
   }

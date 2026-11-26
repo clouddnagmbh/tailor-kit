@@ -5,13 +5,13 @@
 // Pull requests view and the palette. A dialog of the shell's dialog slot.
 
 import type { PullRequest } from "../commands/types";
-import type { AppState } from "../state/app.svelte";
+import type { GitHost } from "../git/host";
 import NewPullDialog from "./NewPullDialog.svelte";
 
 /** Resolves with the new pull request, `undefined` when cancelled. `head`: the branch with the
  *  changes (default: the current one), `base`: the branch to merge into. */
-export function openNewPull(app: AppState, options: { head?: string; base?: string } = {}): Promise<PullRequest | undefined> {
-  return app.showDialog({
+export function openNewPull(host: GitHost, options: { head?: string; base?: string } = {}): Promise<PullRequest | undefined> {
+  return host.showDialog({
     title: "Create pull request",
     component: NewPullDialog,
     props: options,

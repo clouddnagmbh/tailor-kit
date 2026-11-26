@@ -15,10 +15,10 @@
 
   import { BackendError } from "../../commands/backend";
   import type { GitAction, GitActionResult, GitCommit, GitPlan, GitRef, GitRemote, GitStash, GitStatus, GitUndoEntry } from "../../commands/types";
-  import type { ExtensionDialogProps } from "../../extensions";
   import { Badge, Banner, Button, Card, Checkbox, Chip, DialogFooter, EmptyState, Icon, Progress, Select, Spinner, TextField, type SelectOption } from "../../ui";
   import CloneFields from "../CloneFields.svelte";
-  import { GLOSSARY, type GitTerm } from "../glossary";
+  import { getGitHost, type GitDialogProps } from "../host";
+  import { GLOSSARY, gitWord, type GitTerm } from "../glossary";
   import { getGitViews, type GitViews } from "../views.svelte";
   import {
     confirmLabel,
@@ -35,10 +35,10 @@
   import type { GitWizardKind, GitWizardRequest } from "./open";
   import { suggestRefName } from "./refname";
 
-  let { ctx, close, props }: ExtensionDialogProps = $props();
+  let { close, props }: GitDialogProps = $props();
   const request = untrack(() => (props as unknown as { request: GitWizardRequest }).request);
-  const app = untrack(() => ctx.app);
-  const git = app.backend.git;
+  const host = getGitHost();
+  const git = host.backend.git;
   let views: GitViews | null = null;
   try {
     views = getGitViews();
@@ -192,7 +192,7 @@
     try {
       const r = await go();
       result = r;
-      if (r.reload) await app.reload();
+      if (r.reload) await host.reload();
       step = "done";
       await tick();
       document.querySelector<HTMLButtonElement>('[data-testid="git-wizard-done"]')?.focus();
@@ -239,7 +239,7 @@
         step = "form";
         return;
       }
-      await app.adopt(info);
+      await host.content?.adopt(info);
       result = { message: `Cloned into ${info.location}.`, reload: false };
       step = "done";
     } catch (e) {
@@ -256,13 +256,13 @@
     error = null;
     switch (wayOut(reason)) {
       case "save":
-        await app.save();
+        await host.content?.save();
         values = { ...values };
         return;
       case "park":
         try {
           await git.apply({ action: "stash", message: `Parked before: ${confirmLabel(effective, plan, values).toLowerCase()}` });
-          await app.reload();
+          await host.reload();
           values = { ...values };
         } catch (e) {
           error = describe(e);
@@ -343,7 +343,7 @@
   {#if term && step !== "done"}
     <p class="lead">{GLOSSARY[term].text}</p>
     {#if explaining}
-      <p class="gloss" data-testid="git-gloss">In Git this is called <code>{GLOSSARY[term].git}</code>. {GLOSSARY.backup.text}</p>
+      <p class="gloss" data-testid="git-gloss">In Git this is called <code>{gitWord(term, host.brand)}</code>. {GLOSSARY.backup.text}</p>
     {/if}
   {/if}
 

@@ -14,14 +14,14 @@
   import { getExtensions } from "../../shell/extension-tabs";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Badge, Banner, Button, EmptyState, TextArea } from "../../ui";
   import { chooseEditor, chosenEditor, pickEditor } from "../extension/editor-choice";
   import EditorPicker from "../extension/EditorPicker.svelte";
   import { diff3, join, toLines, type Block, type Choice } from "./diff3";
 
   let { path, onclose }: { path: string; onclose: () => void } = $props();
-  const app = getApp();
+  const host = getGitHost();
   const provided = getExtensions();
 
   // A merge editor of an extension can take the place of the view below (`resolve` and `close`:
@@ -39,9 +39,9 @@
   /** What an extension's editor calls: the same steps as the view's own "Resolve", errors go
    *  back to the editor (it stays open). */
   async function resolveWith(text: string): Promise<void> {
-    if (app.dirty.length > 0) throw new Error("Save your changes first: resolving rewrites the file on disk.");
-    await app.backend.git.resolveText(path, text);
-    await app.reload();
+    if (host.unsaved().length > 0) throw new Error("Save your changes first: resolving rewrites the file on disk.");
+    await host.backend.git.resolveText(path, text);
+    await host.reload();
     closeOnce();
   }
 
@@ -56,7 +56,7 @@
   const conflicts = $derived(blocks.filter((b) => b.kind === "conflict"));
   const generated = $derived(join(blocks, choices));
   const result = $derived(edited ?? generated);
-  const blocked = $derived(app.dirty.length > 0 ? "Save your changes first: resolving rewrites the file on disk." : null);
+  const blocked = $derived(host.unsaved().length > 0 ? "Save your changes first: resolving rewrites the file on disk." : null);
 
   $effect(() => {
     const p = path;
@@ -64,7 +64,7 @@
     error = null;
     edited = null;
     closed = false;
-    app.backend.git.conflict(p).then(
+    host.backend.git.conflict(p).then(
       (c) => {
         if (p !== path) return;
         conflict = c;
@@ -87,8 +87,8 @@
     busy = true;
     error = null;
     try {
-      await app.backend.git.resolveText(path, result);
-      await app.reload();
+      await host.backend.git.resolveText(path, result);
+      await host.reload();
       closeOnce();
     } catch (e) {
       error = e instanceof BackendError || e instanceof Error ? e.message : String(e);
@@ -101,18 +101,18 @@
 </script>
 
 <div class="merge" data-testid="text-merge">
-  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "conflict" }} />
+  <ExtensionGitHint target={{ place: "git", repository: host.activeRepository ?? "", view: "conflict" }} />
   <header>
     <h2>Resolve <code>{path}</code></h2>
     <EditorPicker {editors} kind="merge" bind:value={choice} onchange={(v) => chooseEditor("merge", v)} />
-    <ExtensionGitActions target={{ kind: "conflict", repository: app.activeRepository ?? "", path }} label="Conflict actions" />
+    <ExtensionGitActions target={{ kind: "conflict", repository: host.activeRepository ?? "", path }} label="Conflict actions" />
     <Button variant="ghost" onclick={onclose}>Back</Button>
   </header>
   {#if error}
     <Banner tone="danger"><span data-testid="text-merge-error">{error}</span></Banner>
   {/if}
   {#if Editor && conflict && provided}
-    <Editor ctx={provided.ctx} repository={app.activeRepository ?? ""} {conflict} resolve={resolveWith} close={closeOnce} />
+    <Editor ctx={provided.ctx} repository={host.activeRepository ?? ""} {conflict} resolve={resolveWith} close={closeOnce} />
   {:else if !conflict && !error}
     <p class="hint">Loading…</p>
   {:else if conflict}

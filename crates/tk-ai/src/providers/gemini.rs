@@ -13,12 +13,12 @@
 //!   tools it is only valid on Gemini 3 and later, so with tools the schema goes into the
 //!   prompt instead.
 
-use rt_core::transport::{HttpRequest, Transport};
 use serde_json::{Value, json};
+use tk_net::transport::{HttpRequest, Transport};
 
 use super::sse::{Sse, SseEvent};
 use super::{Decoder, Wire, Wired, base_url, json_request, schema_in_prompt};
-use crate::ai::{AiCall, AiConfig, AiDelta, AiError, AiReply, AiRole, AiStop, AiToolCall, AiUsage};
+use crate::{AiCall, AiConfig, AiDelta, AiError, AiReply, AiRole, AiStop, AiToolCall, AiUsage};
 
 /// Google's public endpoint.
 pub const GEMINI_BASE_URL: &str = "https://generativelanguage.googleapis.com";
@@ -296,8 +296,8 @@ mod tests {
     use super::super::provider;
     use super::super::testing::*;
     use super::*;
-    use crate::ai::tests::block_on;
-    use crate::ai::{AiMessage, AiProviderKind, AiTool, AiToolResult};
+    use crate::block_on;
+    use crate::{AiMessage, AiProviderKind, AiTool, AiToolResult};
 
     fn cfg() -> AiConfig {
         config(AiProviderKind::Gemini, "gemini-3-pro", None)

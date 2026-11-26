@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
 
-//! Wave 16 interface: several providers and profiles, what each provider can do, and the
-//! per-collection opt-out.
+//! Wave 16 interface: several providers and profiles, and what each provider can do.
 //!
 //! - A profile ([`AiProfile`]) is one model behind one provider, e.g. "fast" (a small model)
 //!   and "smart" (a large one), possibly on different providers. A task or an extension asks
@@ -11,7 +10,7 @@
 //!   settings with one profile `default` ([`AiSettings::parse`]); nothing is migrated on disk
 //!   until the user saves the settings.
 //! - Keys: per profile ([`profile_key_slot`]), falling back to the wave-8 slot of the
-//!   provider kind ([`super::key_slot`]), so "fast" and "smart" on one provider share a key
+//!   provider kind ([`crate::key_slot`]), so "fast" and "smart" on one provider share a key
 //!   unless the user gives one of them its own.
 //! - [`AiCapabilities`]: the provider matrix as data (streaming, tool use, JSON mode, direct
 //!   browser calls). The settings dialog and the shells read it; tests keep it equal to the
@@ -21,8 +20,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AiConfig, AiError, AiProviderKind, KEY_COLLECTION, KEY_ENVIRONMENT};
-use crate::SecretKey;
+use tk_secrets::SecretSlot;
+
+use crate::{AiConfig, AiError, AiProviderKind, KEY_GROUP};
 
 /// Role names a caller may ask for instead of a profile id.
 pub const ROLE_FAST: &str = "fast";
@@ -204,12 +204,13 @@ impl AiSettings {
     }
 }
 
-/// Where the key of a profile is kept (before the provider kind's slot, [`super::key_slot`]).
-pub fn profile_key_slot(profile: &str) -> SecretKey {
-    SecretKey {
-        collection: KEY_COLLECTION.to_owned(),
-        environment: KEY_ENVIRONMENT.to_owned(),
-        variable: format!("profile:{profile}"),
+/// Where the key of a profile is kept (before the provider kind's slot, [`crate::key_slot`]);
+/// `space` as for [`crate::key_slot`].
+pub fn profile_key_slot(space: &str, profile: &str) -> SecretSlot {
+    SecretSlot {
+        space: space.to_owned(),
+        group: KEY_GROUP.to_owned(),
+        name: format!("profile:{profile}"),
     }
 }
 
@@ -285,22 +286,6 @@ impl AiProviderKind {
     }
 }
 
-/// Whether the assistant may be used for a collection. Off if either says so.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct AiCollectionPolicy {
-    /// `extensions.requesttailor.ai.enabled: false` in `opencollection.yml`: the team decided
-    /// that this repository never goes to an AI provider.
-    pub file_off: bool,
-    /// The user turned it off for this collection on this device.
-    pub device_off: bool,
-}
-
-impl AiCollectionPolicy {
-    pub fn allowed(self) -> bool {
-        !self.file_off && !self.device_off
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -355,7 +340,7 @@ mod tests {
         assert!(s.resolve(Some("missing")).is_none());
         assert!(!s.must_preview("smart"));
         assert!(s.must_preview("local"));
-        assert_eq!(profile_key_slot("local").variable, "profile:local");
+        assert_eq!(profile_key_slot("app:ai", "local").name, "profile:local");
     }
 
     #[test]
@@ -406,18 +391,10 @@ mod tests {
     }
 
     #[test]
-    fn every_kind_has_a_label_and_the_opt_out_wins() {
+    fn every_kind_has_a_label() {
         for kind in AiProviderKind::ALL {
             assert!(!kind.label().is_empty());
             let _ = kind.capabilities();
         }
-        assert!(AiCollectionPolicy::default().allowed());
-        assert!(
-            !AiCollectionPolicy {
-                file_off: true,
-                device_off: false
-            }
-            .allowed()
-        );
     }
 }

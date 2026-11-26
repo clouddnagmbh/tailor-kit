@@ -5,12 +5,12 @@
 //! extensions make through the configured provider.
 //!
 //! - Tools ([`AiTool`]): a name, a description and a JSON Schema of the input. The model
-//!   answers with [`AiToolCall`]s; the caller runs them (read the collection, propose an edit,
+//!   answers with [`AiToolCall`]s; the caller runs them (read the project, propose an edit,
 //!   send only with the user's approval) and continues with [`AiToolResult`]s. Each provider
 //!   maps this to its own shape (Anthropic `tool_use`/`tool_result`, OpenAI `tool_calls` and
 //!   `role: tool`, Gemini `functionCall`/`functionResponse`, Bedrock Converse `toolUse`).
 //! - [`AiRequest`]: what an extension asks for (`ExtensionContext.ai` in the UI). The core
-//!   adds the masked context of [`AiScope`] and masks the whole call with every secret value
+//!   adds the masked context of the scope and masks the whole call with every secret value
 //!   in scope ([`mask_call`]) before anything leaves, like the wave-8 tasks.
 //! - [`AiPreview`]: the exact, masked call that will be sent ("show what will be sent").
 //! - [`AiEvent`]: what a streaming call reports while it runs.
@@ -21,7 +21,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{AiCall, AiError, AiMessage, AiProviderKind, redact};
+use crate::{AiCall, AiError, AiMessage, AiProviderKind, redact};
 
 /// A tool the model may call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,23 +102,11 @@ pub enum AiEvent {
     Error { error: AiError },
 }
 
-/// What of the active collection the core puts into the call, masked (an [`super::AiContext`]).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct AiScope {
-    /// A request path: its spec as written, variables by name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request: Option<String>,
-    /// A response of the response store: its masked report, body cut.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub response: Option<u64>,
-    /// A folder path (`""`: the root): its requests in short form.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub folder: Option<String>,
-}
-
-/// A call an extension asks for: its own prompt, the core's masked context, optional tools.
+/// A call an extension asks for: its own prompt, the product's masked context, optional
+/// tools. `S` is the product's scope type: what of its data the core puts into the call (see
+/// [`crate::AiContextSource`]); the kit never looks inside it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AiRequest {
+pub struct AiRequest<S> {
     /// Chosen by the caller; `AiApi.cancel(id)` stops the call.
     pub id: String,
     /// One line for the preview and the audit: what the call is for ("Write a tests script").
@@ -129,7 +117,7 @@ pub struct AiRequest {
     pub system: String,
     pub messages: Vec<AiMessage>,
     #[serde(default)]
-    pub scope: AiScope,
+    pub scope: S,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<AiTool>,
     /// JSON Schema the answer must follow (structured output where the provider has it,
@@ -160,7 +148,7 @@ pub struct AiPreview {
 }
 
 /// `call` with every string masked with `secrets`, then the whole serialized payload checked
-/// again: what [`super::prepare`] does for the wave-8 tasks, for any call. If the serialized
+/// again: what a product's task path does for its own prompts, for any call. If the serialized
 /// form still contained a secret (an escape the string pass did not see) and the masked text
 /// is no longer JSON, nothing may be sent.
 pub fn mask_call(call: AiCall, secrets: &[String]) -> Result<AiCall, AiError> {
@@ -235,8 +223,8 @@ fn mask_value(value: Value, secrets: &[String]) -> Value {
 mod tests {
     use serde_json::json;
 
-    use super::super::AiRole;
     use super::*;
+    use crate::AiRole;
 
     #[test]
     fn tool_calls_results_and_schemas_are_masked() {

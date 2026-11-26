@@ -19,11 +19,11 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use rt_core::services::LocalBoxFuture;
-use rt_core::transport::{HttpBody, HttpRequest, SendOptions, Transport, collect};
 use serde_json::{Value, json};
+use tk_net::LocalBoxFuture;
+use tk_net::transport::{HttpBody, HttpRequest, SendOptions, Transport, collect};
 
-use super::{
+use crate::{
     AiCall, AiConfig, AiDelta, AiError, AiProvider, AiProviderKind, AiReply, AiRole, AiStop, redact,
 };
 
@@ -162,14 +162,14 @@ impl<T: Transport, W: Wire> Wired<'_, T, W> {
         redact(&text, &[self.wire.key().to_owned()])
     }
 
-    async fn send(&self, request: HttpRequest) -> Result<rt_core::transport::Response, AiError> {
+    async fn send(&self, request: HttpRequest) -> Result<tk_net::transport::Response, AiError> {
         self.transport
             .send(request)
             .await
             .map_err(|e| AiError::Transport(self.masked(e.to_string())))
     }
 
-    async fn refused(&self, response: rt_core::transport::Response, call: &AiCall) -> AiError {
+    async fn refused(&self, response: tk_net::transport::Response, call: &AiCall) -> AiError {
         let status = response.head.status;
         let started = web_time::Instant::now();
         let text = match collect(response, ANSWER_LIMIT, started).await {
@@ -348,7 +348,7 @@ pub(super) mod testing {
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
-    use rt_core::transport::{HttpVersion, Response, ResponseHead, TransportError};
+    use tk_net::transport::{HttpVersion, Response, ResponseHead, TransportError};
 
     use super::*;
 
@@ -431,7 +431,7 @@ pub(super) mod testing {
     pub fn call() -> AiCall {
         AiCall {
             system: "sys".into(),
-            messages: vec![super::super::AiMessage::text(AiRole::User, "hi")],
+            messages: vec![crate::AiMessage::text(AiRole::User, "hi")],
             max_tokens: 100,
             ..Default::default()
         }

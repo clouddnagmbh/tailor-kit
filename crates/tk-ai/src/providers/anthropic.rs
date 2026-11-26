@@ -12,14 +12,12 @@
 
 use std::collections::BTreeMap;
 
-use rt_core::transport::{HttpRequest, Transport};
 use serde_json::{Value, json};
+use tk_net::transport::{HttpRequest, Transport};
 
 use super::sse::{Sse, SseEvent};
 use super::{Decoder, Wire, Wired, base_url, json_request, role};
-use crate::ai::{
-    AiCall, AiConfig, AiDelta, AiError, AiMessage, AiReply, AiStop, AiToolCall, AiUsage,
-};
+use crate::{AiCall, AiConfig, AiDelta, AiError, AiMessage, AiReply, AiStop, AiToolCall, AiUsage};
 
 /// Anthropic's public endpoint.
 pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
@@ -398,8 +396,8 @@ mod tests {
     use super::super::provider;
     use super::super::testing::*;
     use super::*;
-    use crate::ai::tests::block_on;
-    use crate::ai::{AiProviderKind, AiRole, AiTool, AiToolResult};
+    use crate::block_on;
+    use crate::{AiProviderKind, AiRole, AiTool, AiToolResult};
 
     #[test]
     fn messages_request_and_answer() {

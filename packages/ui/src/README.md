@@ -1,18 +1,18 @@
 # UI primitives
 
 The building blocks of every new view. They use only the tokens in
-`../styles/tokens.css` (tokens v2), work in light and dark, and handle focus and
+`styles/tokens.css` (tokens v2), work in light and dark, and handle focus and
 keyboard themselves. **New UI uses these primitives and tokens; no ad-hoc buttons,
 colours or sizes.** See them all at `?gallery=1` in the web dev server
 (`npm run dev -w apps/web`, then `http://127.0.0.1:5173/?gallery=1&theme=both`).
 
 ```svelte
 <script lang="ts">
-  import { Button, Dropdown, EmptyState, Icon, IconButton } from "../ui";
+  import { Button, Dropdown, EmptyState, Icon, IconButton } from "@tailor-kit/ui";
 </script>
 ```
 
-Distributions import the same names from `@requesttailor/ui`.
+RequestTailor distributions import the same names from `@requesttailor/ui`, which re-exports this package.
 
 ## What to use when
 
@@ -94,4 +94,4 @@ Distributions import the same names from `@requesttailor/ui`.
   while moving along a toolbar.
 
 Tests: `menu.test.ts`, `tooltip.test.ts`, `primitives.test.ts`,
-`../styles/tokens.test.ts`, and `apps/web/e2e/ui/gallery.spec.ts`.
+`styles/tokens.test.ts`, and the gallery end-to-end test in the host app.

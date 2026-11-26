@@ -22,8 +22,8 @@
     <div class="brand">
       <span class="logo" aria-hidden="true"></span>
       <div>
-        <h1>RequestTailor UI</h1>
-        <p>Primitives and tokens v2 · apps/ui/src/ui</p>
+        <h1>Tailor Kit UI</h1>
+        <p>Primitives and tokens v2 · packages/ui/src</p>
       </div>
     </div>
     <SegmentedControl

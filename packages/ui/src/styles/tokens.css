@@ -3,7 +3,7 @@
 
 /* Design tokens v2 (wave 14). Components use only these variables, never raw colours or sizes,
    so light and dark themes work everywhere. Names are interface (working rule 1); every name of
-   v1 still works. When to use which token: apps/ui/src/ui/README.md.
+   v1 still works. When to use which token: packages/ui/src/README.md.
 
    Theme: `data-theme="light" | "dark"` on <html>; without it, the OS preference applies. Any
    element with `data-theme` themes its subtree too (the gallery shows both side by side; floating
@@ -63,7 +63,7 @@
   --rt-control-md: 28px;
   --rt-control-lg: 32px;
 
-  /* Icons (Lucide, apps/ui/src/ui/Icon.svelte). The stroke is in the 24-unit icon grid. */
+  /* Icons (Lucide, packages/ui/src/Icon.svelte). The stroke is in the 24-unit icon grid. */
   --rt-icon-sm: 14px;
   --rt-icon-md: 16px;
   --rt-icon-lg: 20px;
@@ -89,7 +89,7 @@
   --rt-size-small: var(--rt-text-small);
   --rt-radius: var(--rt-radius-md);
   --rt-gap: var(--rt-space-4);
-  /* Height of the tab bars (sidebar views, open requests), so their bottom borders line up. */
+  /* Height of the tab bars (sidebar views, open items), so their bottom borders line up. */
   --rt-bar-height: 32px;
   /* Left and right inset of sidebar content (headers, tree rows, the view bar). */
   --rt-side-inset: 12px;

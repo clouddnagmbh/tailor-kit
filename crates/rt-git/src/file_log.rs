@@ -151,7 +151,7 @@ impl Repo {
             let Some(rel) = self.scope.rel(p.as_bstr()) else {
                 continue;
             };
-            if rel != path && rt_app::git::tree_path(&rel) {
+            if rel != path && self.includes(&rel) {
                 removed.insert(rel, b.id);
             }
         }

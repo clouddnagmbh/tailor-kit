@@ -7,7 +7,7 @@
 //! its own branch while the user keeps working (since wave 13).
 
 use gix::ObjectId;
-use gix::bstr::{BString, ByteSlice};
+use gix::bstr::ByteSlice;
 use gix::objs::tree::EntryKind;
 use rt_app::git::{GitCommit, GitIdentity};
 
@@ -80,7 +80,7 @@ impl Repo {
         let identity = self.identity_or(fallback)?;
 
         let mut editor = self.repo.edit_tree(base).ctx("cannot read a tree")?;
-        let root = Scope::new(BString::default());
+        let root = Scope::whole();
         for file in files {
             let path = match file.path.strip_prefix('/') {
                 Some(rest) => root.abs(rest)?,

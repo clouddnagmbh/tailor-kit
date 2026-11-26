@@ -62,6 +62,9 @@ pub struct Repo {
     /// What checks the files of a commit (seam N2); RequestTailor's secret scanner by
     /// default, `None`: nothing is checked.
     pub(crate) scanner: Option<std::sync::Arc<dyn tk_git_types::CommitScanner>>,
+    /// Which files of the scope count (seam N3); RequestTailor's collection files by default,
+    /// `None`: every regular file.
+    pub(crate) files: Option<std::sync::Arc<dyn tk_git_types::ScopeFiles>>,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -89,28 +92,44 @@ impl Repo {
         let rel = root
             .strip_prefix(&workdir)
             .map_err(|_| fail("the collection is not inside the repository's work tree"))?;
-        let mut prefix = BString::default();
+        let mut prefix = String::new();
         for part in rel.components() {
             let part = part
                 .as_os_str()
                 .to_str()
                 .ok_or_else(|| fail("the collection path is not valid UTF-8"))?;
             if !prefix.is_empty() {
-                prefix.push(b'/');
+                prefix.push('/');
             }
-            prefix.extend_from_slice(part.as_bytes());
+            prefix.push_str(part);
         }
+        let scope = Scope::folder(&prefix).map_err(|_| {
+            fail(format!(
+                "the collection folder cannot be a Git path: {prefix}"
+            ))
+        })?;
         Ok(Some(Self {
             repo,
             workdir,
             root,
-            scope: Scope::new(prefix),
+            scope,
             options: options.clone(),
             signing: crate::sign::Signing::default(),
             namespace: rt_app::git::REF_NAMESPACE,
             merger: Some(std::sync::Arc::new(crate::CollectionMerger)),
             scanner: Some(std::sync::Arc::new(crate::SecretScanner)),
+            files: Some(std::sync::Arc::new(crate::CollectionFiles)),
         }))
+    }
+
+    /// The whole repository whose work tree contains `path` (any folder in it), scoped to the
+    /// work tree root (seam N3: GitTailor's form); `None` if there is none.
+    pub fn open_repository(path: &Path, options: &Options) -> Result<Option<Self>> {
+        let path = canonical(path).ctx("cannot open the folder")?;
+        match find_workdir(&path) {
+            Some(workdir) => Self::open(&workdir, options),
+            None => Ok(None),
+        }
     }
 
     /// Like [`Repo::open`], but "not a repository" is an error.
@@ -125,7 +144,8 @@ impl Repo {
             .with_signing(self.signing.clone())
             .with_namespace(self.namespace)
             .with_merger(self.merger.clone())
-            .with_scanner(self.scanner.clone()))
+            .with_scanner(self.scanner.clone())
+            .with_files(self.files.clone()))
     }
 
     /// Signs and verifies commits with `signing` (a distribution's hook, `sign`); without it
@@ -160,6 +180,33 @@ impl Repo {
     ) -> Self {
         self.scanner = scanner;
         self
+    }
+
+    /// Counts the files `files` includes (seam N3) instead of RequestTailor's collection
+    /// files; `None` counts every regular file of the scope.
+    pub fn with_files(
+        mut self,
+        files: Option<std::sync::Arc<dyn tk_git_types::ScopeFiles>>,
+    ) -> Self {
+        self.files = files;
+        self
+    }
+
+    /// The part of the repository this `Repo` works on.
+    pub fn scope(&self) -> &tk_git_types::RepoScope {
+        self.scope.scope()
+    }
+
+    /// Whether the scope-relative `rel` is one of the files that count.
+    pub(crate) fn includes(&self, rel: &str) -> bool {
+        self.files.as_ref().is_none_or(|f| f.includes(rel))
+    }
+
+    /// Drops the files of nested units (nested collections) from a revision's files.
+    pub(crate) fn drop_nested(&self, files: &mut std::collections::BTreeMap<String, String>) {
+        if let Some(f) = &self.files {
+            f.drop_nested(files);
+        }
     }
 
     /// Refuses a commit of `files` (path, content as committed) when the scanner does
@@ -305,7 +352,7 @@ impl Repo {
     /// with a leading `/` (the wave-12 convention).
     pub(crate) fn repo_path(&self, path: &str) -> Result<BString> {
         match path.strip_prefix('/') {
-            Some(rest) => Scope::new(BString::default()).abs(rest),
+            Some(rest) => Scope::whole().abs(rest),
             None => self.scope.abs(path),
         }
     }
@@ -327,12 +374,13 @@ impl Repo {
             repo,
             workdir: self.workdir.clone(),
             root: self.workdir.clone(),
-            scope: Scope::new(BString::default()),
+            scope: Scope::whole(),
             options: self.options.clone(),
             signing: self.signing.clone(),
             namespace: self.namespace,
             merger: self.merger.clone(),
             scanner: self.scanner.clone(),
+            files: self.files.clone(),
         })
     }
 

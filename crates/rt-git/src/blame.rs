@@ -91,7 +91,7 @@ impl Repo {
     /// The repository path (without a leading `/`) a history view's path names.
     pub(crate) fn history_path(&self, path: &str) -> Result<BString> {
         match path.strip_prefix('/') {
-            Some(rest) => Scope::new(BString::default()).abs(rest),
+            Some(rest) => Scope::whole().abs(rest),
             None => self.scope.abs(path),
         }
     }

@@ -104,6 +104,7 @@ mod amend;
 mod blame;
 mod branch_actions;
 mod cherry_pick;
+mod collection_files;
 mod collection_merge;
 pub mod credentials;
 pub mod http;
@@ -156,6 +157,7 @@ mod util;
 pub use tk_git_types::{GitError, GitResult};
 
 /// RequestTailor's file merger (seam N1), the default of every [`Repo`].
+pub use collection_files::CollectionFiles;
 pub use collection_merge::CollectionMerger;
 pub use secret_scanner::SecretScanner;
 mod working_copy;

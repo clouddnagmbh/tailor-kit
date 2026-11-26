@@ -37,7 +37,7 @@ impl Repo {
         Ok(commit.id)
     }
 
-    /// The collection's files at `rev` (see [`GitTree`]).
+    /// The scope's files at `rev` that count (see [`GitTree`], seam N3).
     pub fn tree_at(&self, rev: &str) -> Result<GitTree> {
         let commit = self.resolve_rev(rev)?;
         let tree = self.commit_tree(commit)?;
@@ -49,14 +49,14 @@ impl Repo {
             let Some(rel) = self.scope.rel(path.as_bstr()) else {
                 continue;
             };
-            if !rt_app::git::tree_path(&rel) {
+            if !self.includes(&rel) {
                 continue;
             }
             if let Ok(text) = String::from_utf8(blob_bytes(&self.repo, blob.id)?) {
                 files.insert(rel, text);
             }
         }
-        rt_app::git::drop_nested(&mut files);
+        self.drop_nested(&mut files);
         Ok(GitTree {
             oid: commit.to_string(),
             files,
@@ -68,7 +68,7 @@ impl Repo {
     pub fn show(&self, rev: &str, path: &str) -> Result<Option<String>> {
         let commit = self.resolve_rev(rev)?;
         let repo_path: BString = match path.strip_prefix('/') {
-            Some(rest) => crate::util::Scope::new(BString::default()).abs(rest)?,
+            Some(rest) => crate::util::Scope::whole().abs(rest)?,
             None => self.scope.abs(path)?,
         };
         let Some((mode, id)) = self.entry_at(commit, &repo_path)? else {

@@ -1,0 +1,26 @@
+[package]
+name = "tk-secrets"
+description = "Tailor Kit: secret storage (trait and OS keychain) shared by RequestTailor and GitTailor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+# OS keychain for secret values. Native targets only (the module is cfg'd out on wasm32). Linux
+# uses the Secret Service over zbus (pure Rust, no libdbus needed at build time).
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["async-secret-service", "async-io", "crypto-rust"] }
+
+[lints]
+workspace = true

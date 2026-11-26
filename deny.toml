@@ -1,0 +1,77 @@
+# cargo-deny policy for the public core (Apache-2.0).
+# The [licenses].allow list is also the allowlist for npm (scripts/check-npm-licenses.mjs reads it).
+# Adding a license here is a deliberate decision: copyleft (GPL, AGPL, LGPL, SSPL, EUPL) never goes in.
+
+[graph]
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+  "wasm32-unknown-unknown",
+  "aarch64-apple-ios",
+]
+all-features = true
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",
+  "CC0-1.0",
+  "0BSD",
+]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+
+# webpki-root-certs is Mozilla's root store as data under CDLA-Permissive-2.0 (permissive, not
+# copyleft). It is a wasm32-only dependency of rustls-platform-verifier, which rt-core uses on
+# native targets only, so it is never built (`cargo tree --target wasm32-unknown-unknown -i
+# webpki-root-certs` prints nothing). cargo-deny evaluates each edge's target cfg on its own and
+# lists it anyway. Allowed for this crate only, so it stays visible to advisories and bans.
+[[licenses.exceptions]]
+crate = "webpki-root-certs"
+allow = ["CDLA-Permissive-2.0"]
+
+# Tauri 2 (desktop shell), approved by the project owner on 2026-11-21. MPL-2.0 is file-level
+# copyleft; these crates are used unmodified and the obligation does not extend to our code.
+# Build-time only on desktop targets (tauri-codegen / tauri-build, via dom_query):
+[[licenses.exceptions]]
+crate = "cssparser"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+crate = "cssparser-macros"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+crate = "selectors"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+crate = "dtoa-short"
+allow = ["MPL-2.0"]
+
+# Shipped in the desktop binary (tauri -> dirs -> dirs-sys), unmodified; source is on crates.io.
+[[licenses.exceptions]]
+crate = "option-ext"
+allow = ["MPL-2.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

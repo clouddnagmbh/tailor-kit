@@ -1,0 +1,7 @@
+# Pinned on purpose: toolchain upgrades are a deliberate commit, not a CI surprise.
+# Extra targets are added where needed:
+#   rustup target add wasm32-unknown-unknown aarch64-apple-ios
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

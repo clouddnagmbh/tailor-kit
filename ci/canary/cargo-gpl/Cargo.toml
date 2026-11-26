@@ -1,0 +1,12 @@
+# Canary for the license gate: cargo-deny MUST fail on this workspace.
+[workspace]
+
+[package]
+name = "canary-cargo-gpl"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+gpl-dep = { path = "gpl-dep" }

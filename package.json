@@ -1,0 +1,19 @@
+{
+  "name": "tailor-kit",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check:licenses": "node scripts/check-npm-licenses.mjs",
+    "check:headers": "node scripts/check-license-headers.mjs",
+    "check:words": "node scripts/check-domain-words.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs"
+  }
+}

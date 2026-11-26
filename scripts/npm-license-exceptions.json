@@ -1,0 +1,11 @@
+{
+  "_comment": "Packages allowed despite a license not on the deny.toml allowlist. Each entry needs a reason; devOnly entries must be dev dependencies (build/test tools, never shipped). Checked by scripts/check-npm-licenses.mjs. Approved by the project owner on 2026-11-21.",
+  "exceptions": [
+    {
+      "pattern": "^lightningcss(-[a-z0-9-]+)?$",
+      "license": "MPL-2.0",
+      "devOnly": true,
+      "reason": "CSS transformer used by Vite 8 at build time. Not shipped; MPL-2.0 is file-level copyleft and does not extend to the CSS it outputs."
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# Secret scan configuration. Extends the gitleaks default rules.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Bruno's public e2e fixtures carry fake test credentials (see testdata/collections/bruno/README.md); four import-corpus fixtures with dummy credentials (and one snapshot derived from a dummy), listed in testdata/import/SOURCES.md; public AWS SigV4 test suite vectors with AWS's documented example credentials (testdata/sigv4/SOURCES.md)"
+# Commit c200c28 (MCP client tests) added a sample JWT (subject "1234567890") as a literal to
+# show that saved MCP tests refuse credentials; the test now builds it from parts.
+commits = ["c200c28ffde1f0b6399650cd9b25d9b163829675"]
+# Fake values that tests plant to prove they never reach a file or report (assert_no_canary):
+# they all start with RT-CANARY-.
+# The same for an `alg: none` JWT whose subject is RT-CANARY-... (crates/rt-cli/tests/security_audit.rs).
+regexes = [
+  '''RT-CANARY-[A-Za-z0-9_-]+''',
+  # The sample GitHub token of GitHub's own documentation, planted to show the sequence export
+  # withholds secret-shaped values (crates/rt-app/tests/sequence.rs).
+  '''ghp_16C7e42F292c6912E7710c838347Ae178B4a''',
+  '''eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0\.eyJzdWIiOiJSVC1DQU5BUlkt[A-Za-z0-9_-]*\.?''',
+]
+paths = [
+  '''^testdata/collections/bruno/''',
+  '''^testdata/import/curl/curlconverter-get-digest-auth\.sh$''',
+  '''^testdata/import/curl/curlconverter-post-basic-auth-url-encoded-data\.sh$''',
+  '''^testdata/import/curl/curlconverter-get-with-data\.sh$''',
+  '''^testdata/import/curl/curlconverter-multipart-with-headers\.sh$''',
+  # Snapshot of a DCSA test request whose body is base64 for "another secret - not the same as before".
+  '''^testdata/import/postman/dcsa-tnt-v2\.1\.postman_collection\.json\.expected/collection/test-unofficial-api-create-eswithsecretto-update-secret/update-eventsubscriptionwith-secret-body\.yml$''',
+  # Public AWS SigV4 test suite vectors: the session token and signatures are made with AWS's
+  # documented example key (AKIDEXAMPLE), not a real credential.
+  '''^testdata/sigv4/v4/get-vanilla-with-session-token/''',
+  '''^testdata/sigv4/v4/post-sts-header-before/''',
+]

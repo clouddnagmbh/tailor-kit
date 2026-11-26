@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: Apache-2.0
+# The kit builds and tests on its own: macOS, Windows, Linux, wasm32 for the parts the web uses,
+# the UI packages, and the license, header, domain-word, DCO and secret-scan gates.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -D warnings
+
+jobs:
+  native:
+    name: build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux, os: ubuntu-latest }
+          - { name: macos, os: macos-latest }
+          - { name: windows, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace --all-targets --locked
+      - run: cargo test --workspace --locked --no-fail-fast
+
+  wasm:
+    name: build (wasm32)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pinned toolchain and wasm32 target
+        run: |
+          rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      # The Git engine (gitoxide, files, sockets) is native only; everything else must build for
+      # the browser.
+      - run: cargo build --workspace --exclude tk-git --target wasm32-unknown-unknown --locked
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: License headers
+        run: node scripts/check-license-headers.mjs
+      - name: Domain words (no product words outside comments)
+        run: node scripts/check-domain-words.mjs
+
+  licenses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.22.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: cargo-deny (licenses, advisories, bans, sources)
+        run: cargo deny --all-features check
+      - run: npm ci --ignore-scripts
+      - name: npm license check
+        run: npm run check:licenses
+      - name: Tests of the scripts
+        run: npm run test:scripts
+      - name: Canaries (GPL dependencies must be rejected)
+        run: ci/canary/run.sh
+
+  frontend:
+    name: frontend (svelte packages)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Type check
+        run: npm run check --workspaces
+      - name: Unit tests
+        run: npm test --workspaces
+
+  dco:
+    name: dco sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Every commit is signed off
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            spec="$PR_BASE..$PR_HEAD"
+          elif [ -n "$BEFORE" ] && ! echo "$BEFORE" | grep -qE '^0+$'; then
+            spec="$BEFORE..$GITHUB_SHA"
+          else
+            spec="$GITHUB_SHA"
+          fi
+          node scripts/check-dco.mjs "$spec"
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned, checksum verified)
+        run: |
+          f="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$f"
+          echo "${GITLEAKS_SHA256}  $f" | sha256sum -c -
+          tar -xzf "$f" gitleaks
+      - name: Scan full history
+        run: ./gitleaks git --no-banner --redact --config .gitleaks.toml .
+
+  # Single required status for branch protection.
+  ci-ok:
+    if: always()
+    needs: [native, wasm, lint, licenses, frontend, dco, secrets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All jobs green
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done

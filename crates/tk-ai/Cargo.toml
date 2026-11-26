@@ -1,0 +1,28 @@
+[package]
+name = "tk-ai"
+description = "Tailor Kit: AI providers, masking, profiles, the call runtime and the context seam shared by RequestTailor and GitTailor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Builds on native and wasm32-unknown-unknown (iOS builds the native stack). Knows only masked
+# text and tools, never a product's model.
+
+[dependencies]
+base64 = "0.22"
+# Bodies of the providers and the streamed answer of `tk_net::transport::Transport`.
+bytes = "1"
+futures-core = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+thiserror = "2"
+tk-net = { path = "../tk-net" }
+tk-secrets = { path = "../tk-secrets" }
+url = "2"
+# std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
+web-time = "1"
+
+[lints]
+workspace = true

@@ -13,14 +13,14 @@
 
 use std::collections::BTreeMap;
 
-use rt_core::transport::{HttpRequest, Transport};
 use serde_json::{Value, json};
+use tk_net::transport::{HttpRequest, Transport};
 
 use super::sse::{Sse, SseEvent};
 use super::{
     Decoder, Wire, Wired, base_url, json_request, role, schema_in_prompt, strict_compatible,
 };
-use crate::ai::{
+use crate::{
     AiCall, AiConfig, AiDelta, AiError, AiMessage, AiProviderKind, AiReply, AiRole, AiStop,
     AiToolCall, AiUsage,
 };
@@ -389,8 +389,8 @@ mod tests {
     use super::super::provider;
     use super::super::testing::*;
     use super::*;
-    use crate::ai::tests::block_on;
-    use crate::ai::{AiTool, AiToolResult};
+    use crate::block_on;
+    use crate::{AiTool, AiToolResult};
 
     #[test]
     fn compatible_with_and_without_a_key() {

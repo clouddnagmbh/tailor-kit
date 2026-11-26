@@ -15,7 +15,7 @@ use rt_app::git::actions::{
 use rt_app::git::{GitFileState, GitPullResult};
 
 use crate::actions::{Ctx, Done, PlanExt, Run, block, plural, plural_s, short, slash};
-use crate::merge::{MergeKind, ThreeWay, is_collection_file};
+use crate::merge::{MergeKind, ThreeWay};
 use crate::repo::Repo;
 use crate::util::{Context, Flat, Result, fail, flatten};
 use crate::worktree::{FileState, Probe, blocked};
@@ -505,7 +505,7 @@ impl Repo {
             diff_paths(&a, &b)
                 .into_iter()
                 .map(|path| GitMergeFile {
-                    semantic: is_collection_file(&[&b], path.as_bytes()[1..].as_bstr()),
+                    semantic: self.merges_on_model(&[&b], path.as_bytes()[1..].as_bstr()),
                     path,
                     clean: 1,
                     conflicts: Vec::new(),

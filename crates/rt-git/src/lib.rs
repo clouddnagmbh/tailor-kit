@@ -104,6 +104,7 @@ mod amend;
 mod blame;
 mod branch_actions;
 mod cherry_pick;
+mod collection_merge;
 pub mod credentials;
 pub mod http;
 pub mod identity;
@@ -152,6 +153,9 @@ mod util;
 
 /// Errors of the Git core (seam N7); `rt-app` turns them into `AppError`.
 pub use tk_git_types::{GitError, GitResult};
+
+/// RequestTailor's file merger (seam N1), the default of every [`Repo`].
+pub use collection_merge::CollectionMerger;
 mod working_copy;
 mod worktree;
 

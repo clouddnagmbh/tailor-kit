@@ -4,9 +4,10 @@
 //! Merging the upstream (pull), and resolving conflicts afterwards.
 //!
 //! Wave 12 (strand B): the pull merges the collection on the model. Git's tree merge
-//! (gitoxide) merges the repository; then every collection file is replaced by the result of
-//! `rt_format::merge` (the same merge as `rt merge-driver` and the web app), except files
-//! that need a decision as a whole (text conflicts), where Git's own result stays. A file
+//! (gitoxide) merges the repository; then the repository's file merger (seam N1,
+//! [`tk_git_types::FileMerger`]; RequestTailor's is [`crate::CollectionMerger`]) merges each
+//! of its groups and its result replaces Git's, except files that need a decision as a whole
+//! (text conflicts), where Git's own result stays. Without a merger Git's merge decides. A file
 //! with field conflicts gets the conflict stages 1–3 in the index and, in the working tree,
 //! the merged file with ours in each conflicted field and a comment above it. Nothing about
 //! the conflicts is stored: [`Repo::merge_state`] recomputes them from the index stages, so
@@ -22,15 +23,13 @@ use gix::merge::tree::{TreatAsUnresolved, apply_index_entries::RemovalMode};
 use gix::object::tree::EntryKind;
 use rt_app::git::actions::GitMergeFile;
 use rt_app::git::{GitConflict, GitIdentity, GitPullResult, GitResolution};
-use rt_app::merges::{ConflictChoice, ConflictStages, FileSet, MergeResult, MergeState};
+use rt_app::merges::{ConflictChoice, ConflictStages, MergeState};
+use tk_git_types::{FileMerger, GroupFiles, GroupMerge};
 
 use crate::commit::signature;
 use crate::repo::Repo;
 use crate::util::{Blob, Context, Flat, Result, blob_bytes, blob_text, fail, flatten};
 use crate::worktree::{Probe, stat_of, switch};
-
-/// The file that makes a folder a collection.
-const COLLECTION_FILE: &str = "opencollection.yml";
 
 /// What is merged into `HEAD` (wave 14 generalises the pull's merge to these).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,17 +54,13 @@ pub(crate) struct ThreeWay<'a> {
     pub label: &'a str,
 }
 
-/// One collection of the repository merged on the model.
+/// One group of the repository merged by the file merger (a collection, for RequestTailor).
 struct Semantic {
-    /// Repository path of the collection folder, `""` at the root.
+    /// Repository path of the group's folder, `""` at the root.
     prefix: BString,
-    result: MergeResult,
-    /// Working-tree text of conflicted files (comments at conflicted fields).
-    marked: BTreeMap<String, Vec<u8>>,
-    /// Every collection file on any side (collection-relative).
-    paths: BTreeSet<String>,
-    base: FileSet,
-    theirs: FileSet,
+    merged: GroupMerge,
+    base: GroupFiles,
+    theirs: GroupFiles,
 }
 
 impl Semantic {
@@ -91,81 +86,51 @@ impl Semantic {
     }
 }
 
-/// Folders (repository paths, `""` for the root) that hold a collection on any side, outside
-/// hidden folders and `node_modules`.
-fn collection_roots(flats: &[&Flat]) -> BTreeSet<BString> {
-    let mut out = BTreeSet::new();
-    for flat in flats {
-        for path in flat.keys() {
-            let Ok(path) = path.to_str() else { continue };
-            let dir = if path == COLLECTION_FILE {
-                ""
-            } else if let Some(dir) = path.strip_suffix(&format!("/{COLLECTION_FILE}")) {
-                dir
-            } else {
-                continue;
-            };
-            if dir
-                .split('/')
-                .any(|part| part.starts_with('.') || part == "node_modules")
-            {
-                continue;
-            }
-            out.insert(BString::from(dir));
-        }
+/// The merger's groups on any of `flats` (repository paths of their folders).
+fn groups(merger: &dyn FileMerger, flats: &[&Flat]) -> BTreeSet<BString> {
+    let paths: BTreeSet<&str> = flats
+        .iter()
+        .flat_map(|flat| flat.keys())
+        .filter_map(|p| p.to_str().ok())
+        .collect();
+    let paths: Vec<&str> = paths.into_iter().collect();
+    merger
+        .groups(&paths)
+        .into_iter()
+        .map(BString::from)
+        .collect()
+}
+
+/// `path` relative to the group folder `prefix` (`""`: the root), if it is inside.
+fn rel_to<'p>(prefix: &BStr, path: &'p BStr) -> Option<&'p BStr> {
+    if prefix.is_empty() {
+        return Some(path);
     }
-    out
+    path.strip_prefix(prefix.as_bytes())
+        .and_then(|r| r.strip_prefix(b"/"))
+        .map(|r| r.as_bstr())
 }
 
-/// Whether the repository path `path` is a file of a collection on any side (merged
-/// semantically).
-pub(crate) fn is_collection_file(flats: &[&Flat], path: &BStr) -> bool {
-    collection_roots(flats).iter().any(|root| {
-        let rel = if root.is_empty() {
-            Some(path)
-        } else {
-            path.strip_prefix(root.as_slice())
-                .and_then(|r| r.strip_prefix(b"/"))
-                .map(|r| r.as_bstr())
-        };
-        rel.and_then(|r| r.to_str().ok())
-            .is_some_and(rt_app::git::tree_path)
-    })
-}
-
-/// The collection at `prefix` in `flat`, as `FileSet::from_dir` would read it.
-fn files_under(repo: &gix::Repository, flat: &Flat, prefix: &BStr) -> Result<FileSet> {
-    let mut files = BTreeMap::new();
+/// The files of the group at `prefix` in `flat` that the merger claims (regular files only).
+fn files_under(
+    repo: &gix::Repository,
+    merger: &dyn FileMerger,
+    flat: &Flat,
+    prefix: &BStr,
+) -> Result<GroupFiles> {
+    let mut files = GroupFiles::new();
     for (path, blob) in flat {
         if !matches!(blob.mode, Mode::FILE | Mode::FILE_EXECUTABLE) {
             continue;
         }
-        let rel = if prefix.is_empty() {
-            path.as_bstr()
-        } else {
-            match path
-                .strip_prefix(prefix.as_bytes())
-                .and_then(|r| r.strip_prefix(b"/"))
-            {
-                Some(rest) => rest.as_bstr(),
-                None => continue,
-            }
-        };
-        let Ok(rel) = rel.to_str() else { continue };
-        if !rt_app::git::tree_path(rel) {
+        let Some(rel) = rel_to(prefix, path.as_bstr()).and_then(|r| r.to_str().ok()) else {
             continue;
-        }
-        if let Ok(text) = String::from_utf8(blob_bytes(repo, blob.id)?) {
-            files.insert(rel.to_owned(), text);
+        };
+        if merger.claims(rel) {
+            files.insert(rel.to_owned(), blob_bytes(repo, blob.id)?);
         }
     }
-    rt_app::git::drop_nested(&mut files);
-    Ok(FileSet {
-        files: files
-            .into_iter()
-            .map(|(p, t)| (p, t.into_bytes()))
-            .collect(),
-    })
+    Ok(files)
 }
 
 /// Files under `prefix` that differ between `a` and `b`.
@@ -296,17 +261,18 @@ impl Repo {
         let sems = self.semantics(&flats)?;
         let mut overlay: Vec<(BString, Option<ObjectId>, bool)> = Vec::new();
         for sem in &sems {
-            for p in &sem.paths {
-                if sem.result.text_conflicts.contains(p) {
+            let m = &sem.merged;
+            for p in &m.paths {
+                if m.whole_file.contains(p) {
                     continue;
                 }
                 let repo_path = sem.repo_path(p);
-                let fields = sem.result.conflicts.iter().any(|c| &c.file == p);
+                let fields = m.conflicts.contains_key(p);
                 let content = match fields {
-                    true => sem.marked.get(p),
+                    true => m.marked.get(p),
                     false => None,
                 }
-                .or_else(|| sem.result.files.files.get(p));
+                .or_else(|| m.files.get(p));
                 let id = match content {
                     Some(bytes) => {
                         let id = repo
@@ -339,37 +305,31 @@ impl Repo {
         })
     }
 
-    /// Every collection of the repository merged on the model; a collection that cannot be
-    /// read on some side is left to Git's merge.
+    /// Every group of the repository merged by the file merger; a group the merger cannot
+    /// merge is left to Git's merge, and so is everything without a merger.
     fn semantics(&self, flats: &[Flat; 3]) -> Result<Vec<Semantic>> {
+        let Some(merger) = self.merger.as_deref() else {
+            return Ok(Vec::new());
+        };
         let [b, o, t] = flats;
         let mut out = Vec::new();
-        for prefix in collection_roots(&[b, o, t]) {
+        for prefix in groups(merger, &[b, o, t]) {
             let prefix_ref = prefix.as_bstr();
             // Nothing comes in, or both sides agree: Git's result is ours already.
             if !differs_under(b, t, prefix_ref) || !differs_under(o, t, prefix_ref) {
                 continue;
             }
             let (bf, of, tf) = (
-                files_under(&self.repo, b, prefix_ref)?,
-                files_under(&self.repo, o, prefix_ref)?,
-                files_under(&self.repo, t, prefix_ref)?,
+                files_under(&self.repo, merger, b, prefix_ref)?,
+                files_under(&self.repo, merger, o, prefix_ref)?,
+                files_under(&self.repo, merger, t, prefix_ref)?,
             );
-            let Ok((result, marked)) = rt_app::merges::pull_merge(&bf, &of, &tf) else {
+            let Some(merged) = merger.merge(&bf, &of, &tf) else {
                 continue;
             };
-            let paths = bf
-                .files
-                .keys()
-                .chain(of.files.keys())
-                .chain(tf.files.keys())
-                .cloned()
-                .collect();
             out.push(Semantic {
                 prefix,
-                result,
-                marked,
-                paths,
+                merged,
                 base: bf,
                 theirs: tf,
             });
@@ -377,8 +337,21 @@ impl Repo {
         Ok(out)
     }
 
-    /// The files a merge changes on our side, for a plan: semantic per collection file (the
-    /// fields that merge and those that conflict), line by line for every other file.
+    /// Whether the file merger decides the repository path `path` on `flats` (a collection
+    /// file, for RequestTailor).
+    pub(crate) fn merges_on_model(&self, flats: &[&Flat], path: &BStr) -> bool {
+        let Some(merger) = self.merger.as_deref() else {
+            return false;
+        };
+        groups(merger, flats).iter().any(|root| {
+            rel_to(root.as_bstr(), path)
+                .and_then(|r| r.to_str().ok())
+                .is_some_and(|r| merger.claims(r))
+        })
+    }
+
+    /// The files a merge changes on our side, for a plan: semantic per file the merger
+    /// decides (the parts that merge and those that conflict), line by line for every other.
     pub(crate) fn merge_preview(&self, mut c: Computed<'_>) -> Result<Vec<GitMergeFile>> {
         let how = TreatAsUnresolved::git();
         let mut unresolved: BTreeSet<BString> = BTreeSet::new();
@@ -397,8 +370,9 @@ impl Repo {
             // Their change, and the merge changes our file (or needs a decision: Git's
             // conflicts count only where the model did not merge the file).
             let modelled = c.sems.iter().any(|s| {
-                s.rel(p.as_bstr())
-                    .is_some_and(|r| s.paths.contains(&r) && !s.result.text_conflicts.contains(&r))
+                s.rel(p.as_bstr()).is_some_and(|r| {
+                    s.merged.paths.contains(&r) && !s.merged.whole_file.contains(&r)
+                })
             });
             if b.get(p) != t.get(p)
                 && o.get(p) != t.get(p)
@@ -407,13 +381,12 @@ impl Repo {
                 paths.insert(p);
             }
         }
-        // Changed fields per file of each collection, base → theirs.
+        // Changed parts per file of each group, base → theirs.
         let mut fields_in: BTreeMap<BString, u32> = BTreeMap::new();
-        for sem in &c.sems {
-            if let Ok(diff) = rt_app::diffs::diff(&sem.base, &sem.theirs) {
-                for change in diff.changes {
-                    let n = u32::try_from(change.fields.len().max(1)).unwrap_or(u32::MAX);
-                    *fields_in.entry(sem.repo_path(&change.file)).or_default() += n;
+        if let Some(merger) = self.merger.as_deref() {
+            for sem in &c.sems {
+                for (file, n) in merger.changed_parts(&sem.base, &sem.theirs) {
+                    *fields_in.entry(sem.repo_path(&file)).or_default() += n;
                 }
             }
         }
@@ -426,21 +399,12 @@ impl Repo {
         for p in paths {
             let sem = c.sems.iter().find_map(|s| {
                 s.rel(p.as_bstr())
-                    .filter(|r| s.paths.contains(r))
+                    .filter(|r| s.merged.paths.contains(r))
                     .map(|r| (s, r))
             });
             let file = match sem {
-                Some((s, rel)) if !s.result.text_conflicts.contains(&rel) => {
-                    let conflicts: Vec<String> = s
-                        .result
-                        .conflicts
-                        .iter()
-                        .filter(|x| x.file == rel)
-                        .map(|x| match x.field.join(".") {
-                            f if f.is_empty() => "file".to_owned(),
-                            f => f,
-                        })
-                        .collect();
+                Some((s, rel)) if !s.merged.whole_file.contains(&rel) => {
+                    let conflicts = s.merged.conflicts.get(&rel).cloned().unwrap_or_default();
                     let changed = fields_in.get(p).copied().unwrap_or(1).max(1);
                     let n = u32::try_from(conflicts.len()).unwrap_or(u32::MAX);
                     GitMergeFile {

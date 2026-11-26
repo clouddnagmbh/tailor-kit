@@ -9,9 +9,14 @@
 //! `From<GitError> for rt_app::AppError`).
 //!
 //! Seam N8: refs and files of a program's own live in its [`RefNamespace`].
+//!
+//! Seam N1: a [`FileMerger`] merges files on their content model; without one, Git's line
+//! merge decides.
 
+mod merge;
 mod namespace;
 
+pub use merge::{FileMerger, GroupFiles, GroupMerge};
 pub use namespace::RefNamespace;
 
 /// A failed or refused Git operation.

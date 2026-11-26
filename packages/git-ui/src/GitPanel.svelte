@@ -669,7 +669,7 @@
               ? "encrypted in this browser"
               : host.backend.kind === "tauri"
                 ? "in the system keychain"
-                : "in memory"}), never in the collection.
+                : "in memory"}), never in the {host.brand.scopeNoun}.
           </p>
         </div>
         {#snippet footer()}
@@ -722,15 +722,15 @@
           {/if}
         {/snippet}
       </EmptyState>
-      {#if host.backend.kind === "web"}
-        <p class="hint center">In the browser, the repository must be the collection folder itself: the app cannot see the folders above it.</p>
+      {#if host.backend.kind === "web" && host.brand.webRepositoryHint}
+        <p class="hint center">{host.brand.webRepositoryHint}</p>
       {/if}
     </div>
   {:else}
     <div class="repo" data-testid="git-repo">
       <Card padding="sm">
         <div class="repo-line">
-          <span class="repo-icon" aria-hidden="true"><Icon name="collection" size="sm" /></span>
+          <span class="repo-icon" aria-hidden="true"><Icon name="library" size="sm" /></span>
           <span class="repo-name" data-testid="git-repo-name" use:tooltip={`${GLOSSARY.repository.label}: ${GLOSSARY.repository.text}`}>{name}</span>
           <IconButton
             icon="help"
@@ -992,7 +992,7 @@
         if (cloneUrl.trim()) void clone();
       }}
     >
-      <Card padding="sm" icon="pull" title="Clone a repository" description={host.backend.kind === "web" ? "Opens the clone as the collection; pick the folder to clone into." : "Opens the clone as the collection."}>
+      <Card padding="sm" icon="pull" title="Clone a repository" description={host.backend.kind === "web" ? `Opens the clone as the ${host.brand.scopeNoun}; pick the folder to clone into.` : `Opens the clone as the ${host.brand.scopeNoun}.`}>
         <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
         {#if busy === "clone"}<Progress size="sm" label="Cloning…" />{/if}
         {#snippet footer()}

@@ -33,7 +33,7 @@ export { default as TextArea } from "./TextArea.svelte";
 export { default as TextField } from "./TextField.svelte";
 export { default as Tooltip } from "./Tooltip.svelte";
 
-export { ICON_NAMES, ICONS, iconFor, isIconName, type IconName } from "./icons";
+export { ICON_NAMES, ICONS, iconFor, isIconName, registerIconAliases, type IconName } from "./icons";
 export type { MenuEntry, MenuHeading, MenuItem, MenuSeparator } from "./menu";
 export type { Placement } from "./position";
 export { tooltip, type TooltipOptions } from "./tooltip";

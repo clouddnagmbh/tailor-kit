@@ -163,7 +163,7 @@ describe("selection and sync", () => {
 });
 
 describe("semantic diff of one file", () => {
-  it("keeps the changes of the file, also when the collection sits in a folder", () => {
+  it("keeps the changes of the file, also when the owner's root sits in a folder", () => {
     const change = (file: string) => ({ target: { kind: "request" as const, path: file }, change: { kind: "modified" as const }, file, name: file, fields: [] });
     const diff = { changes: [change("get.yml"), change("users/get.yml")], files: [{ path: "users/get.yml", status: "modified" as const, covered: false }] };
     expect(semanticFor(diff as never, "/api/users/get.yml")).toEqual({ changes: [diff.changes[1]], files: diff.files });

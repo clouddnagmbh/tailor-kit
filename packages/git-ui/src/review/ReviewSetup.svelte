@@ -120,14 +120,14 @@
 <section class="setup" data-testid="review-setup" aria-label="Pull-request review setup">
   <header>
     <h2>Review setup</h2>
-    <p class="muted">Pull and merge requests are read from the Git host of this collection, with your own token.</p>
+    <p class="muted">Pull and merge requests are read from the Git host of this {gitHost.brand.scopeNoun}, with your own token.</p>
   </header>
 
   {#if repo === null}
     <div data-testid="review-no-host">
       <Banner tone="info">
-        The origin of this collection is not on a Git host the app knows. <code>github.com</code> and <code>gitlab.com</code> work as they are;
-        add a self-hosted GitHub Enterprise or GitLab below. Hosts are kept on this device only, never in the collection.
+        The origin of this {gitHost.brand.scopeNoun} is not on a Git host the app knows. <code>github.com</code> and <code>gitlab.com</code> work as they are;
+        add a self-hosted GitHub Enterprise or GitLab below. Hosts are kept on this device only, never in the {gitHost.brand.scopeNoun}.
       </Banner>
     </div>
   {/if}

@@ -95,7 +95,7 @@ export const ICONS = {
   grpc: Network,
   websocket: ArrowDownUp,
   sse: RadioTower,
-  collection: Library,
+  library: Library,
   folder: Folder,
   environment: Layers,
   mcp: Bot,
@@ -179,9 +179,22 @@ export type IconName = keyof typeof ICONS;
 
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];
 
-export const isIconName = (name: unknown): name is IconName => typeof name === "string" && Object.hasOwn(ICONS, name);
+const ALIASES = new Map<string, IconName>();
+
+/** Lets a product keep an icon name its extensions already use (`collection` → `library`)
+ *  without the kit knowing the product's words. A real icon name is never shadowed. */
+export function registerIconAliases(aliases: Record<string, IconName>): void {
+  for (const [alias, name] of Object.entries(aliases)) {
+    if (!Object.hasOwn(ICONS, alias)) ALIASES.set(alias, name);
+  }
+}
+
+const resolve = (name: unknown): IconName | undefined =>
+  typeof name !== "string" ? undefined : Object.hasOwn(ICONS, name) ? (name as IconName) : ALIASES.get(name);
+
+export const isIconName = (name: unknown): name is IconName => resolve(name) !== undefined;
 
 /** The icon for a name from outside (extensions pass strings); unknown names get `fallback`. */
 export function iconFor(name: string | undefined, fallback: IconName = "spark"): Component<Record<string, unknown>> {
-  return isIconName(name) ? ICONS[name] : ICONS[fallback];
+  return ICONS[resolve(name) ?? fallback];
 }

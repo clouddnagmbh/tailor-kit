@@ -24,7 +24,7 @@ use rt_format::diff::FieldPath;
 pub use tk_review::{
     CiCheck, CiState, CiStatus, GithubProvider, GitlabProvider, NewPullRequest, NewReviewComment,
     PullRequest, PullState, ReviewError, ReviewHost, ReviewKind, ReviewRepo, ReviewSession,
-    ReviewSubmission, ReviewVerdict, TOKEN_COLLECTION, TOKEN_VARIABLE, combine, normalize_hosts,
+    ReviewSubmission, ReviewVerdict, TOKEN_SPACE, TOKEN_VARIABLE, combine, normalize_hosts,
 };
 
 use crate::SecretKey;

@@ -12,7 +12,7 @@ import type { ProvidedGitExtensions } from "./extensions";
 import type { GitBrand, GitContent, GitDialog, GitHost } from "./host";
 import type { GitView } from "./views.svelte";
 
-export const TEST_BRAND: GitBrand = { productName: "TestTailor", commitMime: "application/x-testtailor-commit", refNamespace: "testtailor" };
+export const TEST_BRAND: GitBrand = { productName: "TestTailor", commitMime: "application/x-testtailor-commit", refNamespace: "testtailor", scopeNoun: "repository", webRepositoryHint: null };
 
 export interface TestGitHost extends GitHost {
   /** What the views asked for, in order. */

@@ -6,7 +6,7 @@
 // dates, search, and the actions of the context menus with the wizard presets of strand G
 // (`../wizards/open.ts`) and the views of strand H (`compare`, `diff`).
 
-import type { CollectionDiff, GitGraphCommit, GitRef } from "../types";
+import type { ChangeTarget, ContentDiff, GitGraphCommit, GitRef } from "../types";
 import type { GitView } from "../views.svelte";
 import type { GitWizardRequest } from "../wizards/open";
 
@@ -221,10 +221,10 @@ export function syncText(ref: GitRef): string {
   return parts.length > 0 ? `${parts.join(", ")} (${ref.upstream})` : `In step with ${ref.upstream}`;
 }
 
-/** The part of a collection's semantic diff that is about the repository file `path` (leading
- *  `/`; the diff's files are relative to the collection, which may sit in a folder of the
- *  repository): the longest collection path that `path` ends with. */
-export function semanticFor(diff: CollectionDiff, path: string): CollectionDiff {
+/** The part of an owner's semantic diff that is about the repository file `path` (leading
+ *  `/`; the diff's files are relative to the owner's root, which may sit in a folder of the
+ *  repository): the longest owner path that `path` ends with. */
+export function semanticFor<T extends ChangeTarget>(diff: ContentDiff<T>, path: string): ContentDiff<T> {
   const fits = (f: string) => path === `/${f}` || path.endsWith(`/${f}`);
   let file: string | null = null;
   for (const f of [...diff.changes.map((c) => c.file), ...diff.files.map((x) => x.path)]) {

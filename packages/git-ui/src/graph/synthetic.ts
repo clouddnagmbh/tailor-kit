@@ -62,8 +62,8 @@ function oidOf(n: number, seed: number): string {
   return out.slice(0, 40);
 }
 
-/** A history of `count` commits (at least 2). */
-export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000): SyntheticRepo {
+/** A history of `count` commits (at least 2); `firstSummary` is the message of the first. */
+export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firstSummary = "Start the project"): SyntheticRepo {
   const rnd = random(seed);
   const pick = <T>(list: readonly T[]) => list[Math.floor(rnd() * list.length)];
   const made: SyntheticCommit[] = [];
@@ -81,7 +81,7 @@ export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000): Syn
     });
     return oid;
   };
-  let main = commit([], "Start the API collection");
+  let main = commit([], firstSummary);
   let docs: string | null = null;
   const docsAt = Math.max(2, Math.floor(count * 0.3));
   const features: { name: string; tip: string }[] = [];

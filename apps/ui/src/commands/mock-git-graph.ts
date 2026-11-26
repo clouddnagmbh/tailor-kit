@@ -102,7 +102,7 @@ function fromRepo(git: MockGit): GraphSource {
 }
 
 function synthetic(count: number): GraphSource {
-  const repo = syntheticRepo(count, 14);
+  const repo = syntheticRepo(count, 14, undefined, "Start the API collection");
   const main = repo.branches[0].oid;
   const firstParent = repo.commits.find((c) => c.oid === main)?.parents[0] ?? main;
   const refs: GitRef[] = [

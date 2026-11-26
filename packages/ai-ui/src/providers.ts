@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 16 interface: the providers the settings dialog offers and what each can do, the same
 // table as `rt_app::ai::AiProviderKind::{ALL, label, capabilities}` (a test compares it with the
 // contract fixture). Owner: strand A.
 
-import type { AiCapabilities, AiProviderKind } from "../commands/types";
+import type { AiCapabilities, AiProviderKind } from "./types";
 
 export interface AiProviderInfo {
   kind: AiProviderKind;

@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- The frame of the AI assistant's dialogs (wave 8, strand E): modal, Escape closes unless
      busy. The content brings its own buttons. -->
 <script lang="ts">

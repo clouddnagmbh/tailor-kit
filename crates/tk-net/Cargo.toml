@@ -64,6 +64,9 @@ serde_json = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
+# `#[tokio::test]` in the transport tests; in a product workspace another crate may switch
+# these on, in the kit alone nothing does.
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [lints]
 workspace = true

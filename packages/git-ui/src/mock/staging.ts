@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 15, strand F: the index of the mock's Git (`GitApi.indexDiff`, `stage`, `unstage`,
 // `stagePatch`, `unstagePatch`, `discardPatch`, `commitStaged`, `verify`, `config`).
 //
 // The mock keeps a text per file (`blob`): the index is a map path → staged text (or `null`
 // for a staged deletion); a path without an entry is "as in HEAD". Line selection is the same
-// code the web app uses (`line-selection.ts`). The mock's commits are request-based, so
-// `commitStaged` commits whole request files only: it refuses a request file that is staged
-// in part, and files that are not requests stay staged. Nothing is signed: `verify` says
+// code the web app uses (`line-selection.ts`). The mock's commits are model-based, so
+// `commitStaged` commits whole files of the model only: it refuses a file that is staged
+// in part, and files that are not in the model stay staged. Nothing is signed: `verify` says
 // `unsigned`. `discardPatch` changes the file as the index views see it (the rest of the
 // mock's working tree is read-only).
 
-import { BackendError } from "./backend";
-import { applyLineSelection, chosenLines } from "./line-selection";
-import { lineDiff, type MockGit } from "./mock-git";
-import type { GitCommit, GitDiff, GitIndexDiff, GitPatchRequest, GitPatchSide, GitSignatureCheck } from "./types";
-import type { GitIndexMethods } from "./git-methods";
+import { BackendError } from "../api";
+import { applyLineSelection, chosenLines } from "../line-selection";
+import { lineDiff, type MockGit } from "./git";
+import type { GitCommit, GitDiff, GitIndexDiff, GitPatchRequest, GitPatchSide, GitSignatureCheck } from "../types";
+import type { GitIndexMethods } from "../git-methods";
 
 const err = (message: string) => new BackendError("git", message);
 
@@ -36,7 +37,8 @@ const BINARY = "\u0000binary";
 
 const slash = (p: string) => (p.startsWith("/") ? p : `/${p}`);
 
-export function mockGitIndex(git: MockGit): GitIndexMethods {
+export function mockGitIndex<S>(git: MockGit<S>): GitIndexMethods {
+  const { fixtures } = git;
   /** Staged text by path; `null`: staged deletion. */
   const index = new Map<string, string | null>();
   /** Working files `discardPatch` changed (the mock's working tree is read-only otherwise). */
@@ -128,7 +130,7 @@ export function mockGitIndex(git: MockGit): GitIndexMethods {
         const request = requests.get(p);
         if (!request) continue;
         if (text !== (await textAt(null, p))) {
-          throw err(`${p} is staged in part: the mock commits whole request files. Stage the whole file.`);
+          throw err(`${p} is staged in part: the mock commits whole ${fixtures.fileNoun}s. Stage the whole file.`);
         }
         paths.push(request);
       }

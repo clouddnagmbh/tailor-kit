@@ -1,68 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 15, strand B: the working copy, file tree and file contents of the mock's Git
 // (`GitApi.workingCopy`, `fileTree`, `blob`), from `MockGit`'s public methods.
 //
-// The mock's repository root is the demo collection, so every request file is a collection
-// file (the status of `MockGit` says which changed). Next to them the mock repository holds a
-// few other files, so the viewers have something to show: a README and a guide (text), a logo
-// (an image that changed), a binary file, a Git LFS pointer, a file deleted in the working tree,
-// a new note and an ignored log. They exist from the first commit on and only change in the
-// working tree; every revision shows the committed version.
+// The repository the mock stands for holds the product's modelled files (`MockGit` says which
+// changed) and, next to them, the files of `MockFixtures.extraFiles`, so the viewers have
+// something to show (text, an image that changed, a binary, a Git LFS pointer, a file deleted in
+// the working tree, a new note, an ignored log). They exist from the first commit on and only
+// change in the working tree; every revision shows the committed version.
 
-import { BackendError } from "./backend";
-import { DEMO_ID } from "./mock-collections";
-import type { MockGit } from "./mock-git";
-import type { GitBlob, GitFileState, GitTreeEntry, GitWorkingCopy, GitWorkingFile } from "./types";
-import type { GitWorkingMethods } from "./git-methods";
+import { BackendError } from "../api";
+import type { MockExtraFile } from "./content";
+import type { MockGit } from "./git";
+import type { GitBlob, GitFileState, GitTreeEntry, GitWorkingCopy, GitWorkingFile } from "../types";
+import type { GitWorkingMethods } from "../git-methods";
 
-/** The id of the mock repository (`mock-collections.ts`). */
-export const MOCK_REPOSITORY = "mock://demo";
+interface Extra extends MockExtraFile {}
 
-/** 24 × 16 px blue, and the same with an orange square (valid PNGs). */
-export const LOGO_OLD =
-  "iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAGklEQVR42mPQiDpBFcQwatCoQaMGjRpEGQIAjqjvEGSqPNsAAAAASUVORK5CYII=";
-export const LOGO_NEW =
-  "iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAIElEQVR42mPQiDpBFcQwogz60CNCEI0aNGrQCM4i5CEAArsJX6x4MK4AAAAASUVORK5CYII=";
-
-interface Extra {
-  text?: string;
-  base64?: string;
-  media?: string;
-  /** Binary without a viewer: its size. */
-  binary?: number;
-}
-
-const LFS = (oid: string, size: number) => `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
-
-const COMMITTED: Record<string, Extra> = {
-  "/.gitignore": { text: "*.log\n" },
-  "/README.md": { text: "# Demo API\n\nRequests for the demo service.\nSee the docs folder for the guides.\n" },
-  "/docs/guide.md": { text: "# Guide\n\nSend a request with Mod+Enter.\n" },
-  "/assets/logo.png": { base64: LOGO_OLD, media: "image/png" },
-  "/assets/model.glb": { text: LFS("1f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a79881f2e3d4c5b6a7988", 4_194_304) },
-  "/data/blob.bin": { binary: 2048 },
-  "/legacy/old.txt": { text: "Replaced by docs/guide.md.\n" },
-};
-
-/** What the working tree holds instead: `null` deletes the file. */
-const WORKING: Record<string, Extra | null> = {
-  "/README.md": { text: "# Demo API\n\nRequests for the demo service.\nSee the guides folder for the walkthroughs.\n" },
-  "/assets/logo.png": { base64: LOGO_NEW, media: "image/png" },
-  "/assets/model.glb": { text: LFS("9a8b7c6d5e4f30219a8b7c6d5e4f30219a8b7c6d5e4f30219a8b7c6d5e4f3021", 5_242_880) },
-  "/data/blob.bin": { binary: 4096 },
-  "/legacy/old.txt": null,
-  "/notes/todo.md": { text: "- document the retry policy\n- add a request for /health\n" },
-  "/build.log": { text: "built in 3.2 s\n" },
-};
-
-const IGNORED = new Set(["/build.log"]);
+const LFS_MARK = "version https://git-lfs.github.com/spec/v1";
 
 const SIZE = (e: Extra): number => (e.binary ?? (e.base64 ? Math.floor((e.base64.length * 3) / 4) : (e.text?.length ?? 0)));
 
 function blobOf(path: string, rev: string | undefined, extra: Extra): GitBlob {
-  const lfs = extra.text?.startsWith("version https://git-lfs.github.com/spec/v1") ?? false;
+  const lfs = extra.text?.startsWith(LFS_MARK) ?? false;
   const image = extra.media?.startsWith("image/") ?? false;
   return {
     path,
@@ -80,7 +42,11 @@ function blobOf(path: string, rev: string | undefined, extra: Extra): GitBlob {
 
 const NOT_REPO = () => new BackendError("git", "This folder is not a Git repository.");
 
-export function mockGitFiles(git: MockGit): GitWorkingMethods {
+export function mockGitFiles<S>(git: MockGit<S>): GitWorkingMethods {
+  const { fixtures } = git;
+  const COMMITTED = fixtures.extraFiles.committed;
+  const WORKING = fixtures.extraFiles.working;
+  const IGNORED = new Set(fixtures.extraFiles.ignored);
   async function committed(): Promise<boolean> {
     return (await git.log(1)).length > 0;
   }
@@ -123,12 +89,12 @@ export function mockGitFiles(git: MockGit): GitWorkingMethods {
           path,
           state,
           unstaged: state !== "conflicted",
-          ...(requests.has(path) ? { collection: DEMO_ID } : {}),
+          ...(requests.has(path) ? fixtures.tag(path.slice(1), "working") : {}),
         }))
         .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
       const hasHead = await committed();
       return {
-        repository: MOCK_REPOSITORY,
+        repository: fixtures.repository,
         branch: status.branch,
         upstream: status.upstream,
         ahead: status.ahead,

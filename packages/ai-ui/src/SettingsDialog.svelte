@@ -1,20 +1,23 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- AI assistant settings (wave 8; profiles in wave 16): a list of profiles (one model behind
      one provider each), which profile does the quick and which the demanding tasks, when the
      "what will be sent" preview shows, and whether the assistant may be used in this
-     collection. No provider is chosen in advance; the assistant stays off until one is saved.
+     scope (collection, repository). No provider is chosen in advance; the assistant stays off until one is saved.
      Keys go to the keychain (desktop) or the encrypted browser store (web) and never come back:
      the dialog only learns whether one is set. -->
 <script lang="ts">
   import { untrack } from "svelte";
 
-  import type { AiPreviewMode, AiProviderKind, AiSettings } from "../commands/types";
-  import { Badge, Button, Dialog, DialogFooter, Icon, IconButton, SegmentedControl, Select, Switch, TextField } from "../ui";
-  import type { AiState } from "./ai.svelte";
-  import { AI_PROVIDERS, providerInfo } from "./providers";
+  import { Badge, Button, Dialog, DialogFooter, Icon, IconButton, SegmentedControl, Select, Switch, TextField } from "@tailor-kit/ui";
 
-  let { ai }: { ai: AiState } = $props();
+  import { getAiHost } from "./host";
+  import { AI_PROVIDERS, providerInfo } from "./providers";
+  import type { AiPreviewMode, AiProviderKind, AiSettings } from "./types";
+
+  const ai = getAiHost();
+  const brand = ai.brand;
 
   interface Draft {
     id: string;
@@ -71,7 +74,7 @@
   let error = $state<string | null>(null);
   let allowed = $state(true);
   let fileOff = $state(false);
-  let hasCollection = $state(false);
+  let hasScope = $state(false);
 
   function blank(): Draft {
     const taken = new Set(drafts.map((d) => d.id));
@@ -83,7 +86,7 @@
 
   if (drafts.length === 0) drafts.push(blank());
 
-  // Whether keys are set, and the collection's switch: asked once, on open.
+  // Whether keys are set, and the policy's switch: asked once, on open.
   void (async () => {
     for (const d of drafts) {
       if (!d.saved) continue;
@@ -94,9 +97,9 @@
       const p = await ai.backend.ai.policy();
       fileOff = p.file_off;
       allowed = !p.device_off;
-      hasCollection = true;
+      hasScope = true;
     } catch {
-      hasCollection = false;
+      hasScope = false;
     }
   })();
 
@@ -225,7 +228,7 @@
   size="lg"
   testid="ai-settings"
   onclose={() => !busy && ai.close()}
-  description="Use your own key or a model on your computer. RequestTailor has no AI service of its own."
+  description="Use your own key or a model on your computer. {brand.productName} has no AI service of its own."
 >
   <div class="stack">
     <section aria-label="Profiles">
@@ -289,7 +292,7 @@
             <p class="muted" data-testid="ai-local-note">Models on your own computer keep your data there. Tool use depends on the model.</p>
           {:else if !info?.capabilities.browser_direct && ai.backend.kind === "web"}
             <p class="muted" data-testid="ai-companion-note">
-              {info?.label} does not allow calls from a web page. In the web app this needs the RequestTailor companion (<code>rt agent</code>).
+              {info?.label} does not allow calls from a web page. In the web app this needs the {brand.productName} companion{#if brand.companionCommand} (<code>{brand.companionCommand}</code>){/if}.
             </p>
           {/if}
         {/if}
@@ -318,14 +321,14 @@
       <p class="muted">The preview is always shown the first time a profile is used. It lists everything that leaves this app.</p>
     </section>
 
-    {#if hasCollection}
-      <section aria-label="This collection">
-        <h3>This collection</h3>
+    {#if hasScope}
+      <section aria-label={`This ${brand.scopeNoun}`}>
+        <h3>This {brand.scopeNoun}</h3>
         <Switch
-          label="Allow the AI assistant in this collection"
+          label={`Allow the AI assistant in this ${brand.scopeNoun}`}
           description={fileOff
-            ? "The team turned it off in opencollection.yml (extensions.requesttailor.ai.enabled: false). That applies to everyone."
-            : "Turn it off here if this collection must never go to an AI provider. This device only."}
+            ? brand.fileOffNote
+            : `Turn it off here if this ${brand.scopeNoun} must never go to an AI provider. This device only.`}
           checked={allowed && !fileOff}
           disabled={fileOff || busy}
           data-testid="ai-allow"
@@ -335,10 +338,7 @@
     {/if}
 
     <p class="muted" data-testid="ai-privacy">
-      What is sent: only when you ask, the task, the request (method, URL, headers, body, scripts) and for explain and tests the
-      response, to the provider above and nowhere else. Secret values are replaced by *** before anything leaves this app, and so
-      are credentials typed into headers, URLs or bodies. Proposals are shown to you first and never saved by the assistant. What
-      the provider does with the data is up to your agreement with them.
+      {brand.sentText}
     </p>
     {#if error}<p class="error" role="alert" data-testid="ai-settings-error"><Icon name="error" size="sm" /> {error}</p>{/if}
   </div>

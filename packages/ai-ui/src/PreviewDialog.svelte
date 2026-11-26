@@ -1,16 +1,18 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- "What will be sent" (wave 16): the exact, masked call before it leaves, readable: where it
      goes, how much, how many secret values were replaced (those places are marked), the
      instructions, the messages and the tools. "Show the raw call" shows the JSON. Send or
      Cancel; Escape cancels and nothing is sent. The result is `{ send, remember }`. -->
 <script lang="ts">
-  import type { AiPreview } from "../commands/types";
-  import type { ExtensionDialogProps } from "../extensions";
-  import { Badge, Button, Checkbox, DialogFooter, Icon } from "../ui";
-  import { segments } from "./preview";
+  import { Badge, Button, Checkbox, DialogFooter, Icon } from "@tailor-kit/ui";
 
-  let { close, props }: ExtensionDialogProps = $props();
+  import { segments } from "./preview";
+  import type { AiPreview } from "./types";
+
+  /** What a dialog hosted by the product gets (`ExtensionDialogProps` of RequestTailor, `GitDialogProps`). */
+  let { close, props }: { close: (result?: unknown) => void; props: Record<string, unknown> } = $props();
   const preview = $derived(props.preview as AiPreview);
   let raw = $state(false);
   let remember = $state(false);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // A small Markdown subset for the assistant's answers (wave 8, strand E): paragraphs,
 // headings, bullet and numbered lists, fenced code, and inline `code`, **bold** and *italic*.

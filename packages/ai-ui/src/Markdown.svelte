@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- The assistant's Markdown, as text nodes only (`markdown.ts`). Wave 8, strand E. -->
 <script lang="ts">
   import { parseMarkdown, type Span } from "./markdown";

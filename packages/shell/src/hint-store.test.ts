@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HintStore } from "./hint-store";
+import { createShellStorage } from "./storage";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const data = new Map(Object.entries(initial));
@@ -15,22 +16,24 @@ function memoryStorage(initial: Record<string, string> = {}) {
   };
 }
 
-describe("hint store (wave 14)", () => {
+const storage = createShellStorage("test.shell.");
+
+describe("hint store", () => {
   beforeEach(() => vi.stubGlobal("localStorage", memoryStorage()));
   afterEach(() => vi.unstubAllGlobals());
 
   it("remembers a dismissal across a reload", () => {
-    const a = new HintStore();
+    const a = new HintStore(storage);
     expect(a.has("x/tip")).toBe(false);
     a.dismiss("x/tip");
     expect(a.has("x/tip")).toBe(true);
-    const reloaded = new HintStore();
+    const reloaded = new HintStore(storage);
     expect(reloaded.has("x/tip")).toBe(true);
     expect(reloaded.has("x/other")).toBe(false);
   });
 
   it("tells subscribers about a dismissal", () => {
-    const store = new HintStore();
+    const store = new HintStore(storage);
     const seen: number[] = [];
     store.dismissed.subscribe((s) => seen.push(s.size));
     store.dismiss("a");
@@ -40,8 +43,8 @@ describe("hint store (wave 14)", () => {
 
   it("ignores rubbish in the storage", () => {
     for (const raw of ["{not json", '{"a":1}', "[1,2]", "null"]) {
-      vi.stubGlobal("localStorage", memoryStorage({ "rt.shell.hints.dismissed": raw }));
-      const store = new HintStore();
+      vi.stubGlobal("localStorage", memoryStorage({ "test.shell.hints.dismissed": raw }));
+      const store = new HintStore(storage);
       expect(store.has("a")).toBe(false);
       store.dismiss("a");
       expect(store.has("a")).toBe(true);
@@ -59,10 +62,10 @@ describe("hint store (wave 14)", () => {
       removeItem: () => {},
     };
     vi.stubGlobal("localStorage", broken);
-    const store = new HintStore();
+    const store = new HintStore(storage);
     expect(() => store.dismiss("a")).not.toThrow();
     expect(store.has("a")).toBe(true);
     vi.stubGlobal("localStorage", undefined);
-    expect(() => new HintStore().dismiss("b")).not.toThrow();
+    expect(() => new HintStore(storage).dismiss("b")).not.toThrow();
   });
 });

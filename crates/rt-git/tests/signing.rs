@@ -364,6 +364,7 @@ fn a_signer_may_decline_and_may_fail() {
     let head = ref_id(f.dir(), "refs/heads/main");
     let err = repo
         .commit("never", &paths(&["notes.txt"]), None)
+        .map_err(AppError::from)
         .unwrap_err();
     assert!(err.to_string().contains("locked"), "{err}");
     assert_eq!(ref_id(f.dir(), "refs/heads/main"), head);

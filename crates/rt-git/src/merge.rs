@@ -642,7 +642,11 @@ impl Repo {
                 ..MergeState::default()
             });
         }
-        rt_app::merges::state(&self.head_files()?, &stages, merging)
+        Ok(rt_app::merges::state(
+            &self.head_files()?,
+            &stages,
+            merging,
+        )?)
     }
 
     /// Resolves the merge in progress with `choices` (`MergeApi.resolve`): every conflicted

@@ -32,6 +32,8 @@ base64 = "0.22"
 # Line selection for the index operations (the diff the app shows, `rt_app::git::text_diff`).
 similar = "3"
 rt-app = { path = "../rt-app" }
+# Seam N7: errors of the Git core (moves to tailor-kit with this crate).
+tk-git-types = { path = "../tk-git-types" }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

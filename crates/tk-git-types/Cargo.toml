@@ -1,0 +1,16 @@
+[package]
+name = "tk-git-types"
+description = "Tailor Kit: Git types shared by RequestTailor and GitTailor (no I/O)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Builds on every target (also wasm32 and iOS): types only, no I/O.
+
+[dependencies]
+thiserror = "2"
+
+[lints]
+workspace = true

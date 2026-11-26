@@ -300,7 +300,7 @@ pub fn blocked(
 }
 
 /// Error for [`blocked`] paths (shown relative to the collection where possible).
-pub fn blocked_error(repo: &Repo, what: &str, paths: &[BString]) -> rt_app::AppError {
+pub fn blocked_error(repo: &Repo, what: &str, paths: &[BString]) -> crate::util::GitError {
     let mut names: Vec<String> = paths
         .iter()
         .take(5)

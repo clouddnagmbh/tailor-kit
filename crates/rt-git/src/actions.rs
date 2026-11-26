@@ -27,7 +27,6 @@ use gix::ObjectId;
 use gix::bstr::ByteSlice;
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
-use rt_app::AppError;
 use rt_app::git::actions::{
     GitAction, GitActionResult, GitBlock, GitBlockReason, GitPlan, GitRefMove, GitUndoEntry,
     UNDO_KEEP, backup_ref,
@@ -37,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::credentials::CredentialSource;
 use crate::repo::{Repo, Underway};
-use crate::util::{Context, Result, fail};
+use crate::util::{Context, GitError, Result, fail};
 
 /// What an action may use besides the repository.
 pub struct ActionOptions<'a> {
@@ -627,13 +626,13 @@ impl Repo {
         Ok(names)
     }
 
-    /// Plans `action` again and runs it when nothing blocks it (else `AppError::Git` with the
+    /// Plans `action` again and runs it when nothing blocks it (else `GitError::Failed` with the
     /// plan's message). Undoable actions write backups and a journal entry first.
     pub fn apply(&self, action: &GitAction, opts: &ActionOptions<'_>) -> Result<GitActionResult> {
         let cx = self.ctx(opts.unsaved)?;
         let plan = self.plan_with(&cx, action)?;
         if let Some(b) = &plan.blocked {
-            return Err(AppError::Git(b.message.clone()));
+            return Err(GitError::Failed(b.message.clone()));
         }
         let time = now();
         let mut run = Run {

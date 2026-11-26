@@ -19,7 +19,7 @@ use rt_app::review::{ReviewKind, review_base_ref, review_ref};
 use crate::credentials::{CredentialSource, Credentials};
 use crate::net::{Auth, Endpoint, endpoint, ensure_tls};
 use crate::repo::Repo;
-use crate::util::{Context, Result, fail};
+use crate::util::{Context, GitError, Result, fail};
 
 /// The user's token as the HTTPS password for the review host (and only that host): GitHub
 /// takes any user name next to a token, GitLab wants `oauth2`.
@@ -170,7 +170,7 @@ impl Repo {
         match result {
             Ok(()) => Ok(()),
             Err(_) if asked.get() => Err(target.auth_error(&auth)),
-            Err(e) => Err(AppError::Git(format!(
+            Err(e) => Err(GitError::Failed(format!(
                 "cannot fetch the pull request from {}: {e}",
                 target.host
             ))),

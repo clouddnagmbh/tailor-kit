@@ -135,6 +135,7 @@ fn clear_errors() {
         &NoCredentials,
         &opts(),
     )
+    .map_err(AppError::from)
     .unwrap_err();
     assert!(msg(e).contains("is not a Git repository"));
     let e = clone_with_home(
@@ -144,9 +145,12 @@ fn clear_errors() {
         &NoCredentials,
         &opts(),
     )
+    .map_err(AppError::from)
     .unwrap_err();
     assert!(msg(e).contains("does not exist"));
-    let e = clone_with_home("~/x.git", parent.path(), None, &NoCredentials, &opts()).unwrap_err();
+    let e = clone_with_home("~/x.git", parent.path(), None, &NoCredentials, &opts())
+        .map_err(AppError::from)
+        .unwrap_err();
     assert!(msg(e).contains("home folder"));
     // Nothing was left behind.
     assert_eq!(std::fs::read_dir(parent.path()).unwrap().count(), 0);

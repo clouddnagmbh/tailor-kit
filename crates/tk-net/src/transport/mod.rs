@@ -5,6 +5,8 @@
 //! native builds use their own HTTP stack and the WASM build uses the browser's `fetch`.
 //!
 //! Owner: wave 2, strand A.
+//!
+//! Moved from `rt_core::transport` (seam N4); `rt_core::transport` re-exports it.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -39,7 +41,7 @@ pub struct SendOptions {
     pub timeout: Option<Duration>,
     pub follow_redirects: bool,
     pub max_redirects: u32,
-    /// TLS client certificate (mTLS), chosen per host by `crate::tls::client_identity`.
+    /// TLS client certificate (mTLS), chosen per host by the caller.
     /// Transports that cannot present one (the browser's `fetch`) fail with
     /// `TransportError::Tls` instead of sending without it. Wave 5, strand D.
     pub client_identity: Option<ClientIdentity>,
@@ -56,7 +58,7 @@ impl Default for SendOptions {
     }
 }
 
-/// Key material of a TLS client certificate, read from the collection's files. The
+/// Key material of a TLS client certificate, read from files the caller resolved. The
 /// passphrase is resolved (it is masked like a secret value wherever it could show).
 #[derive(Clone, PartialEq, Eq)]
 pub enum ClientIdentity {
@@ -270,8 +272,6 @@ pub async fn collect(
         total: started.elapsed(),
     })
 }
-
-pub mod companion;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests;

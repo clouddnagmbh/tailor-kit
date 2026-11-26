@@ -26,62 +26,40 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
+tk-net = { path = "../tk-net" }
 url = "2"
 # std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
 web-time = "1"
 
-# Transport (strand A), native: own HTTP/1.1 + HTTP/2 stack, rustls with ring (no aws-lc),
-# OS trust store via rustls-platform-verifier.
+# Transport and sessions live in tk-net (seam N4); rt-core re-exports them at the old paths.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-http = "1"
-http-body-util = "0.1"
-hyper = { version = "1", features = ["client", "http1", "http2"] }
-hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "tokio"] }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-platform-verifier = "0.7"
 tokio = { version = "1", features = ["net", "time", "rt"] }
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
-tower-service = "0.3"
-# Client certificates (strand D, wave 5): PKCS#12 archives and encrypted PKCS#8 keys.
-p12-keystore = "0.4"
-pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
-# WebSocket sessions (wave 8, strand A): framing and the client handshake over our own TCP/TLS
-# stream (no TLS or connect features). MIT / MIT OR Apache-2.0.
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
-# Transport (strand A), browser: fetch via web-sys.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # The browser's crypto.getRandomValues for getrandom (OAuth 2.0 PKCE and state).
 getrandom = { version = "0.2", features = ["js"] }
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = [
-  "AbortController",
-  "AbortSignal",
-  "DomException",
-  "Headers",
-  "ReadableStream",
-  "ReadableStreamDefaultReader",
-  "RequestInit",
-  "RequestRedirect",
-  "Response",
-  "ResponseType",
-  "Url",
-] }
 
 [dev-dependencies]
 serde_json = "1"
 
 # Transport tests (strand A): in-process test server, local TLS + HTTP/2 server.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-hyper = { version = "1", features = ["server", "http1", "http2"] }
-hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "server", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "server-auto", "http1", "http2", "tokio"] }
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 rt-testserver = { path = "../rt-testserver" }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+p12-keystore = "0.4"
+pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [lints]
 workspace = true

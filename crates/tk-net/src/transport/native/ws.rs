@@ -37,7 +37,7 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 use web_time::Instant;
 
 use super::NativeTransport;
-use crate::services::LocalBoxFuture;
+use crate::LocalBoxFuture;
 use crate::stream::{Frame, StreamEvent, StreamHead, StreamOpen, StreamSession};
 use crate::transport::{HttpVersion, TransportError};
 

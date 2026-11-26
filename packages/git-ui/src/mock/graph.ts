@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 14, strand F: the commit graph of the mock's Git (`GitApi.graph`, `refs`, `changes`,
 // `fileDiff`), from `MockGit.graphData()` (copies, never the private fields) and the public
@@ -10,12 +11,12 @@
 // (`git/graph/synthetic.ts`) for the graph budgets and for looking at a large graph; its files
 // are documents and code, shown as line diffs.
 
-import { BackendError } from "./backend";
-import { DEMO_ID } from "./mock-collections";
-import { lineDiff, type MockGit } from "./mock-git";
-import type { GitChangedFile, GitDiff, GitFileChange, GitRef, RequestSpec } from "./types";
-import type { GitGraphMethods } from "./wave14-stubs";
-import { dateOrder, graphPage, reachable, sortChanges, sortRefs, syntheticRepo, type GraphSource } from "@tailor-kit/git-ui";
+import { BackendError } from "../api";
+import { lineDiff, type MockGit } from "./git";
+import type { GitChangedFile, GitDiff, GitFileChange, GitRef } from "../types";
+import type { GitApi } from "../api";
+import { dateOrder, graphPage, reachable, sortChanges, sortRefs, type GraphSource } from "../graph/order";
+import { syntheticRepo } from "../graph/synthetic";
 
 /** What `graphData()` has since strand G (tags, a detached `HEAD`); optional until then. */
 interface GraphDataExtra {
@@ -23,12 +24,8 @@ interface GraphDataExtra {
   detached?: string | null;
 }
 
-/** `rt_app::git::tree_path` for the mock's request files. */
-function collectionFile(path: string): boolean {
-  const parts = path.split("/");
-  const file = parts.pop() ?? "";
-  return file.endsWith(".yml") && parts.every((p) => p !== "" && !p.startsWith(".") && p !== "node_modules");
-}
+/** The commit-graph methods of `GitApi`. */
+export type GitGraphMethods = Pick<GitApi, "graph" | "refs" | "changes" | "fileDiff">;
 
 function ancestors(parents: Map<string, string[]>, oid: string): Set<string> {
   const seen = new Set<string>();
@@ -79,12 +76,12 @@ function refsOf(data: ReturnType<MockGit["graphData"]> & GraphDataExtra): { refs
   return { refs: sortRefs(refs), head: branchHead ?? detachedAt, detached: detachedAt !== null };
 }
 
-function fromRepo(git: MockGit): GraphSource {
+function fromRepo<S>(git: MockGit<S>): GraphSource {
   const data = git.graphData() as ReturnType<MockGit["graphData"]> & GraphDataExtra;
   // `scenario("none")`: no branch, no HEAD, nothing to show; the native and web backends fail
   // the same way outside a repository.
   if (data.current === null && !data.detached && data.branches.length === 0) {
-    throw new BackendError("git", "The collection is not in a Git repository.");
+    throw new BackendError("git", `The ${git.fixtures.scope} is not in a Git repository.`);
   }
   const { refs, head, detached } = refsOf(data);
   // In the mock a commit's author is a display name; derive a stable address for the avatar.
@@ -101,8 +98,8 @@ function fromRepo(git: MockGit): GraphSource {
   return { commits, refs, head, detached };
 }
 
-function synthetic(count: number): GraphSource {
-  const repo = syntheticRepo(count, 14);
+function synthetic(count: number, first: string): GraphSource {
+  const repo = syntheticRepo(count, 14, undefined, first);
   const main = repo.branches[0].oid;
   const firstParent = repo.commits.find((c) => c.oid === main)?.parents[0] ?? main;
   const refs: GitRef[] = [
@@ -130,11 +127,10 @@ const SYNTHETIC_FILES: { path: string; change: GitFileChange; binary?: boolean }
   { path: "/assets/logo.png", change: "modified", binary: true },
 ];
 
-const textOf = (spec: RequestSpec | undefined | null) => (spec ? JSON.stringify(spec, null, 2) : null);
-
-export function mockGitGraph(git: MockGit): GitGraphMethods {
+export function mockGitGraph<S>(git: MockGit<S>): GitGraphMethods {
+  const textOf = (spec: S | undefined | null) => (spec ? JSON.stringify(spec, null, 2) : null);
   const wanted = Number(new URLSearchParams(globalThis.location?.search ?? "").get("graph") ?? "");
-  const big = Number.isInteger(wanted) && wanted >= 2 ? synthetic(wanted) : null;
+  const big = Number.isInteger(wanted) && wanted >= 2 ? synthetic(wanted, git.fixtures.syntheticFirst) : null;
   const source = (): GraphSource => big ?? fromRepo(git);
   const known = (src: GraphSource, rev: string) => src.commits.some((c) => c.oid === rev);
   const resolve = async (src: GraphSource, rev: string): Promise<string> => {
@@ -171,14 +167,14 @@ export function mockGitGraph(git: MockGit): GitGraphMethods {
         return sortChanges(files.map((f) => ({ path: f.path, change: f.change, binary: Boolean(f.binary) })));
       }
       const base = from ? await resolve(src, from) : (commit.parents[0] ?? null);
-      const before = base ? git.specsAt(base) : new Map<string, RequestSpec>();
-      const after = git.specsAt(target);
+      const before = base ? git.filesAt(base) : new Map<string, S>();
+      const after = git.filesAt(target);
       const out: GitChangedFile[] = [];
       const file = (path: string, change: GitFileChange): GitChangedFile => ({
         path: `/${path}`,
         change,
         binary: false,
-        ...(collectionFile(path) ? { collection: DEMO_ID } : {}),
+        ...git.fixtures.tag(path, "graph"),
       });
       for (const [path, spec] of after) {
         const old = before.get(path);

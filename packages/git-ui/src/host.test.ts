@@ -24,7 +24,7 @@ const content = (activeOwner: string | null): GitContent =>
   ({ activeOwner, owners: OWNERS, activate: async () => {}, tree: null, activeFile: null }) as unknown as GitContent;
 
 describe("GitHost without content (plain Git)", () => {
-  it("shows no field view and offers no collection to open, whatever a file says", () => {
+  it("shows no field view and offers no owner to open, whatever a file says", () => {
     const host = testGitHost();
     expect(host.content).toBeUndefined();
     expect(fileOwnership(host, "a")).toEqual({ semantic: false, activatable: null, other: undefined });

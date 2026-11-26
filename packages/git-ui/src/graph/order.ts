@@ -149,6 +149,6 @@ export function graphPage(source: GraphSource, query: GitGraphQuery): GitGraphPa
 }
 
 /** Sorted by path, like the native shell. */
-export function sortChanges(files: GitChangedFile[]): GitChangedFile[] {
+export function sortChanges<F extends GitChangedFile>(files: F[]): F[] {
   return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }

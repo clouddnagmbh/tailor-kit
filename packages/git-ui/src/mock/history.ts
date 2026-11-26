@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 15, strand C: blame, history search and the reflog on the mock's Git (`GitApi.blame`,
-// `searchHistory`, `reflog`). The mock keeps request files, so "files" here are the requests of
-// the demo collection, as the text `renderSpec` gives them; paths are `/<request file>`.
+// `searchHistory`, `reflog`). The mock keeps the product's files, so "files" here are the files of
+// the demo repository, as the text `MockContent.render` gives them; paths are `/<file>`.
 //
 // The reflog is made from what the mock knows: the actions in its journal (every move of a ref
 // they made, newest first) and below them the first-parent history of the ref, as "commit:"
 // entries. Like Git's own, it can show commits no branch points to any more.
 
-import { BackendError } from "./backend";
-import { lineDiff, renderSpec, type MockGit } from "./mock-git";
-import type { Core } from "./mock-git-actions";
+import { BackendError } from "../api";
+import { lineDiff, type MockGit, type Tree } from "./git";
+import type { Core } from "./actions";
 import type {
   GitBlame,
   GitBlameHunk,
@@ -23,12 +24,9 @@ import type {
   GitHistoryPage,
   GitHistoryQuery,
   GitReflogEntry,
-  RequestSpec,
-} from "./types";
-import type { GitHistoryMethods } from "./git-methods";
-import { dateOrder } from "@tailor-kit/git-ui";
-
-type Tree = Map<string, RequestSpec>;
+} from "../types";
+import type { GitHistoryMethods } from "../git-methods";
+import { dateOrder } from "../graph/order";
 
 const err = (message: string) => new BackendError("git", message);
 const unslash = (p: string) => p.replace(/^\/+/, "");
@@ -64,11 +62,11 @@ function unchanged(diff: GitDiff, newLines: number): number[] {
   return map;
 }
 
-export function mockGitHistory(git: MockGit): GitHistoryMethods {
-  const c = git as unknown as Core;
-  const text = (tree: Tree, path: string) => {
+export function mockGitHistory<S>(git: MockGit<S>): GitHistoryMethods {
+  const c = git as unknown as Core<S>;
+  const text = (tree: Tree<S>, path: string) => {
     const spec = tree.get(path);
-    return spec ? renderSpec(spec) : null;
+    return spec ? c.content.render(spec) : null;
   };
   const resolve = (rev: string): string => {
     c.start();
@@ -206,7 +204,7 @@ export function mockGitHistory(git: MockGit): GitHistoryMethods {
       if (want || content) {
         if (row.parents.length > 1) continue;
         const now = c.store.get(row.oid)!.tree;
-        const before = row.parents[0] ? c.store.get(row.parents[0])!.tree : new Map<string, RequestSpec>();
+        const before = row.parents[0] ? c.store.get(row.parents[0])!.tree : new Map<string, S>();
         const changed = [...new Set([...now.keys(), ...before.keys()])].filter((p) => text(now, p) !== text(before, p) && `/${p}`.startsWith(want || "/")).sort();
         if (changed.length === 0) continue;
         if (want) matched.push("path");

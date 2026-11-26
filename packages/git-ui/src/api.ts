@@ -78,7 +78,7 @@ export interface GitOwnerInfo {
  *  `git-auth` (message: the host) when credentials are missing or wrong.
  *  Web: `push`, `pull` and `clone` go through the companion and reject with kind
  *  `unsupported` without it. Owners in wave 4: strands A1 (desktop) and A2 (web, UI). */
-export interface GitApi {
+export interface GitApi<F extends object = {}> {
   status(): Promise<GitStatus>;
   /** `HEAD` → working tree of one file. */
   diff(path: string): Promise<GitDiff>;
@@ -142,7 +142,7 @@ export interface GitApi {
   /** All branches, remote branches, tags and a detached `HEAD`, with ahead/behind. */
   refs(): Promise<GitRef[]>;
   /** Files changed from `from` to `to` (`null`: `to` against its first parent). */
-  changes(from: string | null, to: string): Promise<GitChangedFile[]>;
+  changes(from: string | null, to: string): Promise<GitChangedFile<F>[]>;
   /** Line diff of any file between two revs (`to` `null`: the working tree). */
   fileDiff(from: string | null, to: string | null, path: string): Promise<GitDiff>;
   // Strand G: the wizards. `plan` only reads; `apply` plans again and rejects with kind `git`
@@ -161,7 +161,7 @@ export interface GitApi {
   // leading `/`. Until a strand lands, a method rejects with kind `unsupported`.
   // Strand B: the working copy, the file tree, file contents.
   /** Status of the whole working tree against `HEAD` (and the index). */
-  workingCopy(): Promise<GitWorkingCopy>;
+  workingCopy(): Promise<GitWorkingCopy<F>>;
   /** One folder of the file tree (`dir` `"/"` for the root): at `rev`, or (`null`) the working
    *  tree with states and ignored files. */
   fileTree(rev: string | null, dir: string): Promise<GitTreeEntry[]>;
@@ -207,21 +207,21 @@ export interface GitApi {
 
 /** Wave 15 (interface, strand A): repositories in the collection set. The list is part of
  *  `CollectionSet` (`repositories`, `active_repository`); these calls change it. */
-export interface GitRepositoryApi {
+export interface GitRepositoryApi<R extends object = {}> {
   /** Makes repository `id` the active one (every `GitApi` command then acts on it). */
-  activate(id: string): Promise<RepositoryEntry>;
+  activate(id: string): Promise<RepositoryEntry<R>>;
   /** Branch, ahead/behind and number of changes of any repository of the set. */
   summary(id: string): Promise<GitRepoSummary>;
   /** Clones into a new folder, adds it as a root and makes it active; `null` if cancelled. */
-  clone(request: GitCloneRequest): Promise<RepositoryEntry | null>;
+  clone(request: GitCloneRequest): Promise<RepositoryEntry<R> | null>;
   /** Folder picker, then `git init` there (an existing repository is refused), added as a root
    *  and made active; `null` if cancelled. */
-  init(): Promise<RepositoryEntry | null>;
+  init(): Promise<RepositoryEntry<R> | null>;
   /** Desktop only (absent in the browser and the mock): adds an existing folder that is a Git
    *  repository (a worktree or submodule checkout an extension made, say) as a root and makes
    *  its repository active, without a picker. Refused for a folder outside Git. The UI then
    *  calls `AppState.adoptRepository(entry)`. */
-  openPath?(path: string): Promise<RepositoryEntry>;
+  openPath?(path: string): Promise<RepositoryEntry<R>>;
 }
 
 

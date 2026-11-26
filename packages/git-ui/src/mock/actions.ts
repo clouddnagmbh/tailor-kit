@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
+// Copyright 2026 The Tailor Kit Authors
 
 // Wave 14, strand G: the wizards' actions on the mock's Git (`GitApi.plan`, `apply`, `undo`,
 // `remotes`, `stashes`, `lastAction`), with the rules every shell follows (see
@@ -9,11 +10,13 @@
 //
 // The state lives in `MockGit` (mock-git.ts, also strand G's); this module reads and writes its
 // fields through `Core` (the same object, typed with the members it uses). Merges, cherry-picks
-// and reverts merge request files field by field, as the real semantic merge does for
-// collection files.
+// and reverts merge the files the way the product's `MockContent.merge` says (field by field
+// for a model, whole files for text).
 
-import { BackendError } from "./backend";
-import type { MockGit } from "./mock-git";
+import { BackendError } from "../api";
+import type { MockGit } from "./git";
+import type { Commit, Tree } from "./git";
+import type { MockContent, MockFileMerge, MockFixtures } from "./content";
 import type {
   GitAction,
   GitActionResult,
@@ -28,22 +31,12 @@ import type {
   GitRemote,
   GitStash,
   GitUndoEntry,
-  RequestSpec,
-} from "./types";
-import type { GitActionMethods } from "./wave14-stubs";
-import { refNameProblem } from "@tailor-kit/git-ui";
+} from "../types";
+import type { GitApi } from "../api";
+import { refNameProblem } from "../wizards/refname";
 
-type Tree = Map<string, RequestSpec>;
-
-/** A commit of the mock (as in mock-git.ts). */
-interface Commit {
-  oid: string;
-  parents: string[];
-  tree: Tree;
-  message: string;
-  author: string;
-  time: number;
-}
+/** The wizard methods of `GitApi`. */
+export type GitActionMethods = Pick<GitApi, "remotes" | "stashes" | "plan" | "apply" | "lastAction" | "undo">;
 
 /** A parked change: a commit of the whole working tree on top of `HEAD`. */
 export interface MockStash {
@@ -55,7 +48,7 @@ export interface MockStash {
 }
 
 /** Everything undo needs: the state before the action. */
-interface Snapshot {
+interface Snapshot<S> {
   branches: Map<string, string | null>;
   current: string | null;
   detachedAt: string | null;
@@ -64,19 +57,22 @@ interface Snapshot {
   remoteUrls: Map<string, string>;
   hadRemote: boolean;
   stashes: MockStash[];
-  work: Tree;
+  work: Tree<S>;
   mergeHead: string | null;
   conflicts: Set<string>;
 }
 
-export interface MockJournalEntry {
+export interface MockJournalEntry<S = string> {
   entry: GitUndoEntry;
-  before: Snapshot;
+  before: Snapshot<S>;
 }
 
-/** The members of `MockGit` this module uses (mock-git.ts declares them). */
-export interface Core {
-  store: Map<string, Commit>;
+/** The members of `MockGit` this module (and its siblings, and the scenarios) use: the same
+ *  object, typed, because its state is private to everyone else. */
+export interface Core<S = string> {
+  readonly content: MockContent<S>;
+  readonly fixtures: MockFixtures<S>;
+  store: Map<string, Commit<S>>;
   branchesMap: Map<string, string | null>;
   current: string | null;
   detachedAt: string | null;
@@ -94,20 +90,22 @@ export interface Core {
   mergeMessage: string | null;
   conflicts: Set<string>;
   stashList: MockStash[];
-  journal: MockJournalEntry[];
+  journal: MockJournalEntry<S>[];
   backups: Map<string, string>;
   calls: string[];
-  work: Tree;
+  work: Tree<S>;
   isRepo: boolean;
   head(): string | null;
-  headTree(): Tree;
+  headTree(): Tree<S>;
   files(): GitFile[];
   resolveRev(rev: string): string;
-  newCommit(parents: string[], tree: Tree, message: string, author: string): string;
+  localCommit(files: Record<string, S | null>, message: string, author: string): string;
+  remoteCommit(files: Record<string, S | null>, message?: string, branch?: string): string;
+  newCommit(parents: string[], tree: Tree<S>, message: string, author: string): string;
   ancestors(oid: string): Set<string>;
   baseOf(a: string, b: string): string | null;
-  moveWork(from: Tree, to: Tree): void;
-  writeWork(path: string, spec: RequestSpec | undefined): void;
+  moveWork(from: Tree<S>, to: Tree<S>): void;
+  writeWork(path: string, spec: S | undefined): void;
   toCommit(oid: string): GitCommit;
   requireAuthFor(host: string): void;
   identity(): Promise<{ name: string; email: string } | null>;
@@ -118,13 +116,11 @@ export interface Core {
 }
 
 const clone = <T>(v: T): T => structuredClone(v);
-const json = (v: unknown) => JSON.stringify(v ?? null);
-const same = (a: RequestSpec | undefined, b: RequestSpec | undefined) => json(a) === json(b);
 const short = (oid: string) => oid.slice(0, 7);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const slash = (p: string) => (p.startsWith("/") ? p : `/${p}`);
 const unslash = (p: string) => p.replace(/^\//, "");
-const subjectOf = (c: Commit) => c.message.split("\n")[0];
+const subjectOf = (c: Commit<unknown>) => c.message.split("\n")[0];
 
 /** Selects repository paths: a file, or a folder with everything under it; no paths: all. */
 function selection(paths: string[]): (p: string) => boolean {
@@ -132,55 +128,14 @@ function selection(paths: string[]): (p: string) => boolean {
   return (p) => roots.length === 0 || roots.some((r) => p === r || p.startsWith(`${r}/`));
 }
 
-/** One file of a three-way merge, field by field for requests. */
-interface FileMerge {
-  path: string;
-  merged: RequestSpec | undefined;
-  clean: number;
-  conflicts: string[];
-}
-
-function mergeFile(path: string, b: RequestSpec | undefined, o: RequestSpec | undefined, t: RequestSpec | undefined): FileMerge | null {
-  if (same(o, t) || same(b, t)) return null;
-  if (same(b, o)) return { path, merged: t, clean: 1, conflicts: [] };
-  if (!o || !t || !b) {
-    return { path, merged: o, clean: 0, conflicts: [!o ? "deleted here, changed there" : !t ? "changed here, deleted there" : "added on both sides"] };
-  }
-  const merged: Record<string, unknown> = { ...o };
-  let clean = 0;
-  const conflicts: string[] = [];
-  const bo = b as unknown as Record<string, unknown>;
-  const oo = o as unknown as Record<string, unknown>;
-  const to = t as unknown as Record<string, unknown>;
-  for (const key of new Set([...Object.keys(bo), ...Object.keys(oo), ...Object.keys(to)])) {
-    const [bv, ov, tv] = [json(bo[key]), json(oo[key]), json(to[key])];
-    if (ov === tv || bv === tv) continue;
-    if (bv === ov) {
-      merged[key] = clone(to[key]);
-      clean++;
-    } else conflicts.push(key);
-  }
-  return { path, merged: conflicts.length ? o : (merged as unknown as RequestSpec), clean, conflicts };
-}
-
-/** Exported for the tests: the field-by-field merge of whole trees. */
-export function mergeTrees(base: Tree, ours: Tree, theirs: Tree): FileMerge[] {
-  const out: FileMerge[] = [];
+/** Exported for the tests: the merge of whole trees, file by file as `content` says. */
+export function mergeTrees<S>(content: MockContent<S>, base: Tree<S>, ours: Tree<S>, theirs: Tree<S>): MockFileMerge<S>[] {
+  const out: MockFileMerge<S>[] = [];
   for (const p of [...new Set([...base.keys(), ...ours.keys(), ...theirs.keys()])].sort()) {
-    const m = mergeFile(p, base.get(p), ours.get(p), theirs.get(p));
+    const m = content.merge(p, base.get(p), ours.get(p), theirs.get(p));
     if (m) out.push(m);
   }
   return out;
-}
-
-const preview = (files: FileMerge[]): GitMergeFile[] =>
-  files.map((f) => ({ path: slash(f.path), semantic: f.path.endsWith(".yml"), clean: f.clean, conflicts: f.conflicts }));
-
-function diffPaths(a: Tree, b: Tree): string[] {
-  return [...new Set([...a.keys(), ...b.keys()])]
-    .filter((x) => !same(a.get(x), b.get(x)))
-    .sort()
-    .map(slash);
 }
 
 export interface MockGitActions extends GitActionMethods {
@@ -188,8 +143,17 @@ export interface MockGitActions extends GitActionMethods {
   backupRefs(): Map<string, string>;
 }
 
-export function mockGitActions(git: MockGit): MockGitActions {
-  const c = git as unknown as Core;
+export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
+  const c = git as unknown as Core<S>;
+  const same = (a: S | undefined, b: S | undefined) => c.content.identical(a, b);
+  const mergeTreesOf = (base: Tree<S>, ours: Tree<S>, theirs: Tree<S>) => mergeTrees(c.content, base, ours, theirs);
+  const preview = (files: MockFileMerge<S>[]): GitMergeFile[] =>
+    files.map((f) => ({ path: slash(f.path), semantic: c.fixtures.semantic(f.path), clean: f.clean, conflicts: f.conflicts }));
+  const diffPaths = (a: Tree<S>, b: Tree<S>): string[] =>
+    [...new Set([...a.keys(), ...b.keys()])]
+      .filter((x) => !same(a.get(x), b.get(x)))
+      .sort()
+      .map(slash);
   const now = () => Math.floor(Date.now() / 1000);
   let seq = 0;
 
@@ -217,7 +181,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
   };
 
   /** Files with uncommitted changes that differ between `from` and `to` (would be overwritten). */
-  const touched = (from: Tree, to: Tree) =>
+  const touched = (from: Tree<S>, to: Tree<S>) =>
     c
       .files()
       .map((f) => f.path)
@@ -232,7 +196,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
   };
 
   const branchRef = (name: string) => `refs/heads/${name}`;
-  const snapshot = (): Snapshot => ({
+  const snapshot = (): Snapshot<S> => ({
     branches: new Map(c.branchesMap),
     current: c.current,
     detachedAt: c.detachedAt,
@@ -390,13 +354,13 @@ export function mockGitActions(git: MockGit): MockGitActions {
         }
         const ff = c.ancestors(from).has(head);
         const incoming = commitsBetween(from, head);
-        const baseTree = c.store.get(c.baseOf(head, from) ?? "")?.tree ?? new Map<string, RequestSpec>();
-        const files = ff ? [] : mergeTrees(baseTree, c.headTree(), c.store.get(from)!.tree);
+        const baseTree = c.store.get(c.baseOf(head, from) ?? "")?.tree ?? new Map<string, S>();
+        const files = ff ? [] : mergeTreesOf(baseTree, c.headTree(), c.store.get(from)!.tree);
         const ffFiles = diffPaths(c.headTree(), c.store.get(from)!.tree);
         p.merge = {
           fast_forward: ff,
           commits: incoming,
-          files: ff ? ffFiles.map((path) => ({ path, semantic: path.endsWith(".yml"), clean: 1, conflicts: [] })) : preview(files),
+          files: ff ? ffFiles.map((path) => ({ path, semantic: c.fixtures.semantic(path), clean: 1, conflicts: [] })) : preview(files),
         };
         const conflicts = files.filter((f) => f.conflicts.length > 0).length;
         p.steps.push(
@@ -552,8 +516,8 @@ export function mockGitActions(git: MockGit): MockGitActions {
         }
         const pick = action.action === "cherry-pick";
         if (pick && c.ancestors(head).has(oid)) return { ...p, undoable: false, blocked: block("nothing-to-do", `${cur} contains this commit already.`) };
-        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, RequestSpec>();
-        const files = pick ? mergeTrees(parent, c.headTree(), commit.tree) : mergeTrees(commit.tree, c.headTree(), parent);
+        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, S>();
+        const files = pick ? mergeTreesOf(parent, c.headTree(), commit.tree) : mergeTreesOf(commit.tree, c.headTree(), parent);
         const subject = subjectOf(commit);
         p.steps.push(
           pick
@@ -771,7 +735,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
 
   function backupRef(name: string, oid: string | null, t: number, out: string[]) {
     if (!oid) return;
-    const ref = `refs/requesttailor/backup/${t}/${name}`;
+    const ref = `refs/${c.fixtures.refNamespace}/backup/${t}/${name}`;
     c.backups.set(ref, oid);
     out.push(ref);
   }
@@ -779,15 +743,15 @@ export function mockGitActions(git: MockGit): MockGitActions {
   /** Merges `theirsTree` into the working tree over `baseTree`; conflicts leave a merge in
    *  progress (the wave-12 conflict views take over). */
   function threeWay(
-    baseTree: Tree,
-    theirsTree: Tree,
+    baseTree: Tree<S>,
+    theirsTree: Tree<S>,
     kind: "merge" | "cherry-pick" | "revert",
     theirs: string,
     baseOid: string | null,
     message: string,
-  ): { outcome: "conflicts"; paths: string[] } | { merged: Tree } {
+  ): { outcome: "conflicts"; paths: string[] } | { merged: Tree<S> } {
     const ours = clone(c.headTree());
-    const files = mergeTrees(baseTree, ours, theirsTree);
+    const files = mergeTreesOf(baseTree, ours, theirsTree);
     const merged = clone(ours);
     for (const f of files) {
       if (f.merged) merged.set(f.path, clone(f.merged));
@@ -874,7 +838,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
         }
         const who = await author();
         const message = `Merge ${action.from} into ${cur}`;
-        const baseTree = c.store.get(c.baseOf(head!, from) ?? "")?.tree ?? new Map<string, RequestSpec>();
+        const baseTree = c.store.get(c.baseOf(head!, from) ?? "")?.tree ?? new Map<string, S>();
         const r = threeWay(baseTree, c.store.get(from)!.tree, "merge", from, null, message);
         if ("outcome" in r) return { message: `Merging ${action.from} needs your decision in ${plural(r.paths.length, "file")}.`, outcome: r, reload: true };
         const oid = c.newCommit([head!, from], r.merged, message, who);
@@ -946,7 +910,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
         const whole = (action.paths ?? []).length === 0;
         const tree = whole ? clone(c.work) : clone(c.headTree());
         if (!whole) for (const f of files) (c.work.has(f) ? tree.set(f, clone(c.work.get(f)!)) : tree.delete(f));
-        const oid = c.newCommit(head ? [head] : [], tree, message, "RequestTailor");
+        const oid = c.newCommit(head ? [head] : [], tree, message, c.fixtures.author);
         c.stashList.unshift({ oid, message, time: t, branch: cur, files });
         if (whole) c.moveWork(clone(c.work), c.headTree());
         else for (const f of files) c.writeWork(f, c.headTree().get(f));
@@ -955,7 +919,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
       case "unstash": {
         const s = c.stashList[action.index];
         const tree = c.store.get(s.oid)!.tree;
-        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
         if (!action.keep) backupRef("stash", s.oid, t, backups);
         for (const f of s.files) c.writeWork(f, tree.get(f));
         if (!action.keep) c.stashList.splice(action.index, 1);
@@ -970,7 +934,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
       case "cherry-pick": {
         const oid = c.resolveRev(action.commit);
         const commit = c.store.get(oid)!;
-        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, RequestSpec>();
+        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, S>();
         const pick = action.action === "cherry-pick";
         const subject = subjectOf(commit);
         const message = pick ? commit.message : `Revert "${subject}"`;
@@ -994,14 +958,14 @@ export function mockGitActions(git: MockGit): MockGitActions {
         const target = c.resolveRev(action.target);
         backupRef(cur!, head, t, backups);
         if (action.mode === "discard") {
-          backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+          backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
           c.moveWork(clone(c.work), c.store.get(target)!.tree);
         }
         c.branchesMap.set(cur!, target);
         return { message: `Moved ${cur} to ${short(target)}.`, reload: action.mode === "discard" };
       }
       case "discard": {
-        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
         const headTree = c.headTree();
         for (const f of p.files ?? []) c.writeWork(unslash(f), headTree.get(unslash(f)));
         return { message: `Discarded the changes to ${plural((p.files ?? []).length, "file")}.`, reload: true };
@@ -1019,7 +983,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
         return { message: `Replaced the last commit on ${cur} with "${text.split("\n")[0]}".`, reload: false };
       }
       case "abort": {
-        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
         c.moveWork(clone(c.work), c.headTree());
         c.mergeHead = null;
         c.mergeKind = null;
@@ -1031,7 +995,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
       case "restore-files": {
         const at = c.resolveRev(action.rev);
         const want = c.store.get(at)!.tree;
-        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", "RequestTailor"), t, backups);
+        backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
         for (const f of p.files ?? []) c.writeWork(unslash(f), want.get(unslash(f)));
         return { message: `Restored ${plural((p.files ?? []).length, "file")} from ${short(at)}.`, reload: true };
       }
@@ -1079,7 +1043,7 @@ export function mockGitActions(git: MockGit): MockGitActions {
     return [...names];
   }
 
-  function staleness(e: MockJournalEntry): string | undefined {
+  function staleness(e: MockJournalEntry<S>): string | undefined {
     const moved = e.entry.refs.filter((r) => refValue(r.name) !== r.after);
     if (moved.length === 0) return undefined;
     const names = moved.map((r) => (r.name === "HEAD" ? "the current commit" : r.name.replace(/^refs\/(heads|tags)\//, "")));

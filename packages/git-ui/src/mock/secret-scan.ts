@@ -7,7 +7,7 @@
 // and secret fields. `{{variables}}`, `***` and lines with `rt-scan:allow` are not findings.
 // The real scanner (Rust, also in the browser through rt-wasm) is tested on its own.
 
-import type { SecretFinding } from "./types";
+import type { SecretFinding } from "../types";
 
 const FORMATS: [RegExp, string][] = [
   [/\bgh[pousr]_[A-Za-z0-9]{36}\b/, "GitHub token"],

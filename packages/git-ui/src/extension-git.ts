@@ -171,7 +171,8 @@ export function extensionStaging(
 
 /** Actions on two revisions selected together in the graph. */
 export function extensionRangeActions(provided: ProvidedExtensions | null, target: RevisionRangeTarget): ExtensionActionRef<ExtensionAction>[] {
-  return collect(provided, "range actions", (x) => x.rangeActions?.(provided!.ctx, target));
+  const full = provided?.rangeTarget ? provided.rangeTarget(target) : target;
+  return collect(provided, "range actions", (x) => x.rangeActions?.(provided!.ctx, full));
 }
 
 /** The key a dismissal of `ref` is stored under: just the hint for scope `device` (the default),

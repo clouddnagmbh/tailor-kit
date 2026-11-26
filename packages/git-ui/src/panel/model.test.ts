@@ -172,7 +172,7 @@ describe("recent commits", () => {
     expect(shortAgo(now / 1000 - 2 * 86400, now)).toBe("2d");
     expect(repoName("https://git.example.com/acme/demo-api.git", "/x/y")).toBe("demo-api");
     expect(repoName("git@github.com:acme/api.git", null)).toBe("api");
-    expect(repoName(null, "/Users/me/collections/payments")).toBe("payments");
+    expect(repoName(null, "/Users/me/projects/payments")).toBe("payments");
     expect(repoName(null, null)).toBe("Repository");
   });
 });

@@ -4,12 +4,12 @@
 // Palette entries of pull-request review (wave 12, strand E). They open the review view
 // (`GitViews`); the pull request is chosen there.
 
+import type { GitHost } from "../git/host";
 import type { GitViews } from "../git/views.svelte";
 import type { Command } from "../shell/commands";
-import type { AppState } from "../state/app.svelte";
 import { openNewPull } from "./open-new-pull";
 
-export function reviewCommands(app: AppState, views: GitViews): Command[] {
+export function reviewCommands(host: GitHost, views: GitViews): Command[] {
   return [
     {
       id: "git:review",
@@ -19,7 +19,7 @@ export function reviewCommands(app: AppState, views: GitViews): Command[] {
     {
       id: "git:review-create",
       label: "Create pull request…",
-      run: () => void openNewPull(app),
+      run: () => void openNewPull(host),
     },
   ];
 }

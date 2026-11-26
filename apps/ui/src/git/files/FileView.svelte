@@ -9,7 +9,7 @@
 
   import type { GitBlob, GitTreeEntry } from "../../commands/types";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import FileEditorSwitch from "../extension/FileEditorSwitch.svelte";
   import { Button, EmptyState, SegmentedControl, Spinner, TextField } from "../../ui";
   import BlobView from "../viewers/BlobView.svelte";
@@ -18,7 +18,7 @@
   import { crumbs, normalizePath, revOf } from "./model";
 
   let { path, rev }: { path: string; rev?: string } = $props();
-  const app = getApp();
+  const host = getGitHost();
 
   // The props say where the view starts; later choices are its own.
   let revision = $state<string | null>(untrack(() => rev ?? null));
@@ -57,12 +57,12 @@
     changedState = null;
     if (isRoot || kind === "dir") return;
     try {
-      const next = await app.backend.git.blob(revision, at);
+      const next = await host.backend.git.blob(revision, at);
       if (token !== load) return;
       blob = next;
       if (revision === null) {
         const dir = at.slice(0, at.lastIndexOf("/")) || "/";
-        const list = await app.backend.git.fileTree(null, dir);
+        const list = await host.backend.git.fileTree(null, dir);
         if (token === load) changedState = list.find((e) => e.path === at)?.state ?? null;
       }
     } catch (e) {
@@ -75,7 +75,7 @@
     void revision;
     void kind;
     void reload;
-    void app.loadCount;
+    void host.reloadCount;
     void open();
   });
 
@@ -153,7 +153,7 @@
       {:else}
         {#if !folder}
           <div class="ext" data-testid="file-extension-actions">
-            <ExtensionGitActions target={{ kind: "file", repository: app.activeRepository ?? "", path: at, rev: revision ?? undefined }} label="File actions" />
+            <ExtensionGitActions target={{ kind: "file", repository: host.activeRepository ?? "", path: at, rev: revision ?? undefined }} label="File actions" />
           </div>
         {/if}
         {#if revision === null && changedState && changedState !== "deleted"}

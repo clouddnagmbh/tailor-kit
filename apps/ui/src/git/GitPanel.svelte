@@ -19,7 +19,7 @@
      Rules kept from wave 4: no staging area (every file has a checkbox, checked unless the user
      unchecked it); what changes files waits for unsaved edits to be saved; `git-auth` asks for
      credentials and retries; the first commit asks for the author; the secret scan runs
-     before each commit (`SecretFindings`). Talks to Git only through `app.backend.git`. -->
+     before each commit (`SecretFindings`). Talks to Git only through `host.backend.git`. -->
 <script lang="ts">
   import { tick, untrack } from "svelte";
 
@@ -42,13 +42,12 @@
   import { getExtensions } from "../shell/extension-tabs";
   import ExtensionActions from "../shell/ExtensionActions.svelte";
   import ExtensionGitActions from "../shell/ExtensionGitActions.svelte";
-  import { getApp } from "../state/app.svelte";
-  import { gitApiCommands } from "./api-commands";
-  import CloneFields from "./CloneFields.svelte";
+  import { getGitHost, hasRepository } from "./host";
+    import CloneFields from "./CloneFields.svelte";
   import ConflictView from "./ConflictView.svelte";
   import DiffView from "./DiffView.svelte";
   import { commitMessage, mergeMessage, pullMessage, pushMessage } from "./format";
-  import { GLOSSARY, type GitTerm } from "./glossary";
+  import { GLOSSARY, gitWord, type GitTerm } from "./glossary";
   import {
     changeRows,
     commitLabel,
@@ -87,10 +86,10 @@
   import { openGitWizard, type GitWizardKind } from "./wizards/open";
 
   let { onopen }: { onopen: (info: CollectionInfo) => Promise<void> } = $props();
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
-  const commands = $derived(gitApiCommands(app, views));
-  const git = app.backend.git;
+  const commands = $derived(host.commands(views));
+  const git = host.backend.git;
   const extensions = getExtensions();
   /** Commits loaded for the panel; it shows as many as fit its height. */
   const RECENT = 40;
@@ -109,8 +108,8 @@
   let message = $state("");
   // An extension asked for a message (`AppState.prefillCommitMessage`): shown when the field is empty.
   $effect(() => {
-    if (!app.commitPrefill) return;
-    const text = app.takeCommitPrefill();
+    if (!host.commitPrefill) return;
+    const text = host.takeCommitPrefill();
     if (text !== null && untrack(() => message).trim() === "") message = text;
   });
   /** The merge whose message was pre-filled, so it is filled once. */
@@ -142,11 +141,11 @@
   let cloneOpen = $state(false);
 
   const files = $derived(status?.files ?? []);
-  const rows = $derived(changeRows(files, app.tree));
+  const rows = $derived(changeRows(files, host.content?.tree ?? null));
   const selected = $derived(files.filter((f) => !excluded.includes(f.path)).map((f) => f.path));
   const conflicted = $derived(files.some((f) => f.state === "conflicted"));
   const blocked = $derived(
-    app.dirty.length > 0 ? "Save your changes first: switching branches, pulling and resolving change files." : null,
+    host.unsaved().length > 0 ? "Save your changes first: switching branches, pulling and resolving change files." : null,
   );
   const sit = $derived<GitSituation>(situation(status, branches, recent.length > 0, remotes ? remotes.length : null));
   const sync = $derived(syncState(sit));
@@ -160,14 +159,16 @@
   const compareTargets = $derived(branches.filter((b) => b.name !== current && !b.name.endsWith("/HEAD")));
   const origin = $derived(remotes?.find((r) => r.name === "origin") ?? remotes?.[0] ?? null);
   // A repository root has no collection of its own: the name comes from the active repository.
-  const here = $derived(app.repositories.find((r) => r.id === app.activeRepository));
-  const name = $derived(repoName(origin?.url ?? null, here?.location ?? app.collection?.location ?? null));
+  const ownerLocation = $derived(host.content?.owners.find((c) => c.id === host.content?.activeOwner)?.location);
+  const here = $derived(host.repositories.find((r) => r.id === host.activeRepository));
+  const name = $derived(repoName(origin?.url ?? null, here?.location ?? ownerLocation ?? null));
   /** Other collections of the set in the same repository (strand A fills `repo`). */
   const siblings = $derived.by(() => {
-    const mine = app.collections.find((c) => c.id === app.activeCollection);
-    return mine?.repo ? app.collections.filter((c) => c.repo === mine.repo && c.id !== mine.id) : [];
+    const owners = host.content?.owners ?? [];
+    const mine = owners.find((c) => c.id === host.content?.activeOwner);
+    return mine?.repo ? owners.filter((c) => c.repo === mine.repo && c.id !== mine.id) : [];
   });
-  const repository = $derived(app.activeRepository ?? "");
+  const repository = $derived(host.activeRepository ?? "");
   // A staging view of an extension takes the place of the file list; the form then commits the
   // index (`commitStaged`). Without one, nothing changes: commit without staging.
   const staging = $derived(extensionStaging(extensions, repository));
@@ -241,7 +242,7 @@
   let generation = 0;
   async function refresh(): Promise<void> {
     // A set of repository roots has no collection; Git still works on the active repository.
-    if (!app.collection && !app.activeRepository) return;
+    if (!hasRepository(host)) return;
     const mine = ++generation;
     try {
       const s = await git.status();
@@ -285,12 +286,12 @@
 
   // On open, on every (re)load of the collection and whenever the set of unsaved files
   // changes (a save clears it).
-  const dirtyKey = $derived(app.dirty.join("\n"));
+  const dirtyKey = $derived(host.unsaved().join("\n"));
   $effect(() => {
-    void app.loadCount;
+    void host.reloadCount;
     void dirtyKey;
-    void app.collection;
-    void app.activeRepository;
+    void host.content?.activeOwner;
+    void host.activeRepository;
     untrack(() => {
       findings = [];
       void refresh();
@@ -299,7 +300,7 @@
 
   // A wizard opened from the palette changes Git behind the panel's back: read again when a
   // dialog closes.
-  const dialogOpen = $derived(app.dialog !== null);
+  const dialogOpen = $derived(host.dialogOpen);
   let wasOpen = false;
   $effect(() => {
     const open = dialogOpen;
@@ -335,7 +336,7 @@
     error = null;
     result = null;
     // The wizard reloads the collections itself when the action changed files.
-    const done: GitActionResult | undefined = await openGitWizard(app, { kind, preset });
+    const done: GitActionResult | undefined = await openGitWizard(host, { kind, preset });
     if (done) result = done.message;
     await refresh();
   }
@@ -427,7 +428,7 @@
       act("pull", async () => {
         const upstream = status?.upstream ?? null;
         const r = await git.pull();
-        if (r.outcome !== "up-to-date") await app.reload();
+        if (r.outcome !== "up-to-date") await host.reload();
         // Conflicts: the banner says what to do.
         result = r.outcome === "conflicts" ? null : pullMessage(r, upstream);
       }),
@@ -436,7 +437,7 @@
   const checkout = (branch: string) =>
     act("checkout", async () => {
       await git.checkout(branch);
-      await app.reload();
+      await host.reload();
       result = `Switched to ${branch}.`;
     });
 
@@ -460,7 +461,7 @@
     act("resolve", async () => {
       await git.resolve(path, resolution);
       closeDialog();
-      await app.reload();
+      await host.reload();
       result = `Kept ${resolution === "ours" ? "our" : "their"} version of ${path}.`;
     });
 
@@ -636,7 +637,7 @@
   <p class="gloss" data-testid="git-gloss">
     <strong>{GLOSSARY[term].label}.</strong>
     {GLOSSARY[term].text}
-    <span class="git-word">In Git: <code>{GLOSSARY[term].git}</code></span>
+    <span class="git-word">In Git: <code>{gitWord(term, host.brand)}</code></span>
   </p>
 {/snippet}
 
@@ -664,9 +665,9 @@
           <TextField label="Username" data-testid="git-cred-username" autocomplete="username" bind:value={credUser} />
           <TextField label="Password or token" data-testid="git-cred-password" type="password" autocomplete="current-password" bind:value={credPassword} />
           <p class="hint">
-            Stored on this device ({app.backend.kind === "web"
+            Stored on this device ({host.backend.kind === "web"
               ? "encrypted in this browser"
-              : app.backend.kind === "tauri"
+              : host.backend.kind === "tauri"
                 ? "in the system keychain"
                 : "in memory"}), never in the collection.
           </p>
@@ -721,7 +722,7 @@
           {/if}
         {/snippet}
       </EmptyState>
-      {#if app.backend.kind === "web"}
+      {#if host.backend.kind === "web"}
         <p class="hint center">In the browser, the repository must be the collection folder itself: the app cannot see the folders above it.</p>
       {/if}
     </div>
@@ -991,7 +992,7 @@
         if (cloneUrl.trim()) void clone();
       }}
     >
-      <Card padding="sm" icon="pull" title="Clone a repository" description={app.backend.kind === "web" ? "Opens the clone as the collection; pick the folder to clone into." : "Opens the clone as the collection."}>
+      <Card padding="sm" icon="pull" title="Clone a repository" description={host.backend.kind === "web" ? "Opens the clone as the collection; pick the folder to clone into." : "Opens the clone as the collection."}>
         <CloneFields bind:url={cloneUrl} disabled={busy !== null} />
         {#if busy === "clone"}<Progress size="sm" label="Cloning…" />{/if}
         {#snippet footer()}

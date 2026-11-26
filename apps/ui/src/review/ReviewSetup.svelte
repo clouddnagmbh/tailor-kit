@@ -8,7 +8,7 @@
   import { onMount } from "svelte";
 
   import type { DeviceCodePrompt, ReviewHost, ReviewKind, ReviewRepo } from "../commands/types";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "../git/host";
   import { Banner, Button, Card, Select, TextField } from "../ui";
   import { deviceLoginOffered } from "./model";
 
@@ -27,7 +27,7 @@
     onchange: () => void;
   } = $props();
 
-  const app = getApp();
+  const gitHost = getGitHost();
 
   let hosts = $state<ReviewHost[]>([]);
   let host = $state("");
@@ -48,8 +48,8 @@
   }
 
   async function reload() {
-    hosts = await app.backend.review.hosts();
-    if (repo) hasToken = await app.backend.review.hasToken(repo.host);
+    hosts = await gitHost.backend.review.hosts();
+    if (repo) hasToken = await gitHost.backend.review.hasToken(repo.host);
   }
 
   onMount(() => {
@@ -72,7 +72,7 @@
   const addHost = () =>
     run(async () => {
       const entry: ReviewHost = { host: host.trim(), kind, api: api.trim() };
-      await app.backend.review.setHosts([...hosts.filter((h) => h.host !== entry.host), entry]);
+      await gitHost.backend.review.setHosts([...hosts.filter((h) => h.host !== entry.host), entry]);
       host = "";
       api = "";
       await reload();
@@ -81,7 +81,7 @@
 
   const removeHost = (h: ReviewHost) =>
     run(async () => {
-      await app.backend.review.setHosts(hosts.filter((x) => x.host !== h.host));
+      await gitHost.backend.review.setHosts(hosts.filter((x) => x.host !== h.host));
       await reload();
       onchange();
     });
@@ -89,7 +89,7 @@
   const saveToken = () =>
     run(async () => {
       if (!repo) return;
-      await app.backend.review.setToken(repo.host, token);
+      await gitHost.backend.review.setToken(repo.host, token);
       token = "";
       await reload();
       onchange();
@@ -98,7 +98,7 @@
   const removeToken = () =>
     run(async () => {
       if (!repo) return;
-      await app.backend.review.deleteToken(repo.host);
+      await gitHost.backend.review.deleteToken(repo.host);
       await reload();
       onchange();
     });
@@ -106,9 +106,9 @@
   const signIn = () =>
     run(async () => {
       if (!repo) return;
-      prompt = await app.backend.review.startLogin(repo.host);
+      prompt = await gitHost.backend.review.startLogin(repo.host);
       try {
-        await app.backend.review.finishLogin(repo.host);
+        await gitHost.backend.review.finishLogin(repo.host);
       } finally {
         prompt = null;
       }

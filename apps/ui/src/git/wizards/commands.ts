@@ -7,7 +7,7 @@
 // keyboard path to them.
 
 import type { Command } from "../../shell/commands";
-import type { AppState } from "../../state/app.svelte";
+import { hasRepository, type GitHost } from "../host";
 import type { GitViews } from "../views.svelte";
 import { openGitWizard, wizardTitle, type GitWizardKind } from "./open";
 
@@ -43,15 +43,15 @@ const PALETTE_WIZARDS: GitWizardKind[] = [
 ];
 
 /** Opens a wizard; it reloads the collections itself when the action changed files. */
-async function run(app: AppState, kind: GitWizardKind): Promise<void> {
-  await openGitWizard(app, { kind });
+async function run(host: GitHost, kind: GitWizardKind): Promise<void> {
+  await openGitWizard(host, { kind });
 }
 
-export function gitWizardCommands(app: AppState, views: GitViews): Command[] {
-  if (!app.collection && !app.activeRepository) return [];
+export function gitWizardCommands(host: GitHost, views: GitViews): Command[] {
+  if (!hasRepository(host)) return [];
   return [
     { id: `${WIZARD_COMMAND_PREFIX}history`, label: "Git: History", run: () => views.open({ kind: "graph" }) },
-    { id: `${WIZARD_COMMAND_PREFIX}undo`, label: "Git: Undo last Git action", run: () => run(app, "undo") },
-    ...PALETTE_WIZARDS.map((kind) => ({ id: `${WIZARD_COMMAND_PREFIX}${kind}`, label: `Git: ${wizardTitle(kind)}…`, run: () => run(app, kind) })),
+    { id: `${WIZARD_COMMAND_PREFIX}undo`, label: "Git: Undo last Git action", run: () => run(host, "undo") },
+    ...PALETTE_WIZARDS.map((kind) => ({ id: `${WIZARD_COMMAND_PREFIX}${kind}`, label: `Git: ${wizardTitle(kind)}…`, run: () => run(host, kind) })),
   ];
 }

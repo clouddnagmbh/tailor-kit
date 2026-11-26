@@ -5,11 +5,11 @@
      strand A2. -->
 <script lang="ts">
   import type { GitDiff } from "../commands/types";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "./host";
   import { hunkHeader } from "./format";
 
   let { path, onclose }: { path: string; onclose: () => void } = $props();
-  const app = getApp();
+  const host = getGitHost();
 
   let diff = $state<GitDiff | null>(null);
   let error = $state<string | null>(null);
@@ -18,7 +18,7 @@
     const p = path;
     diff = null;
     error = null;
-    app.backend.git.diff(p).then(
+    host.backend.git.diff(p).then(
       (d) => {
         if (p === path) diff = d;
       },

@@ -3,16 +3,17 @@
 <!-- "Clone repository" tile of the New… dialog (wave 15, strand A): the clone form in the shell's
      dialog frame (`AppState.showDialog`). The clone joins the sidebar. -->
 <script lang="ts">
-  import type { ExtensionDialogProps } from "../extensions";
+  import { getGitHost, type GitDialogProps } from "./host";
   import CloneForm from "./CloneForm.svelte";
 
-  let { ctx, close }: ExtensionDialogProps = $props();
+  let { close }: GitDialogProps = $props();
+  const host = getGitHost();
 </script>
 
 <CloneForm
   oncancel={() => close()}
   ondone={async (entry) => {
     close(entry);
-    await ctx.app.adoptRepository(entry);
+    await host.adoptRepository(entry);
   }}
 />

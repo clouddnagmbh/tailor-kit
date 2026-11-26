@@ -5,7 +5,7 @@
      can pick a folder (`git.pickRepository`, desktop) a "Choose folder…" button fills it;
      where it cannot read local paths (browser) a path gets a hint instead of a failure. -->
 <script lang="ts">
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "./host";
   import { CLONE_PLACEHOLDER, LOCAL_CLONE_UNSUPPORTED, looksLocal } from "../commands/clone-source";
 
   let {
@@ -13,8 +13,8 @@
     disabled = false,
     label = "Clone a repository",
   }: { url: string; disabled?: boolean; label?: string } = $props();
-  const app = getApp();
-  const git = app.backend.git;
+  const host = getGitHost();
+  const git = host.backend.git;
   const canPick = typeof git.pickRepository === "function";
   let error = $state<string | null>(null);
 

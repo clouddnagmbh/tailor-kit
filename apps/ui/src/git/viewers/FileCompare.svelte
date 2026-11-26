@@ -7,7 +7,7 @@
      working tree. -->
 <script lang="ts">
   import type { GitBlob } from "../../commands/types";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { EmptyState, Spinner } from "../../ui";
   import ImageDiff from "./ImageDiff.svelte";
   import MetaDiff from "./MetaDiff.svelte";
@@ -20,7 +20,7 @@
     reload = 0,
     onhunks,
   }: { before: Side | null; after: Side | null; reload?: number; onhunks?: (count: number) => void } = $props();
-  const app = getApp();
+  const host = getGitHost();
 
   let blobs = $state<{ old: GitBlob | null; new: GitBlob | null } | null>(null);
   let error = $state<string | null>(null);
@@ -30,7 +30,7 @@
     void reload;
     blobs = null;
     error = null;
-    const git = app.backend.git;
+    const git = host.backend.git;
     Promise.all([b ? git.blob(b.rev, b.path) : null, a ? git.blob(a.rev, a.path) : null]).then(
       ([old, next]) => {
         if (b === before && a === after) blobs = { old, new: next };

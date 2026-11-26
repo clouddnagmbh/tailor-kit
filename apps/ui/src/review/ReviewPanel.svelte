@@ -7,15 +7,16 @@
   import { onMount } from "svelte";
 
   import type { PullRequest, ReviewRepo } from "../commands/types";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "../git/host";
   import { Avatar, Badge, Banner, Button, Card, Chip, EmptyState } from "../ui";
   import { relativeTime, requestWord, stateLabel } from "./model";
   import { openNewPull } from "./open-new-pull";
-  import PullView from "./PullView.svelte";
   import ReviewSetup from "./ReviewSetup.svelte";
 
   let props: { number?: number } = $props();
-  const app = getApp();
+  const host = getGitHost();
+  // The pull request itself (a field-by-field review) is the host's; without it the list stays.
+  const PullView = $derived(host.content?.components.PullView);
 
   let repo = $state<ReviewRepo | null>(null);
   let detected = $state(false);
@@ -45,13 +46,13 @@
     loading = true;
     error = null;
     try {
-      repo = await app.backend.review.repo();
+      repo = await host.backend.review.repo();
       detected = true;
       if (!repo) return;
-      needsToken = !(await app.backend.review.hasToken(repo.host));
+      needsToken = !(await host.backend.review.hasToken(repo.host));
       if (needsToken) return;
       tokenMessage = null;
-      pulls = await app.backend.review.list();
+      pulls = await host.backend.review.list();
     } catch (e) {
       if (!authProblem(e)) error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -70,7 +71,12 @@
 
 <section class="review" data-testid="review-panel" aria-label="Pull requests">
   {#if current !== null && repo}
-    <PullView number={current} {repo} onback={() => (current = null)} onauth={onAuth} />
+    {#if PullView}
+      <PullView number={current} {repo} onback={() => (current = null)} onauth={onAuth} />
+    {:else}
+      <p class="hint" data-testid="review-no-detail">This build cannot show a pull request itself.</p>
+      <Button size="sm" onclick={() => (current = null)}>Back</Button>
+    {/if}
   {:else if !detected && loading}
     <p class="hint">Looking for the Git host…</p>
   {:else if repo === null || needsToken || showSetup}
@@ -94,7 +100,7 @@
         <span class="muted" data-testid="review-repo">{repo.host} · {repo.project}</span>
       </div>
       <span class="spacer"></span>
-      <Button variant="primary" data-testid="review-new" icon="add" onclick={() => void openNewPull(app).then((made) => made && refresh())}>New {word}</Button>
+      <Button variant="primary" data-testid="review-new" icon="add" onclick={() => void openNewPull(host).then((made) => made && refresh())}>New {word}</Button>
       <Button data-testid="review-refresh" icon="sync" loading={loading} disabled={loading} onclick={() => void refresh()}>{loading ? "Loading…" : "Refresh"}</Button>
       <Button variant="ghost" data-testid="review-settings" icon="settings" onclick={() => (showSetup = true)}>Token and hosts</Button>
     </header>

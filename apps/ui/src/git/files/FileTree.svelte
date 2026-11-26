@@ -9,7 +9,7 @@
   import type { GitTreeEntry } from "../../commands/types";
   import { gitActionEntries } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Badge, Icon, Menu, Spinner, type MenuEntry } from "../../ui";
   import { stateLetter } from "./model";
 
@@ -26,7 +26,7 @@
     onselect: (entry: GitTreeEntry) => void;
     reload?: number;
   } = $props();
-  const app = getApp();
+  const host = getGitHost();
   // Extensions' actions on a file or folder: right click.
   const extensions = getExtensions();
   let menu = $state<{ items: MenuEntry[]; anchor: { x: number; y: number } } | null>(null);
@@ -35,8 +35,8 @@
   function entryMenu(entry: GitTreeEntry, e: MouseEvent) {
     const items = gitActionEntries(
       extensions,
-      { kind: "file", repository: app.activeRepository ?? "", path: entry.path, rev: rev ?? undefined },
-      (m) => (app.error = m),
+      { kind: "file", repository: host.activeRepository ?? "", path: entry.path, rev: rev ?? undefined },
+      (m) => host.notifyError(m),
     ).slice(1);
     if (items.length === 0) return;
     e.preventDefault();
@@ -54,7 +54,7 @@
     const at = generation;
     loading[dir] = true;
     try {
-      const list = await app.backend.git.fileTree(rev, dir);
+      const list = await host.backend.git.fileTree(rev, dir);
       if (at !== generation) return;
       entries[dir] = list;
       delete errors[dir];

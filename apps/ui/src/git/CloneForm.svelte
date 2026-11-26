@@ -7,7 +7,7 @@
 <script lang="ts">
   import { BackendError } from "../commands/backend";
   import type { RepositoryEntry } from "../commands/types";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "./host";
   import CloneFields from "./CloneFields.svelte";
 
   let {
@@ -18,8 +18,8 @@
     /** The repository was cloned into a new folder and added to the sidebar. */
     ondone: (entry: RepositoryEntry) => void | Promise<void>;
   } = $props();
-  const app = getApp();
-  const git = app.backend.git;
+  const host = getGitHost();
+  const git = host.backend.git;
 
   let url = $state("");
   let busy = $state(false);
@@ -40,7 +40,7 @@
         password = "";
       }
       // Wave 15: into the sidebar (the folder picker asks where), not instead of it.
-      const entry = await app.backend.repositories.clone({ url: address });
+      const entry = await host.backend.repositories.clone({ url: address });
       if (entry) await ondone(entry);
     } catch (e) {
       if (e instanceof BackendError && e.kind === "git-auth") {

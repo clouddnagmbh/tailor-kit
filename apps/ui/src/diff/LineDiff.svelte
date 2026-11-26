@@ -5,18 +5,18 @@
 <script lang="ts">
   import type { DiffScope, GitDiff } from "../commands/types";
   import { hunkHeader } from "../git/format";
-  import { getApp } from "../state/app.svelte";
+  import { getGitHost } from "../git/host";
   import { Spinner } from "../ui";
   import { lineDiff } from "./textdiff";
 
   let { scope, path }: { scope: DiffScope; path: string } = $props();
-  const app = getApp();
+  const host = getGitHost();
 
   let diff = $state<GitDiff | null>(null);
   let error = $state<string | null>(null);
 
   async function load(s: DiffScope, p: string): Promise<GitDiff> {
-    const git = app.backend.git;
+    const git = host.backend.git;
     if (s.kind === "working") return git.diff(p);
     const [from, to] = s.kind === "commit" ? [`${s.rev}^`, s.rev] : [s.from, s.to];
     // A root commit has no parent: the file did not exist before it.

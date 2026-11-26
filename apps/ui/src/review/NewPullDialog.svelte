@@ -10,16 +10,16 @@
   import { onMount, untrack } from "svelte";
 
   import type { GitRef, NewPullRequest, PullRequest, ReviewRepo } from "../commands/types";
-  import type { ExtensionDialogProps } from "../extensions";
+  import { getGitHost, type GitDialogProps } from "../git/host";
   import { openGitWizard } from "../git/wizards/open";
   import { openNewPull } from "./open-new-pull";
   import { Banner, Button, Checkbox, DialogFooter, Select, Spinner, TextArea, TextField, type SelectOption } from "../ui";
   import { defaultBase, localBranches, problem as missing, publishState, pullWord, remoteBranches, titleFromBranch } from "./new-pull";
 
-  let { ctx, close, props }: ExtensionDialogProps = $props();
-  const app = untrack(() => ctx.app);
-  const review = app.backend.review;
-  const git = app.backend.git;
+  let { close, props }: GitDialogProps = $props();
+  const host = getGitHost();
+  const review = host.backend.review;
+  const git = host.backend.git;
   const preset = untrack(() => props as { head?: string; base?: string });
 
   let loaded = $state(false);
@@ -78,9 +78,9 @@
 
   async function publish() {
     error = null;
-    const done = await openGitWizard(app, { kind: "publish", preset: { name: head } });
+    const done = await openGitWizard(host, { kind: "publish", preset: { name: head } });
     // The wizard replaced this dialog; open it again on the same branch if it published.
-    if (done) await openNewPull(app, { head, base });
+    if (done) await openNewPull(host, { head, base });
   }
 
   async function create() {
@@ -100,12 +100,12 @@
 
   function seeAll() {
     close(made ?? undefined);
-    app.show({ kind: "git", view: { kind: "review", number: made?.number } });
+    host.show({ kind: "review", number: made?.number });
   }
 
   function setup() {
     close();
-    app.show({ kind: "git", view: { kind: "review" } });
+    host.show({ kind: "review" });
   }
 </script>
 

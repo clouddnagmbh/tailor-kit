@@ -8,7 +8,7 @@
   import type { GitRef, GitReflogEntry } from "../../commands/types";
   import ExtensionGitActions from "../../shell/ExtensionGitActions.svelte";
   import ExtensionGitHint from "../../shell/ExtensionGitHint.svelte";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
   import { Avatar, Badge, Button, EmptyState, Select, Skeleton } from "../../ui";
   import { relativeTime, shortId } from "../graph/model";
   import { getGitViews } from "../views.svelte";
@@ -17,7 +17,7 @@
 
   let { name }: { name?: string } = $props();
 
-  const app = getApp();
+  const host = getGitHost();
   const views = getGitViews();
   /** Entries read, and commits of the history looked at to tell lost from kept. */
   const LIMIT = 200;
@@ -40,7 +40,7 @@
     const mine = ++token;
     error = null;
     try {
-      const git = app.backend.git;
+      const git = host.backend.git;
       const [entries, page] = await Promise.all([git.reflog(ref, LIMIT), git.graph({ skip: 0, limit: GRAPH })]);
       if (mine !== token) return;
       refs = page.refs.length > 0 ? page.refs : refs;
@@ -55,7 +55,7 @@
 
   let key = "";
   $effect(() => {
-    const k = `${app.activeCollection}\0${name ?? ""}`;
+    const k = `${host.cacheScope}\0${name ?? ""}`;
     if (k === key) return;
     key = k;
     chosen = name ?? "HEAD";
@@ -70,7 +70,7 @@
   }
 
   async function bringBack(entry: GitReflogEntry) {
-    await openGitWizard(app, { kind: "restore-branch", preset: { name: recoveredName(entry), target: entry.new } });
+    await openGitWizard(host, { kind: "restore-branch", preset: { name: recoveredName(entry), target: entry.new } });
     await load(chosen);
   }
 
@@ -80,7 +80,7 @@
 </script>
 
 <div class="reflog" data-testid="reflog-view" data-ref={chosen}>
-  <ExtensionGitHint target={{ place: "git", repository: app.activeRepository ?? "", view: "history" }} />
+  <ExtensionGitHint target={{ place: "git", repository: host.activeRepository ?? "", view: "history" }} />
   <div class="toolbar">
     <Select label="Look at" size="sm" value={chosen} options={choices} onchange={(e) => choose((e.currentTarget as HTMLSelectElement).value)} data-testid="reflog-ref" />
     {#if rows}<span class="count" data-testid="reflog-count">{rows.length} step{rows.length === 1 ? "" : "s"}{lostCount > 0 ? `, ${lostCount} not on any branch` : ""}</span>{/if}
@@ -107,7 +107,7 @@
           <code class="id">{shortId(e.new)}</code>
           <span class="buttons">
             {#if e.commit}
-              <ExtensionGitActions target={{ kind: "commit", repository: app.activeRepository ?? "", commit: e.new }} label="Commit actions" />
+              <ExtensionGitActions target={{ kind: "commit", repository: host.activeRepository ?? "", commit: e.new }} label="Commit actions" />
               <Button size="sm" variant="ghost" data-testid="reflog-show" onclick={() => views.open({ kind: "graph", select: e.new })} disabled={r.lost === true}>Show</Button>
               <Button size="sm" variant={r.lost === true ? "secondary" : "ghost"} icon="undo" data-testid="reflog-bring-back" onclick={() => void bringBack(e)}>Bring it back</Button>
             {/if}

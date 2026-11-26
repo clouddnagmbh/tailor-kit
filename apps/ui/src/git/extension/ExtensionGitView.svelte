@@ -10,21 +10,21 @@
   import { Banner, Button, EmptyState } from "../../ui";
   import { extensionGitView } from "../../shell/extension-git";
   import { getExtensions } from "../../shell/extension-tabs";
-  import { getApp } from "../../state/app.svelte";
+  import { getGitHost } from "../host";
 
   let { id, props, onclose }: { id: string; props: Record<string, unknown>; onclose: () => void } = $props();
 
   const extensions = getExtensions();
-  const app = getApp();
+  const host = getGitHost();
   const view = $derived(extensionGitView(extensions, id));
-  const repository = $derived(app.activeRepository ?? "");
+  const repository = $derived(host.activeRepository ?? "");
 </script>
 
 {#if view && extensions}
   {@const View = view.component}
   <div class="frame" data-testid="git-extension-view" data-view={id}>
     <svelte:boundary
-      onerror={(e) => console.warn(`RequestTailor: the Git view ${id} failed:`, e)}
+      onerror={(e) => console.warn(`${host.brand.productName}: the Git view ${id} failed:`, e)}
     >
       <View ctx={extensions.ctx} {repository} {props} close={onclose} />
       {#snippet failed(error, reset)}

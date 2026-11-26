@@ -7,7 +7,7 @@
 // words, applies on confirmation and offers "Undo" afterwards. Strand G owns the wizards
 // (`GitWizard.svelte` and what it shows); the request shape is the interface.
 
-import type { AppState } from "../../state/app.svelte";
+import type { GitHost } from "../host";
 import type { GitAction, GitActionResult } from "../../commands/types";
 import GitWizard from "./GitWizard.svelte";
 
@@ -71,8 +71,8 @@ export function wizardTitle(kind: GitWizardKind): string {
 }
 
 /** Opens the wizard; resolves with what it did, `undefined` when cancelled. */
-export function openGitWizard(app: AppState, request: GitWizardRequest): Promise<GitActionResult | undefined> {
-  return app.showDialog({
+export function openGitWizard(host: GitHost, request: GitWizardRequest): Promise<GitActionResult | undefined> {
+  return host.showDialog({
     title: wizardTitle(request.kind),
     component: GitWizard,
     props: { request },

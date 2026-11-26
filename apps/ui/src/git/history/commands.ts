@@ -5,13 +5,14 @@
 // active request need an open request; "Lost work" and "Search history" do not.
 
 import type { Command } from "../../shell/commands";
-import type { AppState } from "../../state/app.svelte";
+import type { GitHost } from "../host";
 import type { GitViews } from "../views.svelte";
 
-export function historyCommands(app: AppState, views: GitViews): Command[] {
+export function historyCommands(host: GitHost, views: GitViews): Command[] {
   const file = (open: (path: string) => void) => () => {
-    if (app.active) open(app.active);
-    else app.error = "Open a request first.";
+    const active = host.content?.activeFile;
+    if (active) open(active);
+    else host.notifyError("Open a request first.");
   };
   return [
     { id: "git-history-search", label: "Git: Search history", run: () => views.open({ kind: "search" }) },

@@ -7,14 +7,14 @@
 // entries.
 
 import type { MenuEntry } from "../../ui";
-import type { AppState } from "../../state/app.svelte";
+import type { GitHost } from "../host";
 import type { GitViews } from "../views.svelte";
 import { openNewPull } from "../../review/open-new-pull";
 import { openGitWizard } from "../wizards/open";
 import type { GraphAction, GraphMenuEntry } from "./model";
 
 export interface ActionHost {
-  app: AppState;
+  gitHost: GitHost;
   views: GitViews;
   /** After a wizard did something. */
   reload: () => void;
@@ -26,7 +26,7 @@ export interface ActionHost {
 export async function runAction(host: ActionHost, action: GraphAction): Promise<void> {
   switch (action.kind) {
     case "wizard": {
-      await openGitWizard(host.app, action.request);
+      await openGitWizard(host.gitHost, action.request);
       // Closed with or without a result: what the wizard did may have moved refs.
       host.reload();
       return;
@@ -47,7 +47,7 @@ export async function runAction(host: ActionHost, action: GraphAction): Promise<
       host.select(action.rev);
       return;
     case "pull-request":
-      await openNewPull(host.app, { head: action.head });
+      await openNewPull(host.gitHost, { head: action.head });
       host.reload();
       return;
   }

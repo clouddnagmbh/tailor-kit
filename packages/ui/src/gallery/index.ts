@@ -6,8 +6,8 @@
 
 import { mount } from "svelte";
 
-import "../../styles/tokens.css";
-import "../../styles/base.css";
+import "../styles/tokens.css";
+import "../styles/base.css";
 import Gallery from "./Gallery.svelte";
 
 export function startGallery(target: HTMLElement) {

@@ -89,7 +89,7 @@ import Braces from "@lucide/svelte/icons/braces";
 
 /** Every semantic icon name, grouped: the "New…" set (`NEW_ICONS`), Git, then general UI. */
 export const ICONS = {
-  // The "New…" dialog and node chips (apps/ui/src/new/icons.ts).
+  // The "New…" dialog and node chips (NEW_ICONS in the host app).
   http: Globe,
   graphql: Hexagon,
   grpc: Network,

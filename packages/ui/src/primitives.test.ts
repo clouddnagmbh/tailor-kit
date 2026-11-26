@@ -3,14 +3,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { NEW_ICONS } from "../new/icons";
 import { colourIndex, initials } from "./avatar";
 import { ICON_NAMES, iconFor, ICONS, isIconName } from "./icons";
 import { formatKeys } from "./keys";
 
 describe("icons", () => {
-  it("covers the New… set and the names the strands use", () => {
-    for (const name of NEW_ICONS) expect(isIconName(name)).toBe(true);
+  it("covers the names the strands use", () => {
     for (const name of ["branch", "commit", "merge", "pull", "push", "sync", "stash", "tag", "compare", "history"])
       expect(ICON_NAMES).toContain(name);
     for (const name of ["bisect", "review", "contract", "shield-secret", "graph", "add", "close", "more", "chevron"])

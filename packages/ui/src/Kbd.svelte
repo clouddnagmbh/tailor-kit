@@ -2,7 +2,7 @@
 <!-- Copyright 2026 The RequestTailor Authors -->
 <!-- A keyboard shortcut, `keys="Mod+Enter"`: ⌘ ↵ on macOS, Ctrl ↵ elsewhere. -->
 <script lang="ts">
-  import { isMacPlatform } from "../shell/shortcuts";
+  import { isMacPlatform } from "./platform";
   import { formatKeys } from "./keys";
 
   let { keys, size = "md" }: { keys: string; size?: "sm" | "md" } = $props();

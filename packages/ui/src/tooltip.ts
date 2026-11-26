@@ -12,7 +12,7 @@ import "./floating.css";
 import { portal, rectOf, viewport } from "./floating";
 import { formatKeys } from "./keys";
 import { place, type Placement } from "./position";
-import { isMacPlatform } from "../shell/shortcuts";
+import { isMacPlatform } from "./platform";
 
 export interface TooltipOptions {
   text: string;

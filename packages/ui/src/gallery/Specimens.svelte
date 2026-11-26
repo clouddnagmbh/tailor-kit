@@ -80,7 +80,7 @@
   ];
 
   const tiles = [
-    { id: "http", title: "HTTP", text: "REST and plain HTTP requests", icon: "http" },
+    { id: "http", title: "HTTP", text: "REST and plain HTTP", icon: "http" },
     { id: "graphql", title: "GraphQL", text: "Queries with schema completion", icon: "graphql" },
     { id: "grpc", title: "gRPC", text: "Unary and streaming calls", icon: "grpc" },
     { id: "websocket", title: "WebSocket", text: "Two-way message streams", icon: "websocket" },
@@ -150,7 +150,7 @@
     <h2>Buttons</h2>
     <div class="row">
       <Button variant="primary" icon="send">Send</Button>
-      <Button icon="add">New request</Button>
+      <Button icon="add">New item</Button>
       <Button variant="ghost" icon="import">Import</Button>
       <Button variant="danger" icon="delete">Delete</Button>
     </div>
@@ -226,7 +226,7 @@
   <section class="card" aria-label="Tabs">
     <h2>Tabs and segmented control</h2>
     <Tabs
-      label="Request parts"
+      label="Sections"
       bind:value={tab}
       items={[
         { id: "params", label: "Params", count: 2 },
@@ -262,7 +262,7 @@
   <section class="card" aria-label="Fields">
     <h2>Fields</h2>
     <div class="grid2">
-      <TextField label="Request URL" bind:value={url} mono />
+      <TextField label="Address" bind:value={url} mono />
       <Select
         label="Environment"
         bind:value={env}
@@ -273,7 +273,7 @@
           { value: "production", label: "Production" },
         ]}
       />
-      <TextField bind:value={search} placeholder="Search requests" icon="search" size="sm">
+      <TextField bind:value={search} placeholder="Search items" icon="search" size="sm">
         {#snippet trailing()}<Kbd keys="Mod+K" size="sm" />{/snippet}
       </TextField>
       <TextField label="Branch name" value="feature/ pagination" error="Branch names cannot contain spaces." />
@@ -301,7 +301,7 @@
   <section class="card" aria-label="Banners">
     <h2>Banners</h2>
     <div class="stack">
-      <Banner tone="info" title="This collection has scripts">Scripts run only in collections you trust.</Banner>
+      <Banner tone="info" title="This item has scripts">Scripts run only in items you trust.</Banner>
       <Banner tone="ok" dismissible>All 24 tests passed in 1.2 s.</Banner>
       <Banner tone="warn" title="Uncommitted changes" dismissible>
         Switching branches keeps them in a stash.
@@ -355,7 +355,7 @@
       <Spinner size="lg" />
       <span class="divider"></span>
       <Tooltip text="Copy as cURL" shortcut="Mod+Shift+C"><Button size="sm" icon="copy">Hover me</Button></Tooltip>
-      <div class="rt-tooltip static">Send request <span class="rt-tooltip-keys"><kbd>⌘</kbd><kbd>↵</kbd></span></div>
+      <div class="rt-tooltip static">Send item <span class="rt-tooltip-keys"><kbd>⌘</kbd><kbd>↵</kbd></span></div>
       <span class="divider"></span>
       <Kbd keys="Mod+Enter" />
       <Kbd keys="Mod+Shift+P" />
@@ -366,7 +366,7 @@
       <Progress label="Run" value={100} tone="ok" size="sm" />
       <Progress label="Quota" value={85} tone="warn" />
       <Progress label="Failed" value={30} tone="danger" size="sm" />
-      <Progress label="Loading collection" />
+      <Progress label="Loading" />
     </div>
     <div class="grid2">
       <div class="stack">
@@ -377,8 +377,8 @@
         <Skeleton height="64px" />
       </div>
       <div class="empty">
-        <EmptyState icon="history" title="No history yet" text="Requests you send appear here, newest first." size="sm">
-          {#snippet actions()}<Button size="sm" variant="primary" icon="send">Send a request</Button>{/snippet}
+        <EmptyState icon="history" title="No history yet" text="Items you send appear here, newest first." size="sm">
+          {#snippet actions()}<Button size="sm" variant="primary" icon="send">Send an item</Button>{/snippet}
         </EmptyState>
       </div>
     </div>

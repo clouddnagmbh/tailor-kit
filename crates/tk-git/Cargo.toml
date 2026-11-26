@@ -1,0 +1,47 @@
+[package]
+name = "tk-git"
+description = "Tailor Kit: the Git core on native targets (gitoxide), for any repository."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Native only (desktop, CLI, iOS check): gitoxide does not build for wasm32. Origin: moved from
+# RequestTailor's `rt-git`; the product's parts stay there.
+
+[dependencies]
+# gitoxide, minimal features: no installed `git`, no curl, no OpenSSL. HTTP through reqwest
+# (blocking) with rustls on ring (the provider is installed by `net`, not aws-lc).
+gix = { version = "0.90", default-features = false, features = [
+  "sha1",
+  "index",
+  "revision",
+  "merge",
+  "excludes",
+  "attributes",
+  "credentials",
+  "blocking-http-transport-reqwest",
+] }
+# Pack writing for our own push (gix itself only reads packs).
+gix-pack = { version = "0.77", default-features = false, features = ["generate"] }
+# Lets gix send credentials over plain http://; `net` allows that for loopback hosts only.
+gix-transport = { version = "0.62", default-features = false, features = ["http-client-insecure-credentials"] }
+reqwest ={ version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
+base64 = "0.22"
+# Line selection for the index operations (the diff the app shows, `tk_git_types::text_diff`).
+similar = "3"
+# The wire types, the seams a product plugs in (N1, N2, N3, N8) and the errors (N7).
+tk-git-types = { path = "../tk-git-types" }
+# `ReviewKind` of the PR heads `Repo::fetch_review` fetches.
+tk-review = { path = "../tk-review" }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Bare test remotes and looking into them.
+gix = { version = "0.90", default-features = false, features = ["sha1"] }
+
+[lints]
+workspace = true

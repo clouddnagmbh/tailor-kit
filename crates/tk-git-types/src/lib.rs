@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Tailor Kit Authors
 
-//! Git types shared by RequestTailor and GitTailor, without I/O. Moves to the `tailor-kit`
-//! repository with the other `tk-*` crates; until then it lives in the RequestTailor workspace.
+//! Git types of the Tailor Kit, without I/O: what the Git core (`tk-git`) answers with, what a
+//! product plugs into it, and the errors it reports. Builds on every target (also wasm32), so a
+//! product's command layer can share the types with a shell that runs Git elsewhere.
+//!
+//! Origin: moved from the RequestTailor workspace (`rt_app::git`), on its way to `tailor-kit`.
+//!
+//! The wire types ([`GitStatus`], [`GitCommit`], [`graph`], [`actions`], [`files`],
+//! [`history`], [`index`], [`plumbing`], [`repos`], [`signing`]) serialize exactly as the UI's
+//! contract expects; changes to them are interface changes. A product adds fields of its own to
+//! [`graph::GitChangedFile`] and [`files::GitWorkingFile`] through their type parameter
+//! (flattened after the core's fields, [`NoExtra`] by default).
 //!
 //! Seam N7 (GitTailor implementation guide): the Git core reports [`GitError`], never a
-//! product's own error type. Each product converts it into its own (RequestTailor:
-//! `From<GitError> for rt_app::AppError`).
+//! product's own error type. Each product converts it into its own (`From<GitError>` for the
+//! product's error).
 //!
 //! Seam N8: refs and files of a program's own live in its [`RefNamespace`].
 //!
@@ -18,15 +27,25 @@
 //! Seam N3: a program works on a [`RepoScope`] (the whole repository or a folder) and counts
 //! the files its [`ScopeFiles`] includes.
 
+pub mod actions;
+pub mod files;
+pub mod graph;
+pub mod history;
+pub mod index;
 mod merge;
 mod namespace;
+pub mod plumbing;
+pub mod repos;
 mod scan;
 mod scope;
+pub mod signing;
+mod types;
 
 pub use merge::{FileMerger, GroupFiles, GroupMerge};
 pub use namespace::RefNamespace;
 pub use scan::CommitScanner;
 pub use scope::{RepoScope, ScopeFiles};
+pub use types::*;
 
 /// A failed or refused Git operation.
 #[derive(Debug, thiserror::Error)]

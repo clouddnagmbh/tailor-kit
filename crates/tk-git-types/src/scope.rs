@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The Tailor Kit Authors
 
-//! Seam N3: which part of a repository a program works on. GitTailor works on the whole
-//! repository; RequestTailor on the folder of a collection. Paths a program sees are relative
+//! Seam N3: which part of a repository a program works on: the whole repository, or one
+//! folder of it (a product's document folder). Paths a program sees are relative
 //! to its [`RepoScope`]; [`ScopeFiles`] says which files inside it count (without one, all).
 
 use std::collections::BTreeMap;
@@ -91,7 +91,7 @@ pub trait ScopeFiles: Send + Sync {
     /// Whether the scope-relative `rel` is one of the program's files.
     fn includes(&self, rel: &str) -> bool;
 
-    /// Removes files that belong to a nested unit of their own (e.g. a nested collection)
+    /// Removes files that belong to a nested unit of their own (a nested document folder)
     /// from a revision's files (scope-relative path → text). The default keeps all.
     fn drop_nested(&self, files: &mut BTreeMap<String, String>) {
         let _ = files;

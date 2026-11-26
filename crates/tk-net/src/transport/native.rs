@@ -33,8 +33,6 @@ mod grpc;
 mod redirect;
 /// Wave 8, strand A.
 mod sse;
-#[cfg(test)]
-mod tests;
 mod tls;
 /// Wave 8, strand A.
 mod ws;
@@ -255,10 +253,8 @@ impl crate::stream::StreamTransport for NativeTransport {
     fn open<'a>(
         &'a self,
         open: crate::stream::StreamOpen,
-    ) -> crate::services::LocalBoxFuture<
-        'a,
-        Result<Box<dyn crate::stream::StreamSession + 'a>, TransportError>,
-    > {
+    ) -> crate::LocalBoxFuture<'a, Result<Box<dyn crate::stream::StreamSession + 'a>, TransportError>>
+    {
         use crate::stream::StreamOpen;
         Box::pin(async move {
             match open {

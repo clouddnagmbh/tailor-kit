@@ -38,7 +38,7 @@ use web_time::Instant;
 
 use super::NativeTransport;
 use super::connector::Connector;
-use crate::services::LocalBoxFuture;
+use crate::LocalBoxFuture;
 use crate::stream::{Direction, Frame, StreamEvent, StreamHead, StreamOpen, StreamSession};
 use crate::transport::{HttpVersion, TransportError};
 
@@ -130,6 +130,7 @@ fn build_request(
     headers.insert(http::header::TE, HeaderValue::from_static("trailers"));
     headers.insert(
         http::header::USER_AGENT,
+        // Kept byte for byte from `rt_core::transport` so the wire does not change.
         HeaderValue::from_static(concat!("requesttailor-grpc/", env!("CARGO_PKG_VERSION"))),
     );
     if let Some(ms) = timeout_ms.filter(|ms| *ms > 0)

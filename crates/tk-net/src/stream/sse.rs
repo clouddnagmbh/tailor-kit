@@ -152,7 +152,7 @@ use std::collections::VecDeque;
 use web_time::Instant;
 
 use super::{Direction, Frame, StreamEvent, StreamHead, StreamSession};
-use crate::services::LocalBoxFuture;
+use crate::LocalBoxFuture;
 use crate::transport::{BodyStream, TransportError};
 
 /// At most this much of a response that is not an event stream is shown.

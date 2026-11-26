@@ -1,0 +1,69 @@
+[package]
+name = "tk-net"
+description = "Tailor Kit: the network boundary (HTTP transport, native stack, browser fetch, session types) shared by RequestTailor and GitTailor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Builds on native and wasm32-unknown-unknown (iOS builds the native stack).
+
+[dependencies]
+base64 = "0.22"
+bytes = "1"
+futures-core = "0.3"
+percent-encoding = "2"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+url = "2"
+# std::time::Instant panics on wasm32-unknown-unknown; web-time works on every target.
+web-time = "1"
+
+# Transport, native: own HTTP/1.1 + HTTP/2 stack, rustls with ring (no aws-lc),
+# OS trust store via rustls-platform-verifier.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "http2", "tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+tokio = { version = "1", features = ["net", "time", "rt"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tower-service = "0.3"
+# Client certificates: PKCS#12 archives and encrypted PKCS#8 keys.
+p12-keystore = "0.4"
+pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
+# WebSocket sessions: framing and the client handshake over our own TCP/TLS stream (no TLS or
+# connect features). MIT / MIT OR Apache-2.0.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+# Transport, browser: fetch via web-sys.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+  "AbortController",
+  "AbortSignal",
+  "DomException",
+  "Headers",
+  "ReadableStream",
+  "ReadableStreamDefaultReader",
+  "RequestInit",
+  "RequestRedirect",
+  "Response",
+  "ResponseType",
+  "Url",
+] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen = { version = "0.14", default-features = false, features = ["ring"] }
+
+[lints]
+workspace = true

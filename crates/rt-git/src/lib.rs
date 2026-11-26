@@ -109,6 +109,7 @@ pub mod credentials;
 pub mod http;
 pub mod identity;
 pub mod local;
+mod secret_scanner;
 
 mod blob;
 mod branch;
@@ -156,6 +157,7 @@ pub use tk_git_types::{GitError, GitResult};
 
 /// RequestTailor's file merger (seam N1), the default of every [`Repo`].
 pub use collection_merge::CollectionMerger;
+pub use secret_scanner::SecretScanner;
 mod working_copy;
 mod worktree;
 

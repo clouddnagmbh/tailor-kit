@@ -56,6 +56,9 @@ pub struct Repo {
     pub(crate) signing: crate::sign::Signing,
     /// Where the app's own refs and files live (seam N8); RequestTailor's by default.
     pub(crate) namespace: tk_git_types::RefNamespace,
+    /// What merges files on their model (seam N1); RequestTailor's collections by default,
+    /// `None`: Git's line merge for every file.
+    pub(crate) merger: Option<std::sync::Arc<dyn tk_git_types::FileMerger>>,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -102,6 +105,7 @@ impl Repo {
             options: options.clone(),
             signing: crate::sign::Signing::default(),
             namespace: rt_app::git::REF_NAMESPACE,
+            merger: Some(std::sync::Arc::new(crate::CollectionMerger)),
         }))
     }
 
@@ -126,6 +130,16 @@ impl Repo {
     /// RequestTailor's.
     pub fn with_namespace(mut self, namespace: tk_git_types::RefNamespace) -> Self {
         self.namespace = namespace;
+        self
+    }
+
+    /// Merges files with `merger` (seam N1) instead of RequestTailor's collection merger;
+    /// `None` merges every file line by line, like Git.
+    pub fn with_merger(
+        mut self,
+        merger: Option<std::sync::Arc<dyn tk_git_types::FileMerger>>,
+    ) -> Self {
+        self.merger = merger;
         self
     }
 
@@ -289,6 +303,7 @@ impl Repo {
             options: self.options.clone(),
             signing: self.signing.clone(),
             namespace: self.namespace,
+            merger: self.merger.clone(),
         })
     }
 

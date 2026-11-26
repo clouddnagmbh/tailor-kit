@@ -57,6 +57,11 @@ pub mod plumbing;
 pub mod repos;
 pub mod signing;
 
+/// RequestTailor's namespace inside a repository (seam N8): `refs/requesttailor/…` and
+/// `.git/requesttailor/…`. The Git core builds every ref and file of its own from it.
+pub const REF_NAMESPACE: tk_git_types::RefNamespace =
+    tk_git_types::RefNamespace::new("requesttailor", &[]);
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};

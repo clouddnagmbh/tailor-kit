@@ -460,7 +460,7 @@ impl Repo {
         let mut unix = now;
         let taken = |unix: i64| -> Result<bool> {
             for (name, _, _) in &changed {
-                let full = format!("{}{name}", rescue::backup_prefix(unix));
+                let full = format!("{}{name}", self.namespace.backup_prefix_at(unix));
                 if self.ref_commit(&full)?.is_some() {
                     return Ok(true);
                 }
@@ -470,7 +470,7 @@ impl Repo {
         while taken(unix)? {
             unix += 1;
         }
-        let backup = rescue::backup_prefix(unix);
+        let backup = self.namespace.backup_prefix_at(unix);
         for (name, old, _) in &changed {
             self.repo
                 .reference(

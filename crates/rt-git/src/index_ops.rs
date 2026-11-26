@@ -392,9 +392,9 @@ impl Repo {
         let unix = crate::actions::now();
         for n in 0.. {
             let name = if n == 0 {
-                rt_app::git::actions::backup_ref(unix, "discard")
+                self.namespace.backup_ref(unix, "discard")
             } else {
-                rt_app::git::actions::backup_ref(unix, &format!("discard-{n}"))
+                self.namespace.backup_ref(unix, &format!("discard-{n}"))
             };
             if self.ref_commit(&name)?.is_none() {
                 return self.put_ref(&name, Some(commit), None, "backup before discarding lines");

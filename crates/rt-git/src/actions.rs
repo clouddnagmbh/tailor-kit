@@ -13,7 +13,7 @@
 //! - a backup ref `refs/requesttailor/backup/<unix>/<name>` for every branch, tag, stash or
 //!   `HEAD` the action moves away from (and `…/worktree`, a commit of the working files, when
 //!   it throws files away), as [`GitPlan::backup`] says;
-//! - an entry in the action journal `.git/requesttailor/actions.jsonl` (newest last, at most
+//! - an entry in the action journal `.git/<namespace>/actions.jsonl` (newest last, at most
 //!   [`UNDO_KEEP`]), with what undo needs: the refs before and after, where `HEAD` pointed,
 //!   the working files before and after (as commits/trees), the repository configuration and
 //!   the stash list when the action changed them.
@@ -29,7 +29,7 @@ use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 use rt_app::git::actions::{
     GitAction, GitActionResult, GitBlock, GitBlockReason, GitPlan, GitRefMove, GitUndoEntry,
-    UNDO_KEEP, backup_ref,
+    UNDO_KEEP,
 };
 use rt_app::git::{GitCommit, GitFile, GitFileState, GitIdentity, GitPullResult};
 use serde::{Deserialize, Serialize};
@@ -230,14 +230,14 @@ pub(crate) struct Run<'a> {
 }
 
 impl Run<'_> {
-    /// Writes `refs/requesttailor/backup/<time>/<name>` → `id` (a numbered name when taken).
+    /// Writes `refs/<namespace>/backup/<time>/<name>` → `id` (a numbered name when taken).
     pub fn backup(&mut self, repo: &Repo, name: &str, id: Option<ObjectId>) -> Result<()> {
         let Some(id) = id else { return Ok(()) };
         for n in 1..100 {
             let full = if n == 1 {
-                backup_ref(self.time, name)
+                repo.namespace.backup_ref(self.time, name)
             } else {
-                backup_ref(self.time, &format!("{name}-{n}"))
+                repo.namespace.backup_ref(self.time, &format!("{name}-{n}"))
             };
             if repo
                 .repo
@@ -295,7 +295,7 @@ pub(crate) struct JournalLine {
 
 impl Repo {
     pub(crate) fn journal_path(&self) -> std::path::PathBuf {
-        self.git_dir().join("requesttailor").join("actions.jsonl")
+        self.namespace.journal(self.git_dir())
     }
 
     /// The journal, oldest first; unreadable lines are skipped.

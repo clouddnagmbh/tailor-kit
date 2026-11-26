@@ -52,14 +52,14 @@ pub fn token_slot(host: &str) -> SecretKey {
 
 /// The local ref a PR's head is fetched into, e.g. `refs/requesttailor/review/github/7`.
 pub fn review_ref(kind: ReviewKind, number: u64) -> String {
-    format!("refs/requesttailor/review/{}/{number}", kind.id())
+    crate::git::REF_NAMESPACE.review_ref(kind.id(), number)
 }
 
 /// The local ref the PR's target branch is fetched into next to the head, so the merge base
 /// exists locally (`refs/requesttailor/review/github/7-base`; not `<n>/base`, which Git
 /// cannot keep next to the ref `<n>`).
 pub fn review_base_ref(kind: ReviewKind, number: u64) -> String {
-    format!("refs/requesttailor/review/{}/{number}-base", kind.id())
+    crate::git::REF_NAMESPACE.review_base_ref(kind.id(), number)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

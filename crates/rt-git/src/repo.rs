@@ -54,6 +54,8 @@ pub struct Repo {
     pub(crate) options: Options,
     /// What commits are signed and verified with (wave 15); the default signs nothing.
     pub(crate) signing: crate::sign::Signing,
+    /// Where the app's own refs and files live (seam N8); RequestTailor's by default.
+    pub(crate) namespace: tk_git_types::RefNamespace,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -99,6 +101,7 @@ impl Repo {
             scope: Scope::new(prefix),
             options: options.clone(),
             signing: crate::sign::Signing::default(),
+            namespace: rt_app::git::REF_NAMESPACE,
         }))
     }
 
@@ -117,6 +120,18 @@ impl Repo {
     pub fn with_signing(mut self, signing: crate::sign::Signing) -> Self {
         self.signing = signing;
         self
+    }
+
+    /// Keeps backups, review refs and the action journal in `namespace` (seam N8) instead of
+    /// RequestTailor's.
+    pub fn with_namespace(mut self, namespace: tk_git_types::RefNamespace) -> Self {
+        self.namespace = namespace;
+        self
+    }
+
+    /// Where the app's own refs and files live.
+    pub fn namespace(&self) -> tk_git_types::RefNamespace {
+        self.namespace
     }
 
     /// Canonical root of the collection.
@@ -273,6 +288,7 @@ impl Repo {
             scope: Scope::new(BString::default()),
             options: self.options.clone(),
             signing: self.signing.clone(),
+            namespace: self.namespace,
         })
     }
 

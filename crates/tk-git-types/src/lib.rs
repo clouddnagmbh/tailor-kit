@@ -7,6 +7,12 @@
 //! Seam N7 (GitTailor implementation guide): the Git core reports [`GitError`], never a
 //! product's own error type. Each product converts it into its own (RequestTailor:
 //! `From<GitError> for rt_app::AppError`).
+//!
+//! Seam N8: refs and files of a program's own live in its [`RefNamespace`].
+
+mod namespace;
+
+pub use namespace::RefNamespace;
 
 /// A failed or refused Git operation.
 #[derive(Debug, thiserror::Error)]

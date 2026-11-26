@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicBool;
 use gix::ObjectId;
 use gix::refs::transaction::PreviousValue;
 use rt_app::AppError;
-use rt_app::review::{ReviewKind, review_base_ref, review_ref};
+use rt_app::review::ReviewKind;
 
 use crate::credentials::{CredentialSource, Credentials};
 use crate::net::{Auth, Endpoint, endpoint, ensure_tls};
@@ -69,8 +69,8 @@ impl Repo {
         target: &str,
         creds: &dyn CredentialSource,
     ) -> Result<FetchedReview> {
-        let head_ref = review_ref(kind, number);
-        let base_ref = review_base_ref(kind, number);
+        let head_ref = self.namespace.review_ref(kind.id(), number);
+        let base_ref = self.namespace.review_base_ref(kind.id(), number);
         let target_ref = format!("refs/heads/{}", target.trim_start_matches("refs/heads/"));
         let specs = [
             (remote_head_ref, head_ref.as_str()),

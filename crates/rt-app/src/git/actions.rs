@@ -42,7 +42,7 @@ pub const UNDO_KEEP: usize = 20;
 
 /// The backup ref for `name` (a short branch or tag name, or `HEAD`) at `unix` seconds.
 pub fn backup_ref(unix: i64, name: &str) -> String {
-    format!("{BACKUP_PREFIX}{unix}/{name}")
+    super::REF_NAMESPACE.backup_ref(unix, name)
 }
 
 /// Whether `name` is a valid branch or tag name, in plain words when it is not (the rules of

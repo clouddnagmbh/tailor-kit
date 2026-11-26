@@ -3,9 +3,9 @@
 
 //! GitHub (and GitHub Enterprise): pull requests, review comments, reviews, check runs.
 
-use rt_core::services::LocalBoxFuture;
-use rt_core::transport::Transport;
 use serde_json::{Value, json};
+use tk_net::services::LocalBoxFuture;
+use tk_net::transport::Transport;
 
 use super::client::{Client, Reply, items, text};
 use super::time::unix_seconds;
@@ -24,8 +24,8 @@ pub struct GithubProvider<'t, T: Transport> {
 }
 
 impl<'t, T: Transport> GithubProvider<'t, T> {
-    pub fn new(transport: &'t T, repo: ReviewRepo, token: &str) -> Self {
-        let client = Client::new(transport, token, &repo.api)
+    pub fn new(transport: &'t T, repo: ReviewRepo, token: &str, user_agent: &str) -> Self {
+        let client = Client::new(transport, token, &repo.api, user_agent)
             .with_header("x-github-api-version", "2022-11-28");
         Self { client, repo }
     }
@@ -86,7 +86,7 @@ fn pull(v: &Value) -> PullRequest {
     }
 }
 
-fn review_comment(v: &Value) -> ReviewComment {
+fn review_comment<A>(v: &Value) -> ReviewComment<A> {
     let line = v.get("line").and_then(Value::as_u64);
     let original = v.get("original_line").and_then(Value::as_u64);
     ReviewComment {
@@ -102,7 +102,7 @@ fn review_comment(v: &Value) -> ReviewComment {
     }
 }
 
-fn issue_comment(v: &Value) -> ReviewComment {
+fn issue_comment<A>(v: &Value) -> ReviewComment<A> {
     ReviewComment {
         id: format!(
             "issue-{}",
@@ -138,7 +138,7 @@ fn status_state(state: &str) -> CiState {
     }
 }
 
-impl<T: Transport> ReviewProvider for GithubProvider<'_, T> {
+impl<T: Transport, A> ReviewProvider<A> for GithubProvider<'_, T> {
     fn repo(&self) -> &ReviewRepo {
         &self.repo
     }
@@ -167,7 +167,10 @@ impl<T: Transport> ReviewProvider for GithubProvider<'_, T> {
         format!("refs/pull/{number}/head")
     }
 
-    fn comments(&self, number: u64) -> LocalBoxFuture<'_, Result<Vec<ReviewComment>, ReviewError>> {
+    fn comments(
+        &self,
+        number: u64,
+    ) -> LocalBoxFuture<'_, Result<Vec<ReviewComment<A>>, ReviewError>> {
         Box::pin(async move {
             let lines = self
                 .pages(self.url(&format!("/pulls/{number}/comments?per_page=100")))
@@ -175,7 +178,7 @@ impl<T: Transport> ReviewProvider for GithubProvider<'_, T> {
             let general = self
                 .pages(self.url(&format!("/issues/{number}/comments?per_page=100")))
                 .await?;
-            let mut out: Vec<ReviewComment> = lines.iter().map(review_comment).collect();
+            let mut out: Vec<ReviewComment<A>> = lines.iter().map(review_comment).collect();
             out.extend(general.iter().map(issue_comment));
             out.sort_by_key(|c| c.created);
             Ok(out)
@@ -186,7 +189,7 @@ impl<T: Transport> ReviewProvider for GithubProvider<'_, T> {
         &'a self,
         pull: &'a PullRequest,
         comment: &'a NewReviewComment,
-    ) -> LocalBoxFuture<'a, Result<ReviewComment, ReviewError>> {
+    ) -> LocalBoxFuture<'a, Result<ReviewComment<A>, ReviewError>> {
         Box::pin(async move {
             let body = json!({
                 "body": comment.body,

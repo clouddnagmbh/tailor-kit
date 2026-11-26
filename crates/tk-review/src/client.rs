@@ -8,11 +8,11 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use rt_core::transport::{HttpBody, HttpRequest, SendOptions, Transport, collect};
 use serde_json::Value;
+use tk_net::transport::{HttpBody, HttpRequest, SendOptions, Transport, collect};
 
 use super::ReviewError;
-use crate::ai::redact;
+use tk_secrets::redact;
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 const ANSWER_LIMIT: usize = 16 * 1024 * 1024;
@@ -38,6 +38,7 @@ pub(super) struct Client<'t, T: Transport> {
     /// API base without a trailing slash.
     pub api: String,
     extra: Vec<(String, String)>,
+    user_agent: String,
 }
 
 fn options() -> SendOptions {
@@ -92,12 +93,13 @@ fn error_text(body: &Result<Value, String>) -> String {
 }
 
 impl<'t, T: Transport> Client<'t, T> {
-    pub fn new(transport: &'t T, token: &str, api: &str) -> Self {
+    pub fn new(transport: &'t T, token: &str, api: &str, user_agent: &str) -> Self {
         Self {
             transport,
             token: token.trim().to_owned(),
             api: api.trim().trim_end_matches('/').to_owned(),
             extra: Vec::new(),
+            user_agent: user_agent.to_owned(),
         }
     }
 
@@ -123,7 +125,7 @@ impl<'t, T: Transport> Client<'t, T> {
         ];
         headers.extend(self.extra.iter().cloned());
         if !self.transport_is_browser() {
-            headers.push(("user-agent".to_owned(), "RequestTailor".to_owned()));
+            headers.push(("user-agent".to_owned(), self.user_agent.clone()));
         }
         let request = HttpRequest {
             method: method.to_owned(),

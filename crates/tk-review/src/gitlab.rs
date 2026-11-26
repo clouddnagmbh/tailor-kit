@@ -3,9 +3,9 @@
 
 //! GitLab (gitlab.com and self-managed): merge requests, discussions, approvals, pipelines.
 
-use rt_core::services::LocalBoxFuture;
-use rt_core::transport::Transport;
 use serde_json::{Value, json};
+use tk_net::services::LocalBoxFuture;
+use tk_net::transport::Transport;
 
 use super::client::{Client, encode_component, items, text};
 use super::time::unix_seconds;
@@ -23,8 +23,8 @@ pub struct GitlabProvider<'t, T: Transport> {
 }
 
 impl<'t, T: Transport> GitlabProvider<'t, T> {
-    pub fn new(transport: &'t T, repo: ReviewRepo, token: &str) -> Self {
-        let client = Client::new(transport, token, &repo.api);
+    pub fn new(transport: &'t T, repo: ReviewRepo, token: &str, user_agent: &str) -> Self {
+        let client = Client::new(transport, token, &repo.api, user_agent);
         Self { client, repo }
     }
 
@@ -90,7 +90,7 @@ fn pull(v: &Value) -> PullRequest {
     }
 }
 
-fn note(v: &Value) -> ReviewComment {
+fn note<A>(v: &Value) -> ReviewComment<A> {
     let position = v.get("position").filter(|p| !p.is_null());
     let path = position
         .and_then(|p| p.get("new_path").or_else(|| p.get("old_path")))
@@ -123,7 +123,7 @@ fn job_state(status: &str, allow_failure: bool) -> CiState {
     }
 }
 
-impl<T: Transport> ReviewProvider for GitlabProvider<'_, T> {
+impl<T: Transport, A> ReviewProvider<A> for GitlabProvider<'_, T> {
     fn repo(&self) -> &ReviewRepo {
         &self.repo
     }
@@ -151,14 +151,17 @@ impl<T: Transport> ReviewProvider for GitlabProvider<'_, T> {
         format!("refs/merge-requests/{number}/head")
     }
 
-    fn comments(&self, number: u64) -> LocalBoxFuture<'_, Result<Vec<ReviewComment>, ReviewError>> {
+    fn comments(
+        &self,
+        number: u64,
+    ) -> LocalBoxFuture<'_, Result<Vec<ReviewComment<A>>, ReviewError>> {
         Box::pin(async move {
             let discussions = self
                 .pages(self.url(&format!(
                     "/merge_requests/{number}/discussions?per_page=100"
                 )))
                 .await?;
-            let mut out: Vec<ReviewComment> = discussions
+            let mut out: Vec<ReviewComment<A>> = discussions
                 .iter()
                 .flat_map(|d| {
                     d.get("notes")
@@ -178,7 +181,7 @@ impl<T: Transport> ReviewProvider for GitlabProvider<'_, T> {
         &'a self,
         pull: &'a PullRequest,
         comment: &'a NewReviewComment,
-    ) -> LocalBoxFuture<'a, Result<ReviewComment, ReviewError>> {
+    ) -> LocalBoxFuture<'a, Result<ReviewComment<A>, ReviewError>> {
         Box::pin(async move {
             // A line comment needs the diff's three shas, which only a single MR carries.
             let mr = self.merge_request(pull.number).await?;

@@ -1,0 +1,25 @@
+[package]
+name = "tk-review"
+description = "Tailor Kit: pull-request providers (GitHub, GitLab), host detection and device-code login over the shared transport."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Builds on every target (native, wasm32-unknown-unknown, iOS): calls go through
+# `tk_net::transport::Transport`.
+
+[dependencies]
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "raw_value"] }
+thiserror = "2"
+tk-git-types = { path = "../tk-git-types" }
+tk-net = { path = "../tk-net" }
+tk-secrets = { path = "../tk-secrets" }
+url = "2"
+web-time = "1"
+
+[lints]
+workspace = true

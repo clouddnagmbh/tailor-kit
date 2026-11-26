@@ -8,6 +8,7 @@
 //! stored through a [`SecretStore`]. [`keychain::KeychainStore`] keeps values in the OS
 //! keychain (native targets only).
 
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
 /// Addresses one secret value. The product decides what the parts mean; the store treats
@@ -37,6 +38,59 @@ pub trait SecretStore {
     fn get(&self, slot: &SecretSlot) -> Result<Option<String>, SecretError>;
     fn set(&self, slot: &SecretSlot, value: &str) -> Result<(), SecretError>;
     fn delete(&self, slot: &SecretSlot) -> Result<(), SecretError>;
+}
+
+// Provenance: `redact` and `percent_encode` come from RequestTailor's `rt-app` `ai::mask`.
+/// What [`redact`] puts in place of a secret.
+pub const MASK: &str = "***";
+
+/// Replaces every occurrence of each non-empty secret value with `***` (longest first), in
+/// the forms a value takes in text: raw, Debug- and JSON-escaped, percent-encoded (`%20` and
+/// `+` for spaces) and base64 (standard and URL-safe, with and without padding; values of 6
+/// characters or more).
+pub fn redact(text: &str, secrets: &[String]) -> String {
+    let mut forms: Vec<String> = Vec::new();
+    for secret in secrets.iter().filter(|s| !s.is_empty()) {
+        forms.push(secret.clone());
+        forms.push(secret.escape_debug().to_string());
+        if let Ok(json) = serde_json::to_string(secret) {
+            forms.push(json[1..json.len() - 1].to_owned());
+        }
+        forms.push(percent_encode(secret, false));
+        forms.push(percent_encode(secret, true));
+        if secret.chars().count() >= 6 {
+            let b = secret.as_bytes();
+            forms.push(base64::engine::general_purpose::STANDARD.encode(b));
+            forms.push(base64::engine::general_purpose::STANDARD_NO_PAD.encode(b));
+            forms.push(base64::engine::general_purpose::URL_SAFE.encode(b));
+            forms.push(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b));
+        }
+    }
+    forms.retain(|f| !f.is_empty() && f != MASK);
+    forms.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    forms.dedup();
+    let mut out = text.to_owned();
+    for form in &forms {
+        if out.contains(form.as_str()) {
+            out = out.replace(form.as_str(), MASK);
+        }
+    }
+    out
+}
+
+/// RFC 3986 encoding of everything but unreserved characters; `plus` encodes space as `+`.
+pub fn percent_encode(s: &str, plus: bool) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' if plus => out.push('+'),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 /// OS keychain (macOS Keychain, Windows Credential Manager, Secret Service on Linux; iOS

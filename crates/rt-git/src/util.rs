@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 The RequestTailor Authors
 
-//! Errors, collection-relative paths and flattened trees.
+//! Errors, scope-relative paths and flattened trees.
 
 use std::collections::BTreeMap;
 
@@ -43,65 +43,43 @@ pub fn canonical(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> 
     Ok(path)
 }
 
-/// The collection's place in the repository: repository-relative paths with this prefix
-/// belong to it.
+/// The part of the repository a `Repo` works on (seam N3: `tk_git_types::RepoScope`), with
+/// repository paths as Git bytes.
 #[derive(Debug, Clone)]
-pub struct Scope {
-    /// `""` (collection is the work tree) or `a/b` (no trailing slash).
-    prefix: BString,
-}
+pub struct Scope(tk_git_types::RepoScope);
 
 impl Scope {
-    pub fn new(prefix: BString) -> Self {
-        Self { prefix }
+    /// The whole repository.
+    pub fn whole() -> Self {
+        Self(tk_git_types::RepoScope::whole())
+    }
+
+    /// The folder `prefix` (repository-relative); refused if a path could not name it.
+    pub fn folder(prefix: &str) -> Result<Self> {
+        Ok(Self(tk_git_types::RepoScope::folder(prefix)?))
+    }
+
+    pub fn scope(&self) -> &tk_git_types::RepoScope {
+        &self.0
     }
 
     pub fn prefix(&self) -> &BStr {
-        self.prefix.as_bstr()
+        self.0.prefix().as_bytes().as_bstr()
     }
 
-    /// Whether the repository path `path` belongs to the collection.
+    /// Whether the repository path `path` belongs to the scope.
     pub fn contains(&self, path: &BStr) -> bool {
-        self.rel_bytes(path).is_some()
+        self.0.contains(path)
     }
 
-    fn rel_bytes<'a>(&self, path: &'a BStr) -> Option<&'a BStr> {
-        if self.prefix.is_empty() {
-            return Some(path);
-        }
-        let rest = path.strip_prefix(self.prefix.as_slice())?;
-        let rest = rest.strip_prefix(b"/")?;
-        (!rest.is_empty()).then(|| rest.as_bstr())
-    }
-
-    /// Collection-relative form of a repository path, `None` outside the collection (or not
-    /// UTF-8, which the collection cannot hold either).
+    /// Scope-relative form of a repository path, `None` outside the scope (or not UTF-8).
     pub fn rel(&self, path: &BStr) -> Option<String> {
-        self.rel_bytes(path)
-            .and_then(|p| p.to_str().ok())
-            .map(str::to_owned)
+        self.0.rel(path)
     }
 
-    /// Repository path of the collection-relative `path`; rejects anything that could leave
-    /// the collection.
+    /// Repository path of the scope-relative `path`; rejects anything that could leave it.
     pub fn abs(&self, path: &str) -> Result<BString> {
-        let bad = || fail(format!("invalid path: {path:?}"));
-        if path.is_empty() || path.contains('\\') || path.contains('\0') {
-            return Err(bad());
-        }
-        for part in path.split('/') {
-            if part.is_empty() || part == "." || part == ".." || part.eq_ignore_ascii_case(".git") {
-                return Err(bad());
-            }
-        }
-        Ok(if self.prefix.is_empty() {
-            path.into()
-        } else {
-            let mut p = self.prefix.clone();
-            p.push(b'/');
-            p.extend_from_slice(path.as_bytes());
-            p
-        })
+        Ok(self.0.abs(path)?.into())
     }
 }
 

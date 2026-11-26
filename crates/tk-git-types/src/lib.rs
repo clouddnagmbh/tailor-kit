@@ -14,14 +14,19 @@
 //! merge decides.
 //!
 //! Seam N2: a [`CommitScanner`] checks the files of a commit (secrets) before it is written.
+//!
+//! Seam N3: a program works on a [`RepoScope`] (the whole repository or a folder) and counts
+//! the files its [`ScopeFiles`] includes.
 
 mod merge;
 mod namespace;
 mod scan;
+mod scope;
 
 pub use merge::{FileMerger, GroupFiles, GroupMerge};
 pub use namespace::RefNamespace;
 pub use scan::CommitScanner;
+pub use scope::{RepoScope, ScopeFiles};
 
 /// A failed or refused Git operation.
 #[derive(Debug, thiserror::Error)]

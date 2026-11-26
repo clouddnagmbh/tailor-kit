@@ -20,7 +20,7 @@ const LFS_PREFIX: &[u8] = b"version https://git-lfs.github.com/spec/v1";
 
 /// A repository path from an API path (`/a/b` or `a/b`); rejects anything odd.
 pub(crate) fn repo_path(path: &str) -> Result<BString> {
-    Scope::new(BString::default()).abs(path.strip_prefix('/').unwrap_or(path))
+    Scope::whole().abs(path.strip_prefix('/').unwrap_or(path))
 }
 
 pub(crate) fn base64(bytes: &[u8]) -> String {

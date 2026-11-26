@@ -44,7 +44,7 @@ fn is_binary(bytes: &[u8]) -> bool {
 
 /// `/path` → `path`, checked like every other path (no `..`, no `.git`).
 fn repo_path(path: &str) -> Result<BString> {
-    Scope::new(BString::default()).abs(path.strip_prefix('/').unwrap_or(path))
+    Scope::whole().abs(path.strip_prefix('/').unwrap_or(path))
 }
 
 fn shown(path: &BStr) -> String {

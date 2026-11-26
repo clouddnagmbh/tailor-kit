@@ -1,42 +1,20 @@
 [package]
 name = "rt-git"
-description = "RequestTailor: Git for collections on native targets (gitoxide)."
+description = "RequestTailor: Git for collections on native targets (the Tailor Kit's tk-git with RequestTailor's parts)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# Native only (desktop, CLI, iOS check). The web app runs Git in JavaScript (isomorphic-git),
-# because gitoxide does not build for wasm32. Excluded from the wasm32 build.
+# Native only (desktop, CLI, iOS check), like tk-git. The web app runs Git in JavaScript
+# (isomorphic-git). Excluded from the wasm32 build.
 
 [dependencies]
-# gitoxide, minimal features: no installed `git`, no curl, no OpenSSL. HTTP through reqwest
-# (blocking) with rustls on ring (the provider is installed by `net`, not aws-lc).
-gix = { version = "0.90", default-features = false, features = [
-  "sha1",
-  "index",
-  "revision",
-  "merge",
-  "excludes",
-  "attributes",
-  "credentials",
-  "blocking-http-transport-reqwest",
-] }
-# Pack writing for our own push (gix itself only reads packs).
-gix-pack = { version = "0.77", default-features = false, features = ["generate"] }
-# Lets gix send credentials over plain http://; `net` allows that for loopback hosts only.
-gix-transport = { version = "0.62", default-features = false, features = ["http-client-insecure-credentials"] }
-reqwest ={ version = "0.13", default-features = false, features = ["blocking", "rustls-no-provider"] }
-base64 = "0.22"
-# Line selection for the index operations (the diff the app shows, `rt_app::git::text_diff`).
-similar = "3"
 rt-app = { path = "../rt-app" }
-# Seam N7: errors of the Git core (moves to tailor-kit with this crate).
+# The Git core; re-exported whole, with RequestTailor's profile as the default of `Options`.
+tk-git = { path = "../tk-git" }
 tk-git-types = { path = "../tk-git-types" }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 
 [dev-dependencies]
 # Bare test remotes and looking into them.
@@ -44,6 +22,8 @@ gix = { version = "0.90", default-features = false, features = ["sha1"] }
 # Wave 12, strand B: reading merged collections in the semantic merge tests.
 rt-core = { path = "../rt-core" }
 rt-format = { path = "../rt-format" }
+# Plan fixtures of the wizard tests, the JSON lines of the perf examples.
+serde_json = "1"
 
 [lints]
 workspace = true

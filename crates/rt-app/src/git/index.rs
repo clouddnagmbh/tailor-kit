@@ -12,58 +12,9 @@
 //! of both sides, and a [`GitPatchRequest`] names them back, so a stale selection (the file
 //! changed meanwhile) is refused instead of applied to the wrong lines. Paths are
 //! repository-relative with a leading `/`.
+//!
+//! The types live in the Tailor Kit (`tk_git_types::index`, where [`GitPatchRequest`] is called
+//! `GitPatch`); this module keeps the old paths.
 
-use serde::{Deserialize, Serialize};
-
-use super::GitDiff;
-
-/// Which pair of versions a diff compares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum GitPatchSide {
-    /// Index → working tree (what `stage` would add).
-    Unstaged,
-    /// `HEAD` → index (what `unstage` would take back).
-    Staged,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitIndexDiff {
-    pub side: GitPatchSide,
-    pub diff: GitDiff,
-    /// Blob id of the old side (`""` if the file does not exist there).
-    pub old: String,
-    /// Blob id of the new side (`""` if the file does not exist there; for the working tree the
-    /// id the content would get).
-    pub new: String,
-}
-
-/// Lines of one hunk of a [`GitIndexDiff`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitHunkSelection {
-    /// Index into `diff.hunks`.
-    pub hunk: u32,
-    /// Indexes into that hunk's `lines` (only added and removed lines count; context lines are
-    /// ignored); `None`: the whole hunk.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub lines: Option<Vec<u32>>,
-}
-
-/// Apply the chosen part of a diff: stage it (side `unstaged`), unstage it (side `staged`) or,
-/// for `discardPatch`, take it out of the working tree (side `unstaged`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitPatchRequest {
-    pub path: String,
-    pub side: GitPatchSide,
-    /// [`GitIndexDiff::old`] and [`GitIndexDiff::new`] of the diff the selection was made on;
-    /// refused with kind `git` when either changed since.
-    pub old: String,
-    pub new: String,
-    pub hunks: Vec<GitHunkSelection>,
-}
-
-/// Commit what the index holds.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitStagedCommit {
-    pub message: String,
-}
+pub use tk_git_types::index::GitPatch as GitPatchRequest;
+pub use tk_git_types::index::*;

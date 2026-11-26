@@ -4,11 +4,11 @@
 //! Seam N8: where a program keeps its own data inside a repository. Every product names its
 //! namespace once; the Git core builds every ref and file name of its own from it.
 //!
-//! - refs under `refs/<name>/…` (backups before rewriting, fetched pull requests),
+//! - refs under `refs/<name>/…` (backups before rewriting, fetched PRs),
 //! - files under `.git/<name>/…` (the action journal).
 //!
 //! A namespace may also *read* the namespaces of other programs, so a repository used by
-//! both keeps working (GitTailor reads RequestTailor's backups). It never writes there.
+//! both keeps working (one program finds the other's backups). It never writes there.
 
 use std::path::{Path, PathBuf};
 
@@ -55,7 +55,7 @@ impl RefNamespace {
         Self { name, reads }
     }
 
-    /// The name, e.g. `requesttailor`.
+    /// The name, e.g. `gittailor`.
     pub const fn name(&self) -> &'static str {
         self.name
     }
@@ -89,12 +89,12 @@ impl RefNamespace {
         format!("{}{what}", self.backup_prefix_at(unix))
     }
 
-    /// The ref a pull request's head is fetched into: `refs/<name>/review/<host>/<number>`.
+    /// The ref a PR's head is fetched into: `refs/<name>/review/<host>/<number>`.
     pub fn review_ref(&self, host: &str, number: u64) -> String {
         format!("refs/{}/review/{host}/{number}", self.name)
     }
 
-    /// The ref the pull request's target is fetched into next to the head:
+    /// The ref the PR's target is fetched into next to the head:
     /// `refs/<name>/review/<host>/<number>-base` (not `<number>/base`, which Git cannot keep
     /// next to the ref `<number>`).
     pub fn review_base_ref(&self, host: &str, number: u64) -> String {
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn names_are_one_safe_component() {
-        for ok in ["requesttailor", "tool-2"] {
+        for ok in ["gittailor", "tool-2"] {
             assert!(valid(ok), "{ok}");
         }
         for bad in ["", "-x", "Tool", "a/b", "a.b", "a b", "ä"] {

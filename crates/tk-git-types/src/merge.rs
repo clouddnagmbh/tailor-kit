@@ -5,7 +5,7 @@
 //!
 //! The Git core merges every file line by line (Git's own merge). A [`FileMerger`] plugged
 //! into it takes over the files it claims: it names the folders whose files merge together
-//! (a *group*, e.g. one API collection), and merges a group's three sides at once. Its result
+//! (a *group*, e.g. one API description), and merges a group's three sides at once. Its result
 //! replaces Git's for every file it decides; a file it leaves (`whole_file`) keeps Git's
 //! result with conflict markers. Without a merger every file is merged line by line.
 

@@ -1,6 +1,6 @@
 [package]
 name = "tk-git-types"
-description = "Tailor Kit: Git types shared by RequestTailor and GitTailor (no I/O)."
+description = "Tailor Kit: the Git core's types, seams and errors (no I/O)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,13 @@ publish.workspace = true
 # Builds on every target (also wasm32 and iOS): types only, no I/O.
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+# Line diffs (`text_diff`); pure Rust, builds on wasm32 and iOS.
+similar = "3"
 thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
 
 [lints]
 workspace = true

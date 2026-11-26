@@ -8,11 +8,18 @@ import { syntheticHistory } from "./synthetic";
 
 const c = (oid: string, ...parents: string[]) => ({ oid, parents });
 
+/** Row `i` of `rows`; the tests only ask for rows that exist. */
+function row(rows: LaneRow[], i: number): LaneRow {
+  const r = rows[i];
+  if (!r) throw new Error(`no row ${i}`);
+  return r;
+}
+
 /** Every lane that ends at the bottom of row i starts at the top of row i + 1. */
 function expectContinuous(rows: LaneRow[]) {
   for (let i = 0; i + 1 < rows.length; i++) {
-    const below = new Set([...rows[i].through.map((t) => t.lane), ...rows[i].down.map((d) => d.to)]);
-    const above = new Set([...rows[i + 1].through.map((t) => t.lane), ...rows[i + 1].up.map((u) => u.from)]);
+    const below = new Set([...row(rows, i).through.map((t) => t.lane), ...row(rows, i).down.map((d) => d.to)]);
+    const above = new Set([...row(rows, i + 1).through.map((t) => t.lane), ...row(rows, i + 1).up.map((u) => u.from)]);
     expect([...above].sort(), `rows ${i} → ${i + 1}`).toEqual([...below].sort());
   }
 }
@@ -21,9 +28,9 @@ describe("lane layout", () => {
   it("keeps a straight history in one lane", () => {
     const rows = layoutLanes([c("c", "b"), c("b", "a"), c("a")]);
     expect(rows.map((r) => r.lane)).toEqual([0, 0, 0]);
-    expect(rows[0].up).toEqual([]);
-    expect(rows[1].up).toEqual([{ from: 0, color: rows[0].color }]);
-    expect(rows[2].down).toEqual([]);
+    expect(row(rows, 0).up).toEqual([]);
+    expect(row(rows, 1).up).toEqual([{ from: 0, color: row(rows, 0).color }]);
+    expect(row(rows, 2).down).toEqual([]);
     expect(new Set(rows.map((r) => r.color)).size).toBe(1);
     expectContinuous(rows);
   });
@@ -31,26 +38,26 @@ describe("lane layout", () => {
   it("joins a fork at the common parent", () => {
     // main: m2 → base; feature: f1 → base. Both tips first.
     const rows = layoutLanes([c("m2", "base"), c("f1", "base"), c("base")]);
-    expect(rows[0].lane).toBe(0);
-    expect(rows[1].lane).toBe(1);
-    expect(rows[1].through).toEqual([{ lane: 0, color: rows[0].color }]);
-    expect(rows[1].color).not.toBe(rows[0].color);
+    expect(row(rows, 0).lane).toBe(0);
+    expect(row(rows, 1).lane).toBe(1);
+    expect(row(rows, 1).through).toEqual([{ lane: 0, color: row(rows, 0).color }]);
+    expect(row(rows, 1).color).not.toBe(row(rows, 0).color);
     // The parent takes the leftmost lane; the other one curves in.
-    expect(rows[2].lane).toBe(0);
-    expect(rows[2].up.map((u) => u.from).sort()).toEqual([0, 1]);
+    expect(row(rows, 2).lane).toBe(0);
+    expect(row(rows, 2).up.map((u) => u.from).sort()).toEqual([0, 1]);
     expectContinuous(rows);
   });
 
   it("opens a lane for the second parent of a merge", () => {
     const rows = layoutLanes([c("merge", "m1", "f1"), c("f1", "base"), c("m1", "base"), c("base")]);
-    expect(rows[0].down).toEqual([
-      { to: 0, color: rows[0].color },
-      { to: 1, color: rows[1].color },
+    expect(row(rows, 0).down).toEqual([
+      { to: 0, color: row(rows, 0).color },
+      { to: 1, color: row(rows, 1).color },
     ]);
-    expect(rows[0].merge).toBe(true);
-    expect(rows[1].lane).toBe(1);
-    expect(rows[2].lane).toBe(0);
-    expect(rows[3].up.map((u) => u.from).sort()).toEqual([0, 1]);
+    expect(row(rows, 0).merge).toBe(true);
+    expect(row(rows, 1).lane).toBe(1);
+    expect(row(rows, 2).lane).toBe(0);
+    expect(row(rows, 3).up.map((u) => u.from).sort()).toEqual([0, 1]);
     expect(rows.map((r) => r.width)).toEqual([2, 2, 2, 2]);
     expectContinuous(rows);
   });
@@ -58,29 +65,29 @@ describe("lane layout", () => {
   it("merges into a lane that already waits for the parent", () => {
     // Two merges of the same feature commit: the second edge joins the existing lane.
     const rows = layoutLanes([c("m2", "m1", "f"), c("m1", "base", "f"), c("f", "base"), c("base")]);
-    expect(rows[1].down.map((d) => d.to)).toEqual([0, 1]);
+    expect(row(rows, 1).down.map((d) => d.to)).toEqual([0, 1]);
     // The feature's lane goes on; the second merge edge curves into it.
-    expect(rows[1].through.map((t) => t.lane)).toEqual([1]);
-    expect(rows[2].lane).toBe(1);
+    expect(row(rows, 1).through.map((t) => t.lane)).toEqual([1]);
+    expect(row(rows, 2).lane).toBe(1);
     expectContinuous(rows);
   });
 
   it("draws an octopus merge with one lane per parent", () => {
     const rows = layoutLanes([c("o", "a", "b", "d"), c("a", "r"), c("b", "r"), c("d", "r"), c("r")]);
-    expect(rows[0].down.map((d) => d.to)).toEqual([0, 1, 2]);
+    expect(row(rows, 0).down.map((d) => d.to)).toEqual([0, 1, 2]);
     expect(rows.slice(1, 4).map((r) => r.lane)).toEqual([0, 1, 2]);
-    expect(rows[4].up.map((u) => u.from).sort()).toEqual([0, 1, 2]);
-    expect(new Set(rows[0].down.map((d) => d.color)).size).toBe(3);
+    expect(row(rows, 4).up.map((u) => u.from).sort()).toEqual([0, 1, 2]);
+    expect(new Set(row(rows, 0).down.map((d) => d.color)).size).toBe(3);
     expectContinuous(rows);
   });
 
   it("gives every root its own line and frees it", () => {
     const rows = layoutLanes([c("a2", "a1"), c("b1"), c("a1")]);
-    expect(rows[1].lane).toBe(1);
-    expect(rows[1].down).toEqual([]);
-    expect(rows[2].lane).toBe(0);
-    expect(rows[2].through).toEqual([]);
-    expect(rows[2].width).toBe(1);
+    expect(row(rows, 1).lane).toBe(1);
+    expect(row(rows, 1).down).toEqual([]);
+    expect(row(rows, 2).lane).toBe(0);
+    expect(row(rows, 2).through).toEqual([]);
+    expect(row(rows, 2).width).toBe(1);
     expectContinuous(rows);
   });
 
@@ -93,9 +100,9 @@ describe("lane layout", () => {
       c("t", "y"),
       c("y"),
     ]);
-    expect(rows[1].lane).toBe(1);
-    expect(rows[2].up.map((u) => u.from).sort()).toEqual([0, 1]);
-    expect(rows[3].lane).toBe(1);
+    expect(row(rows, 1).lane).toBe(1);
+    expect(row(rows, 2).up.map((u) => u.from).sort()).toEqual([0, 1]);
+    expect(row(rows, 3).lane).toBe(1);
     expect(Math.max(...rows.map((r) => r.width))).toBe(2);
     expectContinuous(rows);
   });

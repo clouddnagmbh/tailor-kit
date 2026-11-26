@@ -30,6 +30,8 @@
     ongraph: () => void;
   } = $props();
 
+  /** `rows` has one entry per shown commit; this stands in for a missing one. */
+  const NO_LANES: ReturnType<typeof miniLanes>[number] = { oid: "", lane: 0, merge: false, above: [], below: [], joins: [] };
   const LANE = 12;
   const ROW = 40;
   const MIN_ROWS = 3;
@@ -65,7 +67,7 @@
     {/snippet}
     <ol class="log" data-testid="git-log" bind:this={list}>
       {#each shown as c, i (c.oid)}
-        {@const row = rows[i]}
+        {@const row = rows[i] ?? NO_LANES}
         {@const pills = refPills(c.oid, refs)}
         <li data-testid="git-log-row" data-oid={c.oid} class:open={menuOpen && menu?.commit.oid === c.oid}>
           <svg class="lanes" {width} height={ROW} aria-hidden="true">

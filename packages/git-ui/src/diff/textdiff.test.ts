@@ -32,6 +32,7 @@ describe("lineDiff", () => {
     const d = lineDiff("f.yml", old, next);
     expect(d.hunks).toHaveLength(1);
     const h = d.hunks[0];
+    if (!h) throw new Error("no hunk");
     expect([h.old_start, h.old_lines, h.new_start, h.new_lines]).toEqual([7, 7, 7, 7]);
     expect(h.lines.filter((l) => l.kind !== "context").map((l) => [l.kind, l.text])).toEqual([
       ["removed", "l10"],

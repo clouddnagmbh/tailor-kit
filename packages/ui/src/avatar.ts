@@ -8,8 +8,10 @@ export function initials(name: string): string {
   const base = name.trim().split("@")[0] ?? "";
   const words = base.split(/[\s._-]+/).filter((w) => /\p{L}|\p{N}/u.test(w));
   if (words.length === 0) return "?";
-  if (words.length === 1) return [...words[0]].slice(0, 2).join("").toLocaleUpperCase();
-  return ([...words[0]][0] + [...words[words.length - 1]][0]).toLocaleUpperCase();
+  const first = words[0] ?? "";
+  if (words.length === 1) return [...first].slice(0, 2).join("").toLocaleUpperCase();
+  const last = words[words.length - 1] ?? "";
+  return (([...first][0] ?? "") + ([...last][0] ?? "")).toLocaleUpperCase();
 }
 
 /** One of `count` colours (1-based), the same for the same name on every device (FNV-1a). */

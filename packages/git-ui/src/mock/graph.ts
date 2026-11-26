@@ -90,9 +90,9 @@ function fromRepo<S>(git: MockGit<S>): GraphSource {
       oid: c.oid,
       parents: c.parents,
       time: c.time,
-      summary: c.message.split("\n")[0],
+      summary: c.message.split("\n")[0] ?? "",
       author: c.author,
-      email: `${c.author.split(" ")[0].toLowerCase()}@example.com`,
+      email: `${(c.author.split(" ")[0] ?? "").toLowerCase()}@example.com`,
     })),
   );
   return { commits, refs, head, detached };
@@ -100,7 +100,8 @@ function fromRepo<S>(git: MockGit<S>): GraphSource {
 
 function synthetic(count: number, first: string): GraphSource {
   const repo = syntheticRepo(count, 14, undefined, first);
-  const main = repo.branches[0].oid;
+  const main = repo.branches[0]?.oid;
+  if (main === undefined) throw new Error("the synthetic history has no main branch");
   const firstParent = repo.commits.find((c) => c.oid === main)?.parents[0] ?? main;
   const refs: GitRef[] = [
     ...repo.branches.map((b, i): GitRef => ({

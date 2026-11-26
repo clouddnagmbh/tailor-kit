@@ -22,8 +22,11 @@ function lcs(a: string[], b: string[]): [number, number][] {
   const m = b.length;
   const table: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
+    const cur = table[i];
+    const nxt = table[i + 1];
+    if (!cur || !nxt) continue;
     for (let j = m - 1; j >= 0; j--) {
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+      cur[j] = a[i] === b[j] ? (nxt[j + 1] ?? 0) + 1 : Math.max(nxt[j] ?? 0, cur[j + 1] ?? 0);
     }
   }
   const out: [number, number][] = [];
@@ -34,7 +37,7 @@ function lcs(a: string[], b: string[]): [number, number][] {
       out.push([i, j]);
       i++;
       j++;
-    } else if (table[i + 1][j] >= table[i][j + 1]) i++;
+    } else if ((table[i + 1]?.[j] ?? 0) >= (table[i]?.[j + 1] ?? 0)) i++;
     else j++;
   }
   return out;
@@ -70,7 +73,8 @@ export function diff3(base: string[], ours: string[], theirs: string[]): Block[]
     else if (same(gb, go)) push({ kind: "same", lines: gt });
     else if (same(gb, gt)) push({ kind: "same", lines: go });
     else push({ kind: "conflict", base: gb, ours: go, theirs: gt });
-    if (b < base.length) push({ kind: "same", lines: [base[b]] });
+    const kept = base[b];
+    if (b < base.length && kept !== undefined) push({ kind: "same", lines: [kept] });
     [pb, po, pt] = [b + 1, o + 1, t + 1];
   }
   return blocks;

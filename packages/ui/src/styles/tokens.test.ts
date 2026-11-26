@@ -14,7 +14,7 @@ function block(selectorStart: string): Map<string, string> {
   const open = css.indexOf("{", at);
   const close = css.indexOf("}", open);
   const vars = new Map<string, string>();
-  for (const m of css.slice(open + 1, close).matchAll(/(--rt-[a-z0-9-]+)\s*:\s*([^;]+);/g)) vars.set(m[1], m[2].trim());
+  for (const m of css.slice(open + 1, close).matchAll(/(--rt-[a-z0-9-]+)\s*:\s*([^;]+);/g)) vars.set(m[1] ?? "", (m[2] ?? "").trim());
   return vars;
 }
 
@@ -23,6 +23,8 @@ const darkOs = block(':root:not([data-theme="light"])');
 const dark = block('\n[data-theme="dark"] {');
 const scales = block(":root {");
 
+const WEIGHTS = [0.2126, 0.7152, 0.0722];
+
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
   return [n >> 16, (n >> 8) & 255, n & 255]
@@ -30,12 +32,13 @@ function luminance(hex: string): number {
       const s = c / 255;
       return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
     })
-    .reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    .reduce((sum, c, i) => sum + c * (WEIGHTS[i] ?? 0), 0);
 }
 
 function contrast(a: string, b: string): number {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
+  const hi = Math.max(luminance(a), luminance(b));
+  const lo = Math.min(luminance(a), luminance(b));
+  return (hi + 0.05) / (lo + 0.05);
 }
 
 describe("tokens v2", () => {

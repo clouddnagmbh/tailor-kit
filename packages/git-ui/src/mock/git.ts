@@ -76,8 +76,11 @@ export function lineDiff(path: string, old: string | null, current: string | nul
   // LCS table (files in the mock are small).
   const lcs = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
   for (let i = a.length - 1; i >= 0; i--) {
+    const cur = lcs[i];
+    const nxt = lcs[i + 1];
+    if (!cur || !nxt) continue;
     for (let j = b.length - 1; j >= 0; j--) {
-      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+      cur[j] = a[i] === b[j] ? (nxt[j + 1] ?? 0) + 1 : Math.max(nxt[j] ?? 0, cur[j + 1] ?? 0);
     }
   }
   interface Op {
@@ -89,28 +92,35 @@ export function lineDiff(path: string, old: string | null, current: string | nul
   let i = 0;
   let j = 0;
   while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) {
-      ops.push({ line: { kind: "context", text: a[i] }, oldAt: i++, newAt: j++ });
-    } else if (i < a.length && (j === b.length || lcs[i + 1][j] >= lcs[i][j + 1])) {
-      ops.push({ line: { kind: "removed", text: a[i] }, oldAt: i++, newAt: j });
+    const left = a[i];
+    const right = b[j];
+    if (left !== undefined && right !== undefined && left === right) {
+      ops.push({ line: { kind: "context", text: left }, oldAt: i++, newAt: j++ });
+    } else if (left !== undefined && (j === b.length || (lcs[i + 1]?.[j] ?? 0) >= (lcs[i]?.[j + 1] ?? 0))) {
+      ops.push({ line: { kind: "removed", text: left }, oldAt: i++, newAt: j });
+    } else if (right !== undefined) {
+      ops.push({ line: { kind: "added", text: right }, oldAt: i, newAt: j++ });
     } else {
-      ops.push({ line: { kind: "added", text: b[j] }, oldAt: i, newAt: j++ });
+      break;
     }
   }
   const changed = ops.map((o, k) => (o.line.kind === "context" ? -1 : k)).filter((k) => k >= 0);
   const hunks: DiffHunk[] = [];
   let k = 0;
   while (k < changed.length) {
-    const from = Math.max(0, changed[k] - CONTEXT);
-    let to = changed[k];
-    while (k + 1 < changed.length && changed[k + 1] - to <= 2 * CONTEXT) to = changed[++k];
+    const start = changed[k] ?? 0;
+    const from = Math.max(0, start - CONTEXT);
+    let to = start;
+    while (k + 1 < changed.length && (changed[k + 1] ?? 0) - to <= 2 * CONTEXT) to = changed[++k] ?? to;
     to = Math.min(ops.length - 1, to + CONTEXT);
     k++;
     const slice = ops.slice(from, to + 1);
     const oldLines = slice.filter((o) => o.line.kind !== "added").length;
     const newLines = slice.filter((o) => o.line.kind !== "removed").length;
-    const oldStart = slice.find((o) => o.line.kind !== "added")?.oldAt ?? slice[0].oldAt;
-    const newStart = slice.find((o) => o.line.kind !== "removed")?.newAt ?? slice[0].newAt;
+    const firstOp = slice[0];
+    if (!firstOp) continue;
+    const oldStart = slice.find((o) => o.line.kind !== "added")?.oldAt ?? firstOp.oldAt;
+    const newStart = slice.find((o) => o.line.kind !== "removed")?.newAt ?? firstOp.newAt;
     hunks.push({
       old_start: oldLines === 0 ? oldStart : oldStart + 1,
       old_lines: oldLines,
@@ -385,7 +395,7 @@ export class MockGit<S = string> implements GitApi {
 
   private toCommit(oid: string): GitCommit {
     const c = this.store.get(oid)!;
-    return { oid, summary: c.message.split("\n")[0], author: c.author, time: c.time };
+    return { oid, summary: c.message.split("\n")[0] ?? "", author: c.author, time: c.time };
   }
 
   /** The commit `rev` names: an oid (or a prefix of 4+), a local branch, `origin/<branch>`,
@@ -402,7 +412,7 @@ export class MockGit<S = string> implements GitApi {
     else if (this.tagsMap.has(name)) oid = this.tagsMap.get(name)!.oid;
     else if (/^[0-9a-f]{4,40}$/.test(name)) {
       const hits = [...this.store.keys()].filter((o) => o.startsWith(name));
-      oid = hits.length === 1 ? hits[0] : null;
+      oid = hits.length === 1 ? (hits[0] ?? null) : null;
     }
     if (!oid) throw err(`Unknown revision "${rev}".`);
     let at: string = oid;

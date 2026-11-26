@@ -329,8 +329,9 @@ export function miniLanes(commits: Pick<GitGraphCommit, "oid" | "parents">[]): L
 export function initials(name: string): string {
   const parts = name.trim().split(/[\s._-]+/).filter(Boolean);
   if (parts.length === 0) return "?";
-  const first = parts[0][0] ?? "";
-  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : (parts[0][1] ?? "");
+  const head = parts[0] ?? "";
+  const first = head[0] ?? "";
+  const last = parts.length > 1 ? ((parts[parts.length - 1] ?? "")[0] ?? "") : (head[1] ?? "");
   return (first + last).toUpperCase();
 }
 

@@ -383,7 +383,7 @@ impl Repo {
                 file.path
             )));
         }
-        let value = rescue::plan_value(plan, |at| self.text_at(&at.commit, &at.path))?;
+        let value = rescue::plan_value(plan, |at| Ok(self.text_at(&at.commit, &at.path)?))?;
 
         // New objects first; nothing points at them yet.
         let branches = self.branch_tips()?;

@@ -9,10 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 use gix::bstr::ByteSlice;
-use rt_app::AppError;
 
 use crate::credentials::{CredentialSource, Credentials};
-use crate::util::{Context, Result, fail};
+use crate::util::{Context, GitError, Result, fail};
 
 /// rustls on ring (not aws-lc) for every HTTPS client in this crate (reqwest is built
 /// without a provider of its own).
@@ -78,7 +77,7 @@ pub fn endpoint(url: &str, base: &Path) -> Result<Endpoint> {
                 loopback,
             }))
         }
-        other => Err(AppError::Unsupported(format!(
+        other => Err(GitError::Unsupported(format!(
             "{other} remotes are not supported yet; use an https:// URL"
         ))),
     }
@@ -102,13 +101,13 @@ impl HttpTarget {
     }
 
     /// The error for "the server wants credentials and we have none it may get".
-    pub fn auth_error(&self, auth: &Auth) -> AppError {
+    pub fn auth_error(&self, auth: &Auth) -> GitError {
         match auth {
             Auth::Refused => fail(format!(
                 "refusing to send credentials over unencrypted http:// to {}; use an https:// URL",
                 self.host
             )),
-            _ => AppError::GitAuth(self.host.clone()),
+            _ => GitError::Auth(self.host.clone()),
         }
     }
 }
@@ -186,10 +185,11 @@ pub fn fetch(
 mod tests {
     use super::*;
     use crate::credentials::NoCredentials;
+    use rt_app::AppError;
 
     struct One;
     impl CredentialSource for One {
-        fn get(&self, _host: &str) -> Result<Option<Credentials>> {
+        fn get(&self, _host: &str) -> Result<Option<Credentials>, AppError> {
             Ok(Some(Credentials {
                 username: "u".into(),
                 password: "p".into(),
@@ -220,7 +220,7 @@ mod tests {
         }
         assert!(matches!(
             endpoint("ssh://example.com/a/b.git", Path::new("/")),
-            Err(AppError::Unsupported(_))
+            Err(GitError::Unsupported(_))
         ));
     }
 
@@ -237,11 +237,11 @@ mod tests {
         let insecure = http("http://example.com/x");
         let auth = insecure.auth(&One).unwrap();
         assert!(matches!(auth, Auth::Refused));
-        assert!(matches!(insecure.auth_error(&auth), AppError::Git(m) if m.contains("https")));
+        assert!(matches!(insecure.auth_error(&auth), GitError::Failed(m) if m.contains("https")));
         let none = insecure.auth(&NoCredentials).unwrap();
-        assert_eq!(
+        assert!(matches!(
             insecure.auth_error(&none),
-            AppError::GitAuth("example.com".into())
-        );
+            GitError::Auth(host) if host == "example.com"
+        ));
     }
 }

@@ -15,7 +15,6 @@
 use gix::ObjectId;
 use gix::bstr::{BStr, BString, ByteSlice};
 use gix::index::entry::{Flags, Mode, Stage, Stat};
-use rt_app::AppError;
 use rt_app::git::index::{GitIndexDiff, GitPatchRequest, GitPatchSide, GitStagedCommit};
 use rt_app::git::{GitCommit, text_diff};
 use rt_app::secret_scan;
@@ -23,7 +22,7 @@ use rt_app::secret_scan;
 use crate::commit::{describe, signature};
 use crate::patch::Selection;
 use crate::repo::Repo;
-use crate::util::{Context, Result, blob_bytes, fail};
+use crate::util::{Context, GitError, Result, blob_bytes, fail};
 use crate::worktree::{fs_path, stat_of};
 
 /// One side of a file: its blob and what it holds.
@@ -460,7 +459,7 @@ impl Repo {
             .collect();
         let findings = secret_scan::scan(&files);
         if !findings.is_empty() {
-            return Err(AppError::SecretsFound(secret_scan::refusal(&findings)));
+            return Err(GitError::SecretsFound(secret_scan::refusal(&findings)));
         }
         let identity = self.identity_or(fallback)?;
         let sig = signature(&identity);

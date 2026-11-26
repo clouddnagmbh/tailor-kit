@@ -8,23 +8,24 @@ use std::collections::BTreeMap;
 use gix::ObjectId;
 use gix::bstr::{BStr, BString, ByteSlice};
 use gix::index::entry::Mode;
-use rt_app::AppError;
+pub use tk_git_types::GitError;
 
-pub type Result<T, E = AppError> = std::result::Result<T, E>;
+/// Result of the Git core (seam N7): `GitError`, which `rt-app` turns into `AppError`.
+pub type Result<T, E = GitError> = std::result::Result<T, E>;
 
 /// A refused or failed Git operation.
-pub fn fail(message: impl Into<String>) -> AppError {
-    AppError::Git(message.into())
+pub fn fail(message: impl Into<String>) -> GitError {
+    GitError::Failed(message.into())
 }
 
-/// Turns any error into `AppError::Git` with what was being done.
+/// Turns any error into `GitError::Failed` with what was being done.
 pub trait Context<T> {
     fn ctx(self, what: &str) -> Result<T>;
 }
 
 impl<T, E: std::fmt::Display> Context<T> for std::result::Result<T, E> {
     fn ctx(self, what: &str) -> Result<T> {
-        self.map_err(|e| AppError::Git(format!("{what}: {e}")))
+        self.map_err(|e| GitError::Failed(format!("{what}: {e}")))
     }
 }
 

@@ -149,6 +149,9 @@ mod tags;
 mod tree_commit;
 mod undo;
 mod util;
+
+/// Errors of the Git core (seam N7); `rt-app` turns them into `AppError`.
+pub use tk_git_types::{GitError, GitResult};
 mod working_copy;
 mod worktree;
 
@@ -174,7 +177,7 @@ pub fn local_url(path: &std::path::Path) -> String {
 pub fn status(
     root: &std::path::Path,
     options: &Options,
-) -> Result<rt_app::git::GitStatus, rt_app::AppError> {
+) -> Result<rt_app::git::GitStatus, crate::util::GitError> {
     match Repo::open(root, options)? {
         Some(repo) => repo.status(),
         None => Ok(rt_app::git::GitStatus {

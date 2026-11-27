@@ -113,6 +113,9 @@ export function mockGitFiles<S>(git: MockGit<S>): GitWorkingMethods {
       // Every file path of the side (request files from `MockGit`).
       const paths = new Map<string, number>();
       if (rev === null) {
+        // The working tree is `HEAD` plus its changes, so the files nothing touched are in it too
+        // (a deleted one stays, marked deleted, as in the core).
+        if (await committed()) for (const p of Object.keys((await git.treeAt("HEAD")).files)) paths.set(`/${p}`, 1);
         for (const [p, e] of work) paths.set(p, SIZE(e));
         for (const [p, s] of states) if (s !== "deleted" && !paths.has(p)) paths.set(p, 1);
         for (const [p, s] of states) if (s === "deleted") paths.set(p, 0);

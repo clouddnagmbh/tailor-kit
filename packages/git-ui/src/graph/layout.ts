@@ -70,19 +70,21 @@ export class LaneLayout {
   add(commits: readonly LaneCommit[]): LaneRow[] {
     const rows: LaneRow[] = new Array(commits.length);
     for (let n = 0; n < commits.length; n++) {
-      const { oid, parents } = commits[n];
+      const commit = commits[n];
+      if (!commit) continue;
+      const { oid, parents } = commit;
       const lanes = this.lanes;
       let lane = -1;
       const up: LaneRow["up"] = [];
       const through: LaneRow["through"] = [];
       for (let i = 0; i < lanes.length; i++) {
         const waits = lanes[i];
-        if (waits === null) continue;
+        if (waits === null || waits === undefined) continue;
         if (waits === oid) {
           if (lane < 0) lane = i;
-          up.push({ from: i, color: this.colors[i] });
+          up.push({ from: i, color: this.colors[i] ?? 0 });
         } else {
-          through.push({ lane: i, color: this.colors[i] });
+          through.push({ lane: i, color: this.colors[i] ?? 0 });
         }
       }
       let color: number;
@@ -90,19 +92,21 @@ export class LaneLayout {
         lane = this.freeLane(-1);
         color = this.open(lane, oid);
       } else {
-        color = this.colors[lane];
+        color = this.colors[lane] ?? 0;
         // The other lanes that waited for this commit end here.
         for (const u of up) if (u.from !== lane) lanes[u.from] = null;
       }
       let width = Math.max(lane, ...up.map((u) => u.from)) + 1;
       const down: LaneRow["down"] = [];
-      if (parents.length === 0) {
+      const firstParent = parents[0];
+      if (firstParent === undefined) {
         lanes[lane] = null;
       } else {
-        lanes[lane] = parents[0];
+        lanes[lane] = firstParent;
         down.push({ to: lane, color });
         for (let p = 1; p < parents.length; p++) {
           const parent = parents[p];
+          if (parent === undefined) continue;
           let target = -1;
           for (let i = 0; i < lanes.length; i++) {
             if (i !== lane && lanes[i] === parent) {
@@ -112,7 +116,7 @@ export class LaneLayout {
           }
           let c: number;
           if (target >= 0) {
-            c = this.colors[target];
+            c = this.colors[target] ?? 0;
           } else {
             target = this.freeLane(lane);
             c = this.open(target, parent);

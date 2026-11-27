@@ -65,7 +65,11 @@ function oidOf(n: number, seed: number): string {
 /** A history of `count` commits (at least 2); `firstSummary` is the message of the first. */
 export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firstSummary = "Start the project"): SyntheticRepo {
   const rnd = random(seed);
-  const pick = <T>(list: readonly T[]) => list[Math.floor(rnd() * list.length)];
+  const pick = <T>(list: readonly T[]): T => {
+    const item = list[Math.floor(rnd() * list.length)];
+    if (item === undefined) throw new Error("pick from an empty list");
+    return item;
+  };
   const made: SyntheticCommit[] = [];
   const start = now - count * 1_800;
   const commit = (parents: string[], summary: string): string => {
@@ -76,7 +80,7 @@ export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firs
       parents,
       summary,
       author,
-      email: `${author.split(" ")[0].toLowerCase()}@example.com`,
+      email: `${(author.split(" ")[0] ?? "").toLowerCase()}@example.com`,
       time: start + made.length * 1_800,
     });
     return oid;
@@ -104,7 +108,7 @@ export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firs
       features.push({ name: `feature/${featureNo}-${pick(THINGS).split(" ").pop()}`, tip: main });
       // The fork itself is no commit; the first commit on the branch follows.
       const f = features[features.length - 1];
-      f.tip = commit([f.tip], `${pick(VERBS)} ${pick(THINGS)}`);
+      if (f) f.tip = commit([f.tip], `${pick(VERBS)} ${pick(THINGS)}`);
     } else if (r < 0.32 && features.length > 0) {
       const f = pick(features);
       f.tip = commit([f.tip], `${pick(VERBS)} ${pick(THINGS)}`);
@@ -117,8 +121,10 @@ export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firs
         merged.push(...three);
       } else {
         const [f] = features.splice(i, 1);
-        main = commit([main, f.tip], `Merge ${f.name} into main`);
-        merged.push(f);
+        if (f) {
+          main = commit([main, f.tip], `Merge ${f.name} into main`);
+          merged.push(f);
+        }
       }
     } else {
       main = commit([main], `${pick(VERBS)} ${pick(THINGS)}`);
@@ -127,8 +133,8 @@ export function syntheticRepo(count: number, seed = 1, now = 1_790_000_000, firs
   }
   const branches = [{ name: "main", oid: main }, ...features.map((f) => ({ name: f.name, oid: f.tip }))];
   if (docs) branches.push({ name: "docs", oid: docs });
-  if (merged.length > 0) {
-    const last = merged[merged.length - 1];
+  const last = merged[merged.length - 1];
+  if (last) {
     branches.push({ name: last.name, oid: last.tip });
   }
   return { commits: made.reverse(), branches, tags };

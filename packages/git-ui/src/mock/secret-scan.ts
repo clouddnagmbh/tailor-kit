@@ -36,16 +36,18 @@ export function mockScan(files: [string, string][]): SecretFinding[] {
       // `"key": "value"` or the mock's YAML `key: value` / `key: "value"`.
       const pair = /^\s*(?:- )?"?([A-Za-z_]+)"?:\s*(?:"((?:[^"\\]|\\.)*)"|([^"\s].*?))\s*,?\s*$/.exec(line);
       if (!pair) return;
-      const key = pair[1];
-      const raw = pair[2] ?? pair[3];
+      const key = pair[1] ?? "";
+      const raw = pair[2] ?? pair[3] ?? "";
       const scheme = /^(Bearer|Basic)\s+(\S+)$/i.exec(raw);
-      if (scheme && !placeholder(scheme[2])) {
-        out.push(finding(path, i + 1, `${scheme[1].toLowerCase()} credential`, line, scheme[2], "token"));
+      const schemeName = scheme?.[1];
+      const schemeValue = scheme?.[2];
+      if (schemeName !== undefined && schemeValue !== undefined && !placeholder(schemeValue)) {
+        out.push(finding(path, i + 1, `${schemeName.toLowerCase()} credential`, line, schemeValue, "token"));
         return;
       }
       const format = FORMATS.find(([re]) => re.test(raw));
       if (format) {
-        out.push(finding(path, i + 1, format[1], line, raw.match(format[0])![0], "token"));
+        out.push(finding(path, i + 1, format[1], line, raw.match(format[0])?.[0] ?? "", "token"));
         return;
       }
       if (CREDENTIAL_KEY.test(key) && !placeholder(raw)) out.push(finding(path, i + 1, key, line, raw, key));
@@ -58,6 +60,7 @@ export function mockScan(files: [string, string][]): SecretFinding[] {
 export function mockRefusal(findings: SecretFinding[]): string {
   const files = new Set(findings.map((f) => f.path)).size;
   const f = findings[0];
+  if (!f) return "Commit refused: no credentials.";
   const n = findings.length;
   return `Commit refused: ${n} credential${n === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"} (${f.path}:${f.line} ${f.kind}). ${f.hint}`;
 }

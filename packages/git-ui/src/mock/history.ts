@@ -93,8 +93,9 @@ export function mockGitHistory<S>(git: MockGit<S>): GitHistoryMethods {
     const push = (id: string, lines: [number, number][]) => pending.set(id, [...(pending.get(id) ?? []), ...lines]);
     push(oid, Array.from({ length: total }, (_, i): [number, number] => [i, i]));
     while (pending.size > 0) {
-      const [id] = [...pending.keys()].sort((a, b) => c.store.get(b)!.time - c.store.get(a)!.time);
-      const lines = pending.get(id)!;
+      const id = [...pending.keys()].sort((a, b) => c.store.get(b)!.time - c.store.get(a)!.time)[0];
+      const lines = id === undefined ? undefined : pending.get(id);
+      if (id === undefined || !lines) break;
       pending.delete(id);
       const commit = c.store.get(id)!;
       const now = text(commit.tree, file)!;

@@ -81,6 +81,32 @@ describe("the Git mock over plain text files", () => {
   });
 });
 
+describe("the file tree of the mock", () => {
+  it("lists the unchanged tracked files in the working tree, like the core", async () => {
+    const git = await repo("showcase");
+    const work = await git.fileTree(null, "/src");
+    expect(work.map((e) => [e.name, e.state ?? null])).toEqual([
+      ["app.txt", null],
+      ["lib.txt", null],
+      ["new.txt", "untracked"],
+    ]);
+    // The same folder at HEAD has the tracked files only.
+    expect((await git.fileTree("HEAD", "/src")).map((e) => e.name)).toEqual(["app.txt", "lib.txt"]);
+    // A tracked file the working tree lost stays in the listing, marked deleted; one that
+    // changed is marked modified; folders and unchanged files carry no state.
+    const docs = await git.fileTree(null, "/docs");
+    expect(docs.map((e) => [e.name, e.state ?? null])).toEqual([
+      ["blocked.txt", "deleted"],
+      ["guide.md", null],
+      ["old.txt", null],
+    ]);
+    const root = await git.fileTree(null, "");
+    expect(root.map((e) => e.name)).toEqual(["docs", "src", "README.md"]);
+    expect(root.find((e) => e.name === "README.md")?.state).toBe("modified");
+    expect(root.find((e) => e.name === "src")?.state).toBeUndefined();
+  });
+});
+
 describe("the whole mock backend", () => {
   it("lists repositories, initialises one and clones", async () => {
     const b = createMockGitBackend();

@@ -59,7 +59,7 @@ export function typeahead(entries: readonly MenuEntry[], current: number, char: 
   for (let i = 1; i <= n; i++) {
     const j = (current + i) % n;
     const e = entries[j];
-    if (isItem(e) && !e.disabled && e.label.toLocaleLowerCase().startsWith(c)) return j;
+    if (e && isItem(e) && !e.disabled && e.label.toLocaleLowerCase().startsWith(c)) return j;
   }
   return current;
 }

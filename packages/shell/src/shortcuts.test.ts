@@ -5,11 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { formatShortcut, matchShortcut, type Shortcut } from "./shortcuts";
 
-const table: Shortcut[] = [
-  { command: "save", key: "s" },
-  { command: "next", key: "Tab", ctrl: true },
-  { command: "digit-1", key: "1", digits: true },
-];
+const save: Shortcut = { command: "save", key: "s" };
+const next: Shortcut = { command: "next", key: "Tab", ctrl: true };
+const digit: Shortcut = { command: "digit-1", key: "1", digits: true };
+const table: Shortcut[] = [save, next, digit];
 const aliases: Shortcut[] = [{ command: "next", key: "]", code: "BracketRight", shift: true, macOnly: true }];
 const key = (k: string, mods: object = {}) => ({ key: k, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...mods });
 
@@ -24,8 +23,8 @@ describe("shortcut matching", () => {
   });
 
   it("formats per platform", () => {
-    expect(formatShortcut(table[0], true)).toBe("⌘S");
-    expect(formatShortcut(table[1], false)).toBe("Ctrl+Tab");
-    expect(formatShortcut(table[2], false)).toBe("Ctrl+1…9");
+    expect(formatShortcut(save, true)).toBe("⌘S");
+    expect(formatShortcut(next, false)).toBe("Ctrl+Tab");
+    expect(formatShortcut(digit, false)).toBe("Ctrl+1…9");
   });
 });

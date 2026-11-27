@@ -49,7 +49,7 @@ export function defaultBase(remote: readonly string[], local: readonly string[],
 export function titleFromBranch(branch: string): string {
   const last = branch.split("/").filter(Boolean).pop() ?? branch;
   const words = last.replace(/[-_]+/g, " ").trim();
-  return words ? words[0].toUpperCase() + words.slice(1) : "";
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
 /** What the form still lacks, as one sentence for the user; `null`: ready. */

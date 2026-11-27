@@ -24,34 +24,45 @@ class Ready {
     let i = h.length - 1;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (!Ready.before(h[i], h[p])) break;
-      [h[i], h[p]] = [h[p], h[i]];
+      if (!this.before(i, p)) break;
+      this.swap(i, p);
       i = p;
     }
   }
   pop(): number | undefined {
     const h = this.heap;
-    if (h.length === 0) return undefined;
-    const top = h[0][1];
-    const last = h.pop()!;
-    if (h.length > 0) {
+    const top = h[0]?.[1];
+    if (top === undefined) return undefined;
+    const last = h.pop();
+    if (last !== undefined && h.length > 0) {
       h[0] = last;
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
         const r = l + 1;
         let m = i;
-        if (l < h.length && Ready.before(h[l], h[m])) m = l;
-        if (r < h.length && Ready.before(h[r], h[m])) m = r;
+        if (l < h.length && this.before(l, m)) m = l;
+        if (r < h.length && this.before(r, m)) m = r;
         if (m === i) break;
-        [h[i], h[m]] = [h[m], h[i]];
+        this.swap(i, m);
         i = m;
       }
     }
     return top;
   }
-  private static before(a: [number, number], b: [number, number]): boolean {
+  /** Whether the entry at `i` sorts before the one at `j` (both exist). */
+  private before(i: number, j: number): boolean {
+    const a = this.heap[i];
+    const b = this.heap[j];
+    if (!a || !b) return false;
     return a[0] !== b[0] ? a[0] > b[0] : a[1] < b[1];
+  }
+  private swap(i: number, j: number): void {
+    const a = this.heap[i];
+    const b = this.heap[j];
+    if (!a || !b) return;
+    this.heap[i] = b;
+    this.heap[j] = a;
   }
 }
 
@@ -64,7 +75,7 @@ export function dateOrder<T extends OrderCommit>(commits: readonly T[]): T[] {
   for (const c of commits) {
     for (const p of c.parents) {
       const i = index.get(p);
-      if (i !== undefined) children[i]++;
+      if (i !== undefined) children[i] = (children[i] ?? 0) + 1;
     }
   }
   const ready = new Ready();
@@ -74,11 +85,15 @@ export function dateOrder<T extends OrderCommit>(commits: readonly T[]): T[] {
   const out: T[] = [];
   for (let i = ready.pop(); i !== undefined; i = ready.pop()) {
     const c = commits[i];
+    if (!c) continue;
     out.push(c);
     for (const p of c.parents) {
       const j = index.get(p);
       if (j === undefined) continue;
-      if (--children[j] === 0) ready.push(commits[j].time, j);
+      const left = (children[j] ?? 0) - 1;
+      children[j] = left;
+      const parent = commits[j];
+      if (left === 0 && parent) ready.push(parent.time, j);
     }
   }
   return out;
@@ -90,8 +105,8 @@ export function reachable<T extends OrderCommit>(commits: readonly T[], tips: re
   const seen = new Set<string>();
   const todo = [...tips];
   while (todo.length > 0) {
-    const oid = todo.pop()!;
-    if (seen.has(oid)) continue;
+    const oid = todo.pop();
+    if (oid === undefined || seen.has(oid)) continue;
     const c = byId.get(oid);
     if (!c) continue;
     seen.add(oid);
@@ -128,6 +143,7 @@ export function graphPage(source: GraphSource, query: GitGraphQuery): GitGraphPa
   const commits: GitGraphCommit[] = [];
   for (let i = skip; i < end; i++) {
     const c = source.commits[i];
+    if (!c) continue;
     const refs = labels.get(c.oid);
     commits.push({
       oid: c.oid,

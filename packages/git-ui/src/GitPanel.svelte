@@ -232,7 +232,10 @@
     } catch {
       const log: GitCommit[] = await git.log(RECENT);
       return {
-        commits: log.map((c, i) => ({ ...c, parents: log[i + 1] ? [log[i + 1].oid] : [], email: "" })),
+        commits: log.map((c, i) => {
+          const older = log[i + 1];
+          return { ...c, parents: older ? [older.oid] : [], email: "" };
+        }),
         refs: null,
         head: log[0]?.oid ?? null,
       };

@@ -479,7 +479,7 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
         p.steps.push(`Brings back "${s.message}" (${plural(s.files.length, "file")}).`);
         if (!action.keep) {
           p.steps.push("Removes it from the parked changes; a backup keeps it for Undo.");
-          p.refs.push({ name: "refs/stash", before: c.stashList[0].oid, after: action.index === 0 ? (c.stashList[1]?.oid ?? null) : c.stashList[0].oid });
+          p.refs.push({ name: "refs/stash", before: c.stashList[0]?.oid ?? s.oid, after: action.index === 0 ? (c.stashList[1]?.oid ?? null) : (c.stashList[0]?.oid ?? s.oid) });
         }
         p.backup = true;
         p.files = s.files.map(slash);
@@ -496,7 +496,7 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
         const s = c.stashList[action.index];
         if (!s) return { ...p, blocked: block("not-found", "There are no such parked changes.") };
         p.steps.push(`Deletes the parked changes "${s.message}".`);
-        p.refs.push({ name: "refs/stash", before: c.stashList[0].oid, after: action.index === 0 ? (c.stashList[1]?.oid ?? null) : c.stashList[0].oid });
+        p.refs.push({ name: "refs/stash", before: c.stashList[0]?.oid ?? s.oid, after: action.index === 0 ? (c.stashList[1]?.oid ?? null) : (c.stashList[0]?.oid ?? s.oid) });
         p.backup = true;
         p.destructive = true;
         return p;
@@ -516,7 +516,8 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
         }
         const pick = action.action === "cherry-pick";
         if (pick && c.ancestors(head).has(oid)) return { ...p, undoable: false, blocked: block("nothing-to-do", `${cur} contains this commit already.`) };
-        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, S>();
+        const firstParent = commit.parents[0];
+        const parent = firstParent ? c.store.get(firstParent)!.tree : new Map<string, S>();
         const files = pick ? mergeTreesOf(parent, c.headTree(), commit.tree) : mergeTreesOf(commit.tree, c.headTree(), parent);
         const subject = subjectOf(commit);
         p.steps.push(
@@ -918,6 +919,7 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
       }
       case "unstash": {
         const s = c.stashList[action.index];
+        if (!s) throw new BackendError("git", "There are no such parked changes.");
         const tree = c.store.get(s.oid)!.tree;
         backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);
         if (!action.keep) backupRef("stash", s.oid, t, backups);
@@ -927,6 +929,7 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
       }
       case "drop-stash": {
         const [s] = c.stashList.splice(action.index, 1);
+        if (!s) throw new BackendError("git", "There are no such parked changes.");
         backupRef("stash", s.oid, t, backups);
         return { message: `Deleted the parked changes "${s.message}".`, reload: false };
       }
@@ -934,15 +937,16 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
       case "cherry-pick": {
         const oid = c.resolveRev(action.commit);
         const commit = c.store.get(oid)!;
-        const parent = commit.parents[0] ? c.store.get(commit.parents[0])!.tree : new Map<string, S>();
+        const firstParent = commit.parents[0];
+        const parent = firstParent ? c.store.get(firstParent)!.tree : new Map<string, S>();
         const pick = action.action === "cherry-pick";
         const subject = subjectOf(commit);
         const message = pick ? commit.message : `Revert "${subject}"`;
         const who = pick ? commit.author : await author();
         backupRef(cur!, head, t, backups);
         const r = pick
-          ? threeWay(parent, commit.tree, "cherry-pick", oid, commit.parents[0] ?? null, message)
-          : threeWay(commit.tree, parent, "revert", commit.parents[0], oid, message);
+          ? threeWay(parent, commit.tree, "cherry-pick", oid, firstParent ?? null, message)
+          : threeWay(commit.tree, parent, "revert", firstParent ?? "", oid, message);
         if ("outcome" in r) {
           return { message: `${pick ? "Copying" : "Undoing"} "${subject}" needs your decision in ${plural(r.paths.length, "file")}.`, outcome: r, reload: true };
         }
@@ -1096,6 +1100,7 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
       const at = c.journal.findIndex((e) => e.entry.id === id);
       if (at < 0) throw new BackendError("git", "This action can no longer be undone.");
       const e = c.journal[at];
+      if (!e) throw new BackendError("git", "This action can no longer be undone.");
       const stale = staleness(e);
       if (stale) throw new BackendError("git", `Cannot undo: ${stale}`);
       const blocked = await unsaved();

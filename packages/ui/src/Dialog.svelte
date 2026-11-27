@@ -80,6 +80,7 @@
     }
     const first = list[0];
     const last = list[list.length - 1];
+    if (!first || !last) return;
     const active = document.activeElement as HTMLElement | null;
     const inside = active && panel.contains(active);
     if (e.shiftKey && (active === first || !inside)) {

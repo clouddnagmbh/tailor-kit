@@ -43,7 +43,7 @@
   };
   const METHODS = ["get", "post", "put", "patch", "delete"];
 
-  const status = $derived(kind === "status" ? (STATUS[String(value).toUpperCase()] ?? ["neutral", String(value)]) : null);
+  const status = $derived(kind === "status" ? (STATUS[String(value).toUpperCase()] ?? (["neutral", String(value)] as [Tone, string])) : null);
   const text = $derived(
     status && long
       ? status[1]

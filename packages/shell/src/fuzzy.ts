@@ -14,12 +14,12 @@ function scoreToken(token: string, text: string): number | null {
     if (i < 0) return null;
     score += 1;
     if (i === prev + 1) score += 3;
-    if (i === 0 || /[\s:/._-]/.test(text[i - 1])) score += 5;
+    if (i === 0 || /[\s:/._-]/.test(text.charAt(i - 1))) score += 5;
     prev = i;
     from = i + 1;
   }
   // Earlier matches rank slightly higher.
-  return score - text.indexOf(token[0]) * 0.01;
+  return score - text.indexOf(token.charAt(0)) * 0.01;
 }
 
 /** Score of `text` for `query`, or `null` if it does not match. Empty query matches all. */

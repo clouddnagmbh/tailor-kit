@@ -69,16 +69,16 @@ export function applyLineSelection(
     hunk.lines.forEach((line, l) => {
       const picked = chosen.has(key(h, l));
       if (line.kind === "context") {
-        out.push(invert ? next[pn] : old[po]);
+        out.push((invert ? next[pn] : old[po]) ?? "");
         po++;
         pn++;
       } else if (line.kind === "removed") {
         // Applied: the line goes; taken back: it comes back.
-        if (invert ? picked : !picked) out.push(old[po]);
+        if (invert ? picked : !picked) out.push(old[po] ?? "");
         po++;
       } else {
         // Applied: the line comes; taken back: it goes.
-        if (invert ? !picked : picked) out.push(next[pn]);
+        if (invert ? !picked : picked) out.push(next[pn] ?? "");
         pn++;
       }
     });

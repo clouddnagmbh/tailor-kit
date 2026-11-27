@@ -564,3 +564,47 @@ fn b2_the_redo_of_an_undone_push_sends_it_again_with_a_lease() {
         assert_eq!(ref_id(f.remote.path(), remote_ref), pushed, "{publish}");
     }
 }
+
+#[test]
+fn b2_the_redo_of_an_undone_delete_deletes_the_branch_or_tag_again() {
+    let f = scene("undo-all-redo-delete");
+    for (a, name) in [
+        (
+            r#"{"action":"delete-branch","name":"other","force":true}"#,
+            "refs/heads/other",
+        ),
+        (r#"{"action":"delete-tag","name":"v1"}"#, "refs/tags/v1"),
+    ] {
+        let before = (state(f.dir()), index(f.dir()));
+        let r = repo(&f).apply(&act(a), &options(false)).unwrap();
+        let after = (state(f.dir()), index(f.dir()));
+        assert!(ref_id(f.dir(), name).is_none(), "{a}: deleted");
+        let undo = repo(&f)
+            .undo_recorded(&r.undo.unwrap().id, false, &tk_git::NoCredentials)
+            .unwrap();
+        assert_eq!((state(f.dir()), index(f.dir())), before, "{a}: undone");
+        let undo = undo
+            .undo
+            .unwrap_or_else(|| panic!("{a}: the undo is journaled"));
+        assert!(
+            undo.refs
+                .iter()
+                .any(|m| m.name == name && m.before.is_none() && m.after.is_some()),
+            "{a}: the undo journals the ref it brought back: {:?}",
+            undo.refs
+        );
+        let redo = repo(&f)
+            .undo_recorded(&undo.id, false, &tk_git::NoCredentials)
+            .unwrap();
+        assert_eq!((state(f.dir()), index(f.dir())), after, "{a}: redone");
+        assert!(ref_id(f.dir(), name).is_none(), "{a}: deleted again");
+        repo(&f)
+            .undo_recorded(&redo.undo.unwrap().id, false, &tk_git::NoCredentials)
+            .unwrap();
+        assert_eq!(
+            (state(f.dir()), index(f.dir())),
+            before,
+            "{a}: undone again"
+        );
+    }
+}

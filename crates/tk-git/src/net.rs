@@ -35,6 +35,10 @@ pub enum Endpoint {
     /// A repository on this machine (local path or `file://`).
     Local(PathBuf),
     Http(HttpTarget),
+    /// `ssh://` and `user@host:path`; run by the product's `SshConnector`.
+    #[allow(dead_code)]
+    // read by the transport that runs over the connector (wave 1, strand A)
+    Ssh(tk_git_types::ssh::SshTarget),
 }
 
 /// Parses a remote URL; relative local paths are relative to `base`.
@@ -77,8 +81,23 @@ pub fn endpoint(url: &str, base: &Path) -> Result<Endpoint> {
                 loopback,
             }))
         }
+        gix::url::Scheme::Ssh => {
+            let host = parsed
+                .host()
+                .ok_or_else(|| fail(format!("the remote URL {url:?} has no host")))?
+                .to_owned();
+            let path = parsed.path.to_str_lossy().into_owned();
+            Ok(Endpoint::Ssh(tk_git_types::ssh::SshTarget {
+                user: parsed.user().map(str::to_owned),
+                host,
+                port: parsed.port,
+                // The scp form carries the path after a colon; gix keeps it with a leading `/`
+                // only when the URL had one.
+                path: path.strip_prefix("//").map_or(path.clone(), str::to_owned),
+            }))
+        }
         other => Err(GitError::Unsupported(format!(
-            "{other} remotes are not supported yet; use an https:// URL"
+            "{other} remotes are not supported; use an https:// or ssh:// URL"
         ))),
     }
 }
@@ -219,7 +238,15 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(matches!(
-            endpoint("ssh://example.com/a/b.git", Path::new("/")),
+            endpoint("ssh://git@example.com:2222/a/b.git", Path::new("/")).unwrap(),
+            Endpoint::Ssh(t) if t.user.as_deref() == Some("git") && t.port == Some(2222) && t.path == "/a/b.git"
+        ));
+        assert!(matches!(
+            endpoint("git@example.com:a/b.git", Path::new("/")).unwrap(),
+            Endpoint::Ssh(t) if t.host == "example.com" && t.path == "a/b.git"
+        ));
+        assert!(matches!(
+            endpoint("ftp://example.com/a.git", Path::new("/")),
             Err(GitError::Unsupported(_))
         ));
     }

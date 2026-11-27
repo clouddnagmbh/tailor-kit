@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use gix::ObjectId;
 use gix::refs::transaction::PreviousValue;
-use tk_git_types::{GitIdentity, GitPullResult};
+use tk_git_types::{GitError, GitIdentity, GitPullResult};
 
 use crate::branch::branch_ref;
 use crate::credentials::CredentialSource;
@@ -58,6 +58,16 @@ impl Repo {
         Ok(Upstream::new(&remote, &merge))
     }
 
+    /// What an SSH remote answers until the transport runs over the connector (the follow-up of
+    /// this seam): no connector, or not wired yet.
+    pub(crate) fn ssh_pending(&self) -> GitError {
+        GitError::Unsupported(if self.ssh.is_some() {
+            "SSH remotes are not wired into fetch and push yet".into()
+        } else {
+            "SSH remotes need an SSH connector (Repo::with_ssh)".into()
+        })
+    }
+
     fn remote_endpoint(&self, remote: &str, push: bool) -> Result<Endpoint> {
         let url = push
             .then(|| self.config(&format!("remote.{remote}.pushurl")))
@@ -80,6 +90,7 @@ impl Repo {
             Endpoint::Http(target) => {
                 crate::net::fetch(&self.repo, remote, &target, creds, with_head)
             }
+            Endpoint::Ssh(_) => Err(self.ssh_pending()),
         }
     }
 
@@ -97,6 +108,7 @@ impl Repo {
             Endpoint::Local(path) => {
                 crate::local::push(&self.repo, &path, &self.options, new, remote_ref)
             }
+            Endpoint::Ssh(_) => Err(self.ssh_pending()),
             Endpoint::Http(target) => crate::http::push(
                 &self.repo,
                 &target,
@@ -150,6 +162,7 @@ impl Repo {
             Endpoint::Local(path) => {
                 crate::local::push(&self.repo, &path, &self.options, head, &upstream.merge)?;
             }
+            Endpoint::Ssh(_) => return Err(self.ssh_pending()),
             Endpoint::Http(target) => {
                 crate::http::push(
                     &self.repo,

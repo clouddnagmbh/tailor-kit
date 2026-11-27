@@ -24,6 +24,9 @@
 //!
 //! Seam N2: a [`CommitScanner`] checks the files of a commit (secrets) before it is written.
 //!
+//! Seam N10: an [`ssh::SshConnector`] runs `git-upload-pack` and `git-receive-pack` on an SSH
+//! server; the product owns keys, agent and host-key checks.
+//!
 //! Seam N3: a program works on a [`RepoScope`] (the whole repository or a folder) and counts
 //! the files its [`ScopeFiles`] includes.
 
@@ -39,6 +42,7 @@ pub mod repos;
 mod scan;
 mod scope;
 pub mod signing;
+pub mod ssh;
 mod types;
 
 pub use merge::{FileMerger, GroupFiles, GroupMerge};

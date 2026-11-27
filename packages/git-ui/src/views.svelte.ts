@@ -64,15 +64,16 @@ export class GitViews {
   }
 }
 
-const KEY = Symbol("rt-git-views");
+/** The context key of `provideGitViews`. */
+export const GIT_VIEWS_KEY = Symbol("rt-git-views");
 
 export function provideGitViews(views: GitViews): GitViews {
-  return setContext(KEY, views);
+  return setContext(GIT_VIEWS_KEY, views);
 }
 
 /** The shell's views; components below `AppShell` only. */
 export function getGitViews(): GitViews {
-  const views = getContext<GitViews | undefined>(KEY);
+  const views = getContext<GitViews | undefined>(GIT_VIEWS_KEY);
   if (!views) throw new Error("getGitViews() outside AppShell");
   return views;
 }

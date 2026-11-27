@@ -23,6 +23,7 @@ export { default as LineDiff } from "./diff/LineDiff.svelte";
 export { default as Words } from "./diff/Words.svelte";
 
 export * from "./clone-source";
+export * from "./builtin-actions";
 export * from "./extension-git";
 export * from "./format";
 export * from "./glossary";

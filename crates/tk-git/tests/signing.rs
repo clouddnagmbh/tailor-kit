@@ -386,3 +386,34 @@ fn without_signing_commits_are_unsigned_and_the_reflog_is_git_like() {
     );
     assert!(!f.repo().commit_info(&c.oid).unwrap().signed);
 }
+
+#[test]
+fn stash_commits_are_signed_and_git_still_reads_them() {
+    let (f, signer) = signed_fixture("sign-stash");
+    let repo = repo_with(&f, &signer);
+    f.write("notes.txt", "parked\n");
+    f.write("loose.txt", "untracked\n");
+    apply(&repo, &act(r#"{"action":"stash","message":"signed"}"#));
+    assert_eq!(repo.stashes().unwrap().len(), 1);
+    {
+        for rev in ["stash@{0}", "stash@{0}^2", "stash@{0}^3"] {
+            assert_signed(f.dir(), rev, &signer);
+        }
+        let list = git(f.dir(), &["stash", "list"]).unwrap();
+        assert!(list.contains("signed"), "{list}");
+        let shown = git(f.dir(), &["stash", "show", "--name-only", "stash@{0}"]).unwrap();
+        assert!(shown.contains("notes.txt"), "{shown}");
+    }
+    // Backups and snapshots stay unsigned, so only the stash commits were handed over.
+    assert_eq!(signer.payloads.lock().unwrap().len(), 3);
+}
+
+#[test]
+fn stash_commits_stay_unsigned_without_a_signer() {
+    let f = fixture("sign-stash-none");
+    f.write("notes.txt", "parked\n");
+    apply(&f.repo(), &act(r#"{"action":"stash","message":"plain"}"#));
+    {
+        assert!(!raw(f.dir(), "stash@{0}").contains("gpgsig"));
+    }
+}

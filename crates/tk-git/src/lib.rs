@@ -133,6 +133,7 @@ mod net;
 mod pack;
 mod patch;
 mod plumbing;
+mod rebase;
 mod reflog;
 mod remote;
 mod remotes_admin;

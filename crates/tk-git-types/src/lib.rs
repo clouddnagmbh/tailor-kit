@@ -38,6 +38,7 @@ pub mod index;
 mod merge;
 mod namespace;
 pub mod plumbing;
+pub mod rebase;
 pub mod repos;
 mod scan;
 mod scope;

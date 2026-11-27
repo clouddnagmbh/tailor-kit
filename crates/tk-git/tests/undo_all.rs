@@ -48,9 +48,17 @@ fn tag(a: &GitAction) -> &'static str {
         GitAction::RestoreFiles { .. } => "restore-files",
         GitAction::Rewrite { .. } => "rewrite",
         GitAction::Commit { .. } => "commit",
+        GitAction::Rebase { .. } => "rebase",
+        GitAction::RebaseContinue { .. } => "rebase-continue",
+        GitAction::RebaseSkip => "rebase-skip",
+        GitAction::PullRebase => "pull-rebase",
+        GitAction::ForcePush { .. } => "force-push",
     }
 }
 
+/// The variants with a case below. The five of GitTailor wave 3 (rebase, rebase-continue,
+/// rebase-skip, pull-rebase, force-push) plan blocked until strands A and B land; each strand
+/// adds its cases and raises this number.
 const ALL: usize = 29;
 
 /// `main` with two commits of its own (not pushed) and the tag `v1`, a branch `other` with one

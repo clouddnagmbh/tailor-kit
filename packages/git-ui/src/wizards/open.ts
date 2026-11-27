@@ -61,6 +61,12 @@ const TITLES: Record<GitWizardKind, string> = {
   rewrite: "Rewrite history",
   // GitTailor wave 1 (strand F).
   commit: "Commit",
+  // GitTailor wave 3 (strands A and B; the wizards' fields come with the strands).
+  rebase: "Rebase",
+  "rebase-continue": "Continue rebase",
+  "rebase-skip": "Skip this commit",
+  "pull-rebase": "Get changes and rebase",
+  "force-push": "Force push with lease",
   diverged: "Branches went apart",
   detached: "Not on a branch",
   clone: "Clone repository",

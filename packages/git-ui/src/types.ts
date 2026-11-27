@@ -366,7 +366,66 @@ export type GitAction =
   | { action: "rewrite"; branch: string; tip: string; summary: string }
   // GitTailor wave 1 (strand F): a commit with plan, backup and undo (`paths`: the current
   // content of these files; `staged`: what the index holds).
-  | { action: "commit"; message: string; paths?: string[]; staged?: boolean };
+  | { action: "commit"; message: string; paths?: string[]; staged?: boolean }
+  // GitTailor wave 3 (interface commit; planned blocked `unsupported` until strands A and B):
+  // rebase as picks in memory, its continue and skip (stopping is `abort`), pull with rebase,
+  // and push with a lease (`expect`: the remote tip the user saw).
+  | {
+      action: "rebase";
+      branch?: string;
+      onto: string;
+      upstream?: string;
+      steps?: GitRebaseStep[];
+      autosquash?: boolean;
+      allow_published?: boolean;
+    }
+  | { action: "rebase-continue"; message?: string }
+  | { action: "rebase-skip" }
+  | { action: "pull-rebase" }
+  | { action: "force-push"; branch?: string; expect: string };
+
+/** What a rebase step does with its commit (the words of `git rebase -i`). */
+export type GitRebaseStepKind = "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
+
+/** One line of a rebase todo, applied in order (oldest first). */
+export interface GitRebaseStep {
+  kind: GitRebaseStepKind;
+  commit: string;
+  /** `reword`, `squash`: the new message. */
+  message?: string;
+}
+
+export interface GitRebasePlanStep {
+  step: GitRebaseStep;
+  subject: string;
+  result?: string;
+  conflicts?: string[];
+  empty: boolean;
+}
+
+/** `GitPlan.rebase`: the resolved todo and how far its in-memory run goes. */
+export interface GitRebasePreview {
+  branch: string;
+  onto: string;
+  base: string;
+  steps: GitRebasePlanStep[];
+  stops_at?: number;
+  tip?: string;
+}
+
+export type GitRebaseStop = "conflict" | "edit" | "message" | "other";
+
+/** A rebase in progress (`.git/rebase-merge/`, also one `git rebase` started). */
+export interface GitRebaseState {
+  branch?: string;
+  onto: string;
+  orig_head: string;
+  done: GitRebaseStep[];
+  todo: GitRebaseStep[];
+  stopped_at?: string;
+  stop: GitRebaseStop;
+  conflicts?: string[];
+}
 
 /** Why an action cannot run now; the UI explains each and offers the way out. */
 export type GitBlockReason =
@@ -387,7 +446,9 @@ export type GitBlockReason =
   | "network"
   | "unsupported"
   /** Wave 15: it would replace commits that are already on a remote. */
-  | "published";
+  | "published"
+  /** GitTailor wave 3: a protected branch (no rewrite of its published history, no force push). */
+  | "protected";
 
 export interface GitBlock {
   reason: GitBlockReason;
@@ -424,6 +485,8 @@ export interface GitPlan {
   backup: boolean;
   undoable: boolean;
   merge?: GitMergePreview;
+  /** GitTailor wave 3: the rebase's resolved todo and how far it goes. */
+  rebase?: GitRebasePreview;
   destructive: boolean;
   warnings?: string[];
   blocked?: GitBlock;

@@ -114,6 +114,7 @@ pub(crate) fn new_plan(action: &GitAction) -> GitPlan {
         backup: false,
         undoable: true,
         merge: None,
+        rebase: None,
         destructive: false,
         warnings: Vec::new(),
         blocked: None,
@@ -608,6 +609,17 @@ impl Repo {
                 paths,
                 staged,
             } => self.plan_commit(cx, p, message, paths, *staged),
+            GitAction::Rebase { .. }
+            | GitAction::RebaseContinue { .. }
+            | GitAction::RebaseSkip
+            | GitAction::PullRebase => Ok(p.blocked_by(block(
+                GitBlockReason::Unsupported,
+                "Rebasing is not available yet (GitTailor wave 3, strand A).",
+            ))),
+            GitAction::ForcePush { .. } => Ok(p.blocked_by(block(
+                GitBlockReason::Unsupported,
+                "Force push with lease is not available yet (GitTailor wave 3, strand B).",
+            ))),
         }
     }
 
@@ -668,6 +680,12 @@ impl Repo {
                 paths,
                 staged,
             } => self.run_commit(cx, run, message, paths, *staged),
+            // Planned blocked above, so `apply` never gets here.
+            GitAction::Rebase { .. }
+            | GitAction::RebaseContinue { .. }
+            | GitAction::RebaseSkip
+            | GitAction::PullRebase
+            | GitAction::ForcePush { .. } => Err(fail("not available yet (GitTailor wave 3)")),
         }
     }
 
@@ -932,6 +950,11 @@ pub(crate) fn action_tag(action: &GitAction) -> &'static str {
         GitAction::RestoreFiles { .. } => "restore-files",
         GitAction::Rewrite { .. } => "rewrite",
         GitAction::Commit { .. } => "commit",
+        GitAction::Rebase { .. } => "rebase",
+        GitAction::RebaseContinue { .. } => "rebase-continue",
+        GitAction::RebaseSkip => "rebase-skip",
+        GitAction::PullRebase => "pull-rebase",
+        GitAction::ForcePush { .. } => "force-push",
     }
 }
 

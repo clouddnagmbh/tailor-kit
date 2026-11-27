@@ -534,7 +534,7 @@ fn a1_a_rebase_git_started_is_continued_here() {
             .unwrap()
             .as_deref()
             .map(str::trim_end),
-        Some(text.trim_end()),
+        Some(strip_comments(&text).as_str()),
         "the proposed message has no comments"
     );
     let s = f.repo().rebase_state().unwrap().unwrap();

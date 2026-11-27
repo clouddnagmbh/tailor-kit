@@ -116,6 +116,7 @@ pub(crate) fn new_plan(action: &GitAction) -> GitPlan {
         merge: None,
         rebase: None,
         destructive: false,
+        command: Vec::new(),
         warnings: Vec::new(),
         blocked: None,
     }

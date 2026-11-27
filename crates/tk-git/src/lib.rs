@@ -157,6 +157,7 @@ mod tags;
 /// Committing files onto a branch without a checkout (since wave 13).
 mod tree_commit;
 mod undo;
+mod undo_all;
 mod util;
 
 /// Errors of the Git core (seam N7); a product turns them into its own.

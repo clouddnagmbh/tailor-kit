@@ -7,8 +7,9 @@
 //!
 //! Files the operation changed or the user resolved go back to the last commit (the branch's
 //! own, or for a rebase the one it started from). Files Git does not know (not in the index)
-//! stay. The working files before are kept under a backup ref, so Undo brings them back as
-//! plain changes; it cannot resume the operation itself.
+//! stay. The working files before are kept under a backup ref. Undo brings them back, the
+//! index with its conflict stages and the merge (cherry-pick, revert) in progress; a rebase
+//! comes back as plain changes only (its state folder is not kept).
 
 use std::collections::BTreeSet;
 
@@ -94,10 +95,12 @@ impl Repo {
                 "The changes in {} are taken out of your working files.",
                 plural_s(files.len(), "file")
             ));
-            p.warnings.push(
-                "Undo brings your files back as plain changes; it cannot resume the operation."
-                    .into(),
-            );
+            if cx.underway.is_none() {
+                p.warnings.push(
+                    "Undo brings your files back as plain changes; it cannot resume the rebase."
+                        .into(),
+                );
+            }
             p.destructive = true;
         }
         p.files = files.iter().map(|f| format!("/{}", f.path)).collect();

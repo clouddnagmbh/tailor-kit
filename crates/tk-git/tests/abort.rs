@@ -89,7 +89,7 @@ fn aborts_a_merge_back_to_where_it_started() {
 }
 
 #[test]
-fn undo_brings_the_files_back_as_changes() {
+fn undo_resumes_the_merge_with_its_conflicts() {
     let f = conflicting("abort-undo");
     apply(&f.repo(), &act(r#"{"action":"merge","from":"other"}"#));
     let during = files(f.dir());
@@ -102,8 +102,8 @@ fn undo_brings_the_files_back_as_changes() {
         "the files are back, markers and all"
     );
     assert!(
-        !f.repo().status().unwrap().merging,
-        "the merge itself is not resumed"
+        f.repo().status().unwrap().merging,
+        "the merge is in progress again"
     );
 }
 

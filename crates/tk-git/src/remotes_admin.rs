@@ -349,7 +349,7 @@ impl Repo {
                 remote: remote.to_owned(),
                 remote_ref: full.clone(),
                 before: before.map(|id| id.to_string()),
-                after: at.to_string(),
+                after: Some(at.to_string()),
             });
         }
         self.repo
@@ -384,7 +384,9 @@ impl Repo {
 
     pub(crate) fn plan_fetch(&self, mut p: GitPlan, remote: Option<&str>) -> Result<GitPlan> {
         p.network = true;
-        p.undoable = false;
+        // Undo puts the remote-tracking refs back (where the product opts in: a fetch in the
+        // background must not crowd the user's own actions out of the journal).
+        p.undoable = self.push_undo;
         let name = match remote {
             Some(r) => r.to_owned(),
             None => self.default_remote()?,

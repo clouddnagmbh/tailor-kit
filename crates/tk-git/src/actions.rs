@@ -18,9 +18,13 @@
 //!   the working files before and after (as commits/trees), the repository configuration and
 //!   the stash list when the action changed them.
 //!
-//! Network actions (fetch, push, publish, push-tag) are not undoable and write no entry, except
-//! push and publish where the product opts in ([`Repo::with_push_undo`]): their entry records
-//! what moved on the remote, and undo sets it back with a lease.
+//! Every action that is not blocked is undoable, the network actions (fetch, push, publish,
+//! push-tag) where the product opts in ([`Repo::with_push_undo`]; without it they write no
+//! entry, so a fetch in the background never crowds the user's actions out of the journal).
+//! A fetch records the remote-tracking refs it moved (undo puts them back; one that brought
+//! nothing writes no entry). Push, publish and push-tag record what moved on the remote, and
+//! undo sets it back with a lease (a pushed tag is deleted there again, only while it is still
+//! the one sent).
 //! Unsaved changes in the app are the caller's to know: it passes [`ActionOptions::unsaved`].
 
 use std::cell::OnceCell;
@@ -287,9 +291,49 @@ pub(crate) struct Restore {
     /// The action left a merge (cherry-pick, revert) in progress.
     #[serde(default)]
     pub underway: bool,
-    /// A push or publish ([`Repo::with_push_undo`]): undo sets the remote branch back.
+    /// A push, publish or push-tag ([`Repo::with_push_undo`]): undo sets the ref on the remote
+    /// back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pushed: Option<crate::remote::Pushed>,
+    /// How the index differed from `HEAD`'s tree before (staged changes, conflict stages):
+    /// undo puts it back where it rewrites the index.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<crate::undo::IndexDelta>,
+    /// A recorded change moved the index: how it looked after (undo is refused once it moved
+    /// again, and always writes it back).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_moved: Option<crate::undo::IndexMove>,
+    /// The merge (cherry-pick, revert) the action stopped: its files in `.git`, for undo.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub merge: Vec<(String, String)>,
+}
+
+/// The repository before a recorded change ([`Repo::capture`]).
+pub(crate) struct Before {
+    names: Vec<String>,
+    values: Vec<Option<ObjectId>>,
+    head: Option<String>,
+    config: String,
+    stash: String,
+    remote: std::collections::BTreeMap<String, ObjectId>,
+    index: Option<crate::undo::IndexDelta>,
+    merge: Vec<(String, String)>,
+    /// A commit of the working files before.
+    pub worktree: Option<ObjectId>,
+}
+
+/// What the journal entry of a change says about it ([`Repo::journal_after`]).
+pub(crate) struct Recorded<'a> {
+    pub action: &'a str,
+    pub summary: &'a str,
+    pub time: i64,
+    pub backups: Vec<String>,
+    pub pushed: Option<crate::remote::Pushed>,
+    /// A fetch: the remote-tracking refs are its refs; nothing new writes no entry.
+    pub fetch: bool,
+    /// A recorded change ([`Repo::record`]): the index is part of what it changed (undo puts
+    /// it back, refused once it changed again); nothing changed writes no entry.
+    pub index_moved: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -674,37 +718,80 @@ impl Repo {
             });
         }
         let names = self.recorded_refs(&plan)?;
-        let before: Vec<Option<ObjectId>> = names
-            .iter()
-            .map(|n| self.ref_value(n))
-            .collect::<Result<_>>()?;
-        let head_before = self.head_ref()?.map(|n| n.as_bstr().to_string());
-        let config_before = self.config_text()?;
-        let stash_before = self.stash_log_text()?;
-        let remote_before = self.remote_refs()?;
-        let worktree_before = if touches_worktree(action, &plan) {
-            let id = crate::undo::snapshot_commit(
-                &cx.whole,
-                &format!(
-                    "{}: working files before {}",
-                    self.product().name,
-                    action_tag(action)
-                ),
-            )?;
-            if worktree_backup(action) {
-                run.backup(self, "worktree", Some(id))?;
-            }
-            Some(id)
-        } else {
-            None
-        };
+        let worktree = touches_worktree(action, &plan).then(|| {
+            format!(
+                "{}: working files before {}",
+                self.product().name,
+                action_tag(action)
+            )
+        });
+        let before = self.capture(names, worktree.as_deref(), &cx.whole)?;
+        if worktree_backup(action) {
+            run.backup(self, "worktree", before.worktree)?;
+        }
 
         let done = self.run_action(&cx, action, &plan, &mut run)?;
 
+        let entry = self.journal_after(
+            before,
+            Recorded {
+                action: action_tag(action),
+                summary: &done.message,
+                time,
+                backups: run.backups.clone(),
+                pushed: run.pushed.take(),
+                fetch: matches!(action, GitAction::Fetch { .. }),
+                index_moved: false,
+            },
+        )?;
+        Ok(GitActionResult {
+            message: done.message,
+            undo: entry,
+            outcome: done.outcome,
+            reload: done.reload,
+        })
+    }
+
+    /// What the journal compares later: the refs `names`, `HEAD`, the configuration, the stash
+    /// list, the remote-tracking refs, the index, the merge in progress and, with `worktree`
+    /// (the message of the commit that keeps them), the working files.
+    pub(crate) fn capture(
+        &self,
+        names: Vec<String>,
+        worktree: Option<&str>,
+        whole: &Repo,
+    ) -> Result<Before> {
+        let values = names
+            .iter()
+            .map(|n| self.ref_value(n))
+            .collect::<Result<_>>()?;
+        Ok(Before {
+            names,
+            values,
+            head: self.head_ref()?.map(|n| n.as_bstr().to_string()),
+            config: self.config_text()?,
+            stash: self.stash_log_text()?,
+            remote: self.remote_refs()?,
+            index: self.index_delta()?,
+            merge: self.merge_files()?,
+            worktree: match worktree {
+                Some(message) => Some(crate::undo::snapshot_commit(whole, message)?),
+                None => None,
+            },
+        })
+    }
+
+    /// Compares the repository with `before` and appends what changed to the journal. `None`:
+    /// a fetch or a recorded change that changed nothing (no entry).
+    pub(crate) fn journal_after(
+        &self,
+        before: Before,
+        rec: Recorded<'_>,
+    ) -> Result<Option<GitUndoEntry>> {
         // A fresh view: the run may have changed the configuration and HEAD.
         let after_repo = self.reopen()?;
         let mut refs = Vec::new();
-        for (name, b) in names.iter().zip(&before) {
+        for (name, b) in before.names.iter().zip(&before.values) {
             let a = after_repo.ref_value(name)?;
             if a != *b {
                 refs.push(GitRefMove {
@@ -717,26 +804,37 @@ impl Repo {
         let head_after = after_repo.head_ref()?.map(|n| n.as_bstr().to_string());
         let config_after = after_repo.config_text()?;
         let stash_after = after_repo.stash_log_text()?;
+        let index_after = after_repo.index_delta()?;
+        let index_moved = (rec.index_moved && index_after != before.index)
+            .then_some(crate::undo::IndexMove { after: index_after });
         let mut restore = Restore {
-            head: (head_before != head_after).then_some((head_before, head_after)),
-            config: (config_before != config_after).then_some((config_before, config_after)),
-            stash_log: (stash_before != stash_after).then_some((stash_before, stash_after)),
-            underway: after_repo.underway()?.is_some(),
-            pushed: run.pushed.take(),
+            head: (before.head != head_after).then_some((before.head, head_after)),
+            config: (before.config != config_after).then_some((before.config, config_after)),
+            stash_log: (before.stash != stash_after).then_some((before.stash, stash_after)),
+            // It started one (a merge in progress before stays in progress after undo).
+            underway: after_repo.underway()?.is_some() && before.merge.is_empty(),
+            pushed: rec.pushed,
+            index: before.index,
+            index_moved,
             ..Restore::default()
         };
-        if let Some(before) = worktree_before {
+        if !before.merge.is_empty() && after_repo.merge_files()? != before.merge {
+            restore.merge = before.merge;
+        }
+        let mut files_moved = false;
+        if let Some(b) = before.worktree {
             let whole = after_repo.whole()?;
             let after = crate::undo::snapshot_tree(&whole)?;
-            restore.worktree = Some((before.to_string(), after.to_string()));
+            files_moved = after_repo.commit_tree(b)? != after;
+            restore.worktree = Some((b.to_string(), after.to_string()));
         }
         let remote_after = after_repo.remote_refs()?;
-        if remote_before != remote_after {
-            let mut all: Vec<&String> = remote_before.keys().chain(remote_after.keys()).collect();
+        if before.remote != remote_after {
+            let mut all: Vec<&String> = before.remote.keys().chain(remote_after.keys()).collect();
             all.sort();
             all.dedup();
             for name in all {
-                let (b, a) = (remote_before.get(name), remote_after.get(name));
+                let (b, a) = (before.remote.get(name), remote_after.get(name));
                 if b != a {
                     restore.remote_refs.push(GitRefMove {
                         name: name.clone(),
@@ -746,19 +844,39 @@ impl Repo {
                 }
             }
         }
+        if rec.fetch {
+            // What a fetch moves are remote-tracking refs: they are its refs (undo puts them
+            // back and is refused once another fetch moved them).
+            refs.append(&mut restore.remote_refs);
+        }
+        let unchanged = refs.is_empty()
+            && restore.head.is_none()
+            && restore.config.is_none()
+            && restore.stash_log.is_none()
+            && restore.remote_refs.is_empty()
+            && restore.index_moved.is_none()
+            && restore.merge.is_empty()
+            && restore.pushed.is_none()
+            && !files_moved;
+        if unchanged && (rec.fetch || rec.index_moved) {
+            // Nothing to undo: a fetch that brought nothing, a recorded change that changed
+            // nothing. The journal stays as it is.
+            return Ok(None);
+        }
         static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.subsec_nanos())
             .unwrap_or(0);
+        let time = rec.time;
         let entry = GitUndoEntry {
             id: format!("{time}-{nanos:09}-{seq}"),
-            action: action_tag(action).to_owned(),
-            summary: done.message.clone(),
+            action: rec.action.to_owned(),
+            summary: rec.summary.to_owned(),
             time,
             refs,
-            backups: run.backups.clone(),
+            backups: rec.backups,
             stash: None,
             stale: None,
         };
@@ -768,12 +886,7 @@ impl Repo {
             restore,
         });
         self.write_journal(&journal)?;
-        Ok(GitActionResult {
-            message: done.message,
-            undo: Some(entry),
-            outcome: done.outcome,
-            reload: done.reload,
-        })
+        Ok(Some(entry))
     }
 
     /// The newest journal entry, with `stale` set when undo would be refused.

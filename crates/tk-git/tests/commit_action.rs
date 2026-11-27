@@ -422,7 +422,7 @@ fn push_undo_is_refused_once_someone_pushed_on_top() {
     assert!(e.to_string().contains("revert"), "{e}");
     assert_eq!(ref_id(f.remote.path(), "refs/heads/main"), remote_before);
     // After a fetch, the entry says it is stale before anything is tried.
-    apply(&pushing(f.dir()), &act(r#"{"action":"fetch"}"#));
+    apply(&f.repo(), &act(r#"{"action":"fetch"}"#));
     let last = pushing(f.dir()).last_action().unwrap().unwrap();
     assert!(last.stale.unwrap().contains("server changed"));
 }

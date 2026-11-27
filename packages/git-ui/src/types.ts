@@ -199,7 +199,7 @@ export interface MergeState<T extends ChangeTarget = ChangeTarget> {
   clean?: string[];
 }
 
-export type ReviewKind = "github" | "gitlab";
+export type ReviewKind = "github" | "gitlab" | "bitbucket" | "azure" | "gitea";
 
 export interface ReviewHost {
   host: string;

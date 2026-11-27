@@ -109,6 +109,13 @@ fn message(body: &Value) -> String {
         .collect()
 }
 
+fn no_device_login(repo: &ReviewRepo) -> ReviewError {
+    ReviewError::Host(format!(
+        "{} has no device-code login; use a personal access token",
+        repo.host
+    ))
+}
+
 /// Asks the host for a device code.
 pub async fn start<T: Transport>(
     transport: &T,
@@ -118,6 +125,7 @@ pub async fn start<T: Transport>(
     let (url, scope) = match repo.kind {
         ReviewKind::Github => (format!("{}/login/device/code", web_base(repo)), "repo"),
         ReviewKind::Gitlab => (format!("{}/oauth/authorize_device", web_base(repo)), "api"),
+        _ => return Err(no_device_login(repo)),
     };
     let (status, body) = post_form(
         transport,
@@ -167,6 +175,7 @@ pub async fn poll<T: Transport>(
     let url = match repo.kind {
         ReviewKind::Github => format!("{}/login/oauth/access_token", web_base(repo)),
         ReviewKind::Gitlab => format!("{}/oauth/token", web_base(repo)),
+        _ => return Err(no_device_login(repo)),
     };
     let (_, body) = post_form(
         transport,

@@ -2,7 +2,8 @@
 // Copyright 2026 The RequestTailor Authors
 
 //! Pull-request review: pull requests of GitHub and merge requests of GitLab behind one
-//! interface, [`ReviewProvider`]. Gitea and Bitbucket can follow on the same interface.
+//! interface, [`ReviewProvider`]. Bitbucket, Azure DevOps and Gitea are named and detected here;
+//! a product brings their providers (the kit answers them with a hint).
 //! Provenance: extracted from RequestTailor's `rt-app` `review` module (seam K2).
 //!
 //! - Local: the program talks only to the user's own Git host, with the user's own token.
@@ -63,6 +64,13 @@ pub fn review_base_ref(namespace: &RefNamespace, kind: ReviewKind, number: u64) 
 pub enum ReviewKind {
     Github,
     Gitlab,
+    /// Bitbucket Cloud and Data Center. Only the identifier and the URL detection live here;
+    /// [`provider`] answers with a hint, a product supplies the implementation.
+    Bitbucket,
+    /// Azure DevOps Services and Server (same rule as [`ReviewKind::Bitbucket`]).
+    Azure,
+    /// Gitea and Forgejo, Codeberg included (same rule as [`ReviewKind::Bitbucket`]).
+    Gitea,
 }
 
 impl ReviewKind {
@@ -70,6 +78,9 @@ impl ReviewKind {
         match self {
             ReviewKind::Github => "github",
             ReviewKind::Gitlab => "gitlab",
+            ReviewKind::Bitbucket => "bitbucket",
+            ReviewKind::Azure => "azure",
+            ReviewKind::Gitea => "gitea",
         }
     }
 }
@@ -314,6 +325,67 @@ pub fn provider<'t, T: Transport, A: 't>(
             token,
             user_agent,
         )),
+        ReviewKind::Bitbucket | ReviewKind::Azure | ReviewKind::Gitea => {
+            Box::new(Unimplemented { repo: repo.clone() })
+        }
+    }
+}
+
+/// The answer of [`provider`] for a kind the kit only names: every call explains that the
+/// product has to bring the implementation (and so changes nothing for products that do not).
+struct Unimplemented {
+    repo: ReviewRepo,
+}
+
+impl Unimplemented {
+    fn hint<R>(&self) -> LocalBoxFuture<'_, Result<R, ReviewError>> {
+        let hint = format!(
+            "{} ({}) is recognised, but this app has no pull-request support for it",
+            self.repo.host,
+            self.repo.kind.id()
+        );
+        Box::pin(async move { Err(ReviewError::Host(hint)) })
+    }
+}
+
+impl<A> ReviewProvider<A> for Unimplemented {
+    fn repo(&self) -> &ReviewRepo {
+        &self.repo
+    }
+    fn list(&self) -> LocalBoxFuture<'_, Result<Vec<PullRequest>, ReviewError>> {
+        self.hint()
+    }
+    fn get(&self, _number: u64) -> LocalBoxFuture<'_, Result<PullRequest, ReviewError>> {
+        self.hint()
+    }
+    fn head_ref(&self, number: u64) -> String {
+        format!("refs/pull/{number}/head")
+    }
+    fn comments(
+        &self,
+        _number: u64,
+    ) -> LocalBoxFuture<'_, Result<Vec<ReviewComment<A>>, ReviewError>> {
+        self.hint()
+    }
+    fn comment<'a>(
+        &'a self,
+        _pull: &'a PullRequest,
+        _comment: &'a NewReviewComment,
+    ) -> LocalBoxFuture<'a, Result<ReviewComment<A>, ReviewError>> {
+        self.hint()
+    }
+    fn submit<'a>(
+        &'a self,
+        _pull: &'a PullRequest,
+        _review: &'a ReviewSubmission,
+    ) -> LocalBoxFuture<'a, Result<(), ReviewError>> {
+        self.hint()
+    }
+    fn ci<'a>(
+        &'a self,
+        _pull: &'a PullRequest,
+    ) -> LocalBoxFuture<'a, Result<CiStatus, ReviewError>> {
+        self.hint()
     }
 }
 
@@ -362,4 +434,52 @@ pub fn normalize_hosts(hosts: &[ReviewHost]) -> Result<Vec<ReviewHost>, ReviewEr
         });
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+    use tk_net::transport::{HttpRequest, Response, TransportError};
+
+    /// A transport that must never be used: the kit only names the new kinds.
+    struct Never;
+    impl Transport for Never {
+        async fn send(&self, _request: HttpRequest) -> Result<Response, TransportError> {
+            panic!("the hint provider makes no request");
+        }
+    }
+
+    fn ready<F: Future>(f: F) -> F::Output {
+        let mut f = std::pin::pin!(f);
+        match f.as_mut().poll(&mut Context::from_waker(Waker::noop())) {
+            Poll::Ready(v) => v,
+            Poll::Pending => panic!("the hint is answered at once"),
+        }
+    }
+
+    #[test]
+    fn the_new_kinds_have_ids_and_the_provider_answers_with_a_hint() {
+        for (kind, id) in [
+            (ReviewKind::Bitbucket, "bitbucket"),
+            (ReviewKind::Azure, "azure"),
+            (ReviewKind::Gitea, "gitea"),
+        ] {
+            assert_eq!(kind.id(), id);
+            let repo = ReviewRepo {
+                kind,
+                host: "h.example".into(),
+                api: "https://h.example/api".into(),
+                project: "a/b".into(),
+            };
+            let p = provider::<_, ()>(&Never, &repo, "token", "ua");
+            let err = ready(p.list()).unwrap_err();
+            assert!(
+                matches!(&err, ReviewError::Host(m) if m.contains("no pull-request support")),
+                "{err}"
+            );
+            assert!(ready(p.get(1)).is_err());
+        }
+    }
 }

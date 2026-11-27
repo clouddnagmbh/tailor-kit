@@ -186,7 +186,9 @@ fn aborts_a_rebase_started_on_the_command_line() {
     assert!(!f.dir().join(".git/rebase-merge").exists());
     assert!(!f.dir().join(".git/rebase-apply").exists());
     assert_eq!(state(f.dir()), before);
-    // And Undo leaves no rebase behind.
+    // And Undo brings the stopped rebase back (GitTailor wave 3: the journal keeps its files),
+    // so `git rebase --continue` or `--abort` can take it from there.
     f.repo().undo(&r.undo.unwrap().id, false).unwrap();
-    assert!(!f.dir().join(".git/rebase-merge").exists());
+    assert!(f.dir().join(".git/rebase-merge").exists());
+    assert!(f.repo().rebase_state().unwrap().is_some());
 }

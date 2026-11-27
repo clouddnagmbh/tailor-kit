@@ -8,8 +8,9 @@
 //! Files the operation changed or the user resolved go back to the last commit (the branch's
 //! own, or for a rebase the one it started from). Files Git does not know (not in the index)
 //! stay. The working files before are kept under a backup ref. Undo brings them back, the
-//! index with its conflict stages and the merge (cherry-pick, revert) in progress; a rebase
-//! comes back as plain changes only (its state folder is not kept).
+//! index with its conflict stages and the merge (cherry-pick, revert) or the interactive
+//! rebase (`rebase-merge/`, kept in the journal since GitTailor wave 3) in progress; a rebase of
+//! the older `rebase-apply` backend comes back as plain changes only.
 
 use std::collections::BTreeSet;
 
@@ -96,10 +97,8 @@ impl Repo {
                 plural_s(files.len(), "file")
             ));
             if cx.underway.is_none() {
-                p.warnings.push(
-                    "Undo brings your files back as plain changes; it cannot resume the rebase."
-                        .into(),
-                );
+                p.warnings
+                    .push("Undo brings the rebase back where it stopped, with your files.".into());
             }
             p.destructive = true;
         }
@@ -187,7 +186,12 @@ impl Repo {
         if let Some(r) = rebase
             && cx.underway.is_none()
         {
-            std::fs::remove_dir_all(&r.dir).ctx("cannot clear the rebase state")?;
+            if r.dir.ends_with(crate::rebase::REBASE_MERGE) {
+                // With `REBASE_HEAD` and the files next to it (the journal keeps them all).
+                self.clear_rebase_files()?;
+            } else {
+                std::fs::remove_dir_all(&r.dir).ctx("cannot clear the rebase state")?;
+            }
         }
         Ok(Done::new(
             if cx.underway.is_some() {

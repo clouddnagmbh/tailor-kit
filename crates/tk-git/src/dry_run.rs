@@ -345,6 +345,7 @@ impl Repo {
                 paths,
                 staged,
             } => self.sim_commit(cx, message, paths, *staged, opts)?,
+            GitAction::Rebase { .. } => self.sim_rebase(cx, action, opts)?,
             _ => return Ok(None),
         }))
     }
@@ -713,6 +714,82 @@ impl Repo {
                 config: None,
                 outcome: None,
                 message,
+            },
+            from: now,
+            to: want,
+            conflicts: Vec::new(),
+            exact: true,
+            warnings: Vec::new(),
+        })
+    }
+
+    /// A rebase replayed in memory, signed like the run: exact when no step stops (accepting
+    /// writes these commits and moves the branch); a stop is shown, and accepting runs it.
+    fn sim_rebase(&self, cx: &Ctx, action: &GitAction, opts: &ActionOptions<'_>) -> Result<Sim> {
+        let r = self.dry_rebase(cx, action, opts.identity)?;
+        let current = match (&cx.head_ref, &r.head_name) {
+            (Some(h), Some(n)) => h.as_bstr() == n.as_str(),
+            _ => false,
+        };
+        let old_tree = self.commit_tree(r.orig_head)?;
+        let Some(tip) = r.tip else {
+            return Ok(Sim {
+                effect: Effect {
+                    refs: Vec::new(),
+                    worktree: None,
+                    backup_worktree: false,
+                    index: IndexEffect::Keep,
+                    config: None,
+                    outcome: Some(GitPullResult::Conflicts {
+                        paths: r.conflicts.clone(),
+                    }),
+                    message: r.message,
+                },
+                from: old_tree,
+                to: old_tree,
+                conflicts: r.conflicts,
+                exact: false,
+                warnings: Vec::new(),
+            });
+        };
+        let new_tree = self.commit_tree(tip)?;
+        let refs = r
+            .head_name
+            .iter()
+            .map(|n| (n.clone(), Some(r.orig_head), Some(tip)))
+            .collect();
+        let outcome = Some(GitPullResult::Merged {
+            oid: tip.to_string(),
+        });
+        if !current {
+            return Ok(Sim {
+                effect: Effect {
+                    refs,
+                    worktree: None,
+                    backup_worktree: false,
+                    index: IndexEffect::Keep,
+                    config: None,
+                    outcome,
+                    message: r.message,
+                },
+                from: old_tree,
+                to: new_tree,
+                conflicts: Vec::new(),
+                exact: true,
+                warnings: Vec::new(),
+            });
+        }
+        let now = snapshot_tree(self)?;
+        let want = self.keep_untracked(cx, now, new_tree)?;
+        Ok(Sim {
+            effect: Effect {
+                refs,
+                worktree: Some((now, want)),
+                backup_worktree: false,
+                index: IndexEffect::Keep,
+                config: None,
+                outcome,
+                message: r.message,
             },
             from: now,
             to: want,
@@ -1422,5 +1499,6 @@ pub fn dry_run_supported(action: &GitAction) -> bool {
             | GitAction::Rewrite { .. }
             | GitAction::DeleteBranch { .. }
             | GitAction::Commit { .. }
+            | GitAction::Rebase { .. }
     )
 }

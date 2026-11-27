@@ -56,10 +56,20 @@ fn tag(a: &GitAction) -> &'static str {
     }
 }
 
-/// The variants with a case below. The five of GitTailor wave 3 (rebase, rebase-continue,
-/// rebase-skip, pull-rebase, force-push) plan blocked until strands A and B land; each strand
-/// adds its cases and raises this number.
-const ALL: usize = 29;
+/// The variants with a case below. Force-push (GitTailor wave 3) plans blocked until strand B
+/// lands; it adds its case and raises this number.
+const ALL: usize = 33;
+
+/// A rebase of `other` onto `main` stopped at its `edit` step.
+fn rebase_stopped(f: &Fixture) {
+    let other = ref_id(f.dir(), "refs/heads/other").unwrap();
+    apply(
+        &f.repo(),
+        &act(&format!(
+            r#"{{"action":"rebase","branch":"other","onto":"main","steps":[{{"kind":"edit","commit":"{other}"}}]}}"#
+        )),
+    );
+}
 
 /// `main` with two commits of its own (not pushed) and the tag `v1`, a branch `other` with one
 /// commit of its own.
@@ -216,6 +226,21 @@ fn b2_every_action_plans_undoable_once_it_is_not_blocked() {
         ("commit", |f, _| {
             f.write("notes.txt", "changed\n");
             act(r#"{"action":"commit","message":"Change","paths":["/notes.txt"]}"#)
+        }),
+        ("rebase", |_, _| {
+            act(r#"{"action":"rebase","branch":"other","onto":"main"}"#)
+        }),
+        ("rebase-continue", |f, _| {
+            rebase_stopped(f);
+            act(r#"{"action":"rebase-continue","message":"other, reworded"}"#)
+        }),
+        ("rebase-skip", |f, _| {
+            rebase_stopped(f);
+            act(r#"{"action":"rebase-skip"}"#)
+        }),
+        ("pull-rebase", |f, keep| {
+            someone_pushes(f, keep);
+            act(r#"{"action":"pull-rebase"}"#)
         }),
     ];
     let mut seen: Vec<&str> = Vec::new();

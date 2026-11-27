@@ -98,6 +98,31 @@ export type GitActionTarget =
   /** A conflicted file during a merge, cherry-pick, revert or rebase. */
   | { kind: "conflict"; repository: string; path: string };
 
+/** What is dragged in the commit graph (since tailor-kit 0.3, GitTailor wave 3): a commit row,
+ *  or the label of a branch or tag on a row (`ref` is `GitRef.full`, `commit` the row's). */
+export type GraphDragSource =
+  | { kind: "commit"; commit: string }
+  | { kind: "ref"; ref: string; commit: string };
+
+/** A drop in the commit graph: `source` dragged onto the row of `commit`, whose branch and tag
+ *  labels are `refs` (`GitRef.full`), or onto one of those labels (`ref`). `position` says
+ *  whether it landed in the upper or the lower half of the row (newer side / older side), for
+ *  an extension that reorders commits. The graph asks `GitExtension.graphDrops` while the drag
+ *  moves over a row (cheap, synchronous, no `$state` writes) and accepts the drop only when an
+ *  extension offers an action; dropped, it offers the actions in a menu at the drop point
+ *  (each action plans first: nothing runs on the drop alone). */
+export interface GraphDropTarget {
+  repository: string;
+  source: GraphDragSource;
+  /** The row dropped on. */
+  commit: string;
+  /** The branch and tag labels on that row. */
+  refs: readonly string[];
+  /** The label dropped on, if the drop landed on one. */
+  ref?: string;
+  position: "above" | "below";
+}
+
 /** A view in the main area's Git host, opened with `AppState.show({ kind: "git", view: {
  *  kind: "extension", id: "<extension>/<view>", props } })` (since wave 15). */
 export interface ExtensionGitView<Ctx = GitExtensionContext> {
@@ -225,6 +250,9 @@ export interface GitExtension<Ctx = GitExtensionContext> {
   commitFormActions?(ctx: Ctx, target: CommitFormTarget): readonly ExtensionAction[];
   /** Actions on two revisions selected together (graph). */
   rangeActions?(ctx: Ctx, target: RevisionRangeTarget): readonly ExtensionAction[];
+  /** What a drop in the commit graph does (since tailor-kit 0.3): the choices offered for
+   *  `drop`; none: the graph does not accept it. */
+  graphDrops?(ctx: Ctx, drop: GraphDropTarget): readonly ExtensionAction[];
 }
 
 /** The product's extensions with the context they are called with (`GitHost.extensions`). */

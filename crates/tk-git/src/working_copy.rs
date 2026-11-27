@@ -50,6 +50,8 @@ struct Item<'a> {
     stat: Stat,
     /// Modified in the same second as the index was written: size and time prove nothing.
     racy: bool,
+    /// Skip-worktree (sparse checkout): Git assumes it unchanged, whatever the disk holds.
+    skip: bool,
 }
 
 /// What a tracked path looks like on disk, from `lstat` alone.
@@ -63,6 +65,9 @@ enum Look {
 }
 
 fn look(workdir: &std::path::Path, item: &Item<'_>) -> Look {
+    if item.skip {
+        return Look::Clean;
+    }
     let Ok(file) = fs_path(workdir, item.path) else {
         return Look::Dirty;
     };
@@ -137,6 +142,9 @@ impl Repo {
                     id: entry.id,
                     stat: entry.stat,
                     racy: entry.stat.is_racy(timestamp, stat_options()),
+                    skip: entry
+                        .flags
+                        .contains(gix::index::entry::Flags::SKIP_WORKTREE),
                 });
             } else if conflicted.last() != Some(&path) {
                 conflicted.push(path);

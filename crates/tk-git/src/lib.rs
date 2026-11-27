@@ -150,6 +150,8 @@ mod rewrite_branch;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
 pub mod sign;
 mod signing;
+/// GitTailor wave 3, strand D: skip-worktree entries (sparse checkout) are kept and respected.
+mod sparse;
 mod ssh;
 mod stash;
 /// Wave 2 of GitTailor: the state of a working tree as objects, and setting it back.
@@ -178,6 +180,7 @@ pub use history_rewrite::{
 };
 pub use remote::{clone, clone_with_home, clone_with_ssh, expand_home};
 pub use repo::{AsOptions, Options, Product, Profile, Repo, global_identity, init};
+pub use sparse::SkipChange;
 pub use tree_commit::TreeFile;
 pub use util::canonical;
 

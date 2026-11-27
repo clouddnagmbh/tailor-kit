@@ -103,9 +103,26 @@ impl Repo {
         let mut editor = self.repo.edit_tree(base).ctx("cannot read the HEAD tree")?;
         let mut pipeline = crate::filter::Filters::new(self)?;
         let mut updates = Vec::new();
+        let skipped = crate::sparse::skipped(&index);
         for path in paths {
             let repo_path = self.scope.abs(path)?;
+            // Outside the sparse checkout: committed as the index has it, never as deleted.
+            if let Some(b) = crate::sparse::assumed(repo_path.as_bstr(), &index) {
+                editor
+                    .upsert(repo_path.as_bstr(), entry_kind(b.mode), b.id)
+                    .ctx("cannot build the tree")?;
+                continue;
+            }
             match pipeline.worktree_file_to_object(repo_path.as_bstr(), &index)? {
+                // A registered submodule: its checked-out commit (the new pointer).
+                Some((id, EntryKind::Commit, _))
+                    if self.is_gitlink(&index, repo_path.as_bstr())? =>
+                {
+                    editor
+                        .upsert(repo_path.as_bstr(), EntryKind::Commit, id)
+                        .ctx("cannot build the tree")?;
+                    updates.push((repo_path, Some((id, EntryKind::Commit))));
+                }
                 Some((_, EntryKind::Commit, _)) => {
                     return Err(fail(format!("{path} is a nested repository")));
                 }
@@ -129,7 +146,9 @@ impl Repo {
         }
         let mut contents = Vec::new();
         for (path, (_, object)) in paths.iter().zip(&updates) {
-            if let Some((id, _)) = object {
+            if let Some((id, kind)) = object
+                && *kind != EntryKind::Commit
+            {
                 contents.push((path.as_str(), crate::util::blob_bytes(&self.repo, *id)?));
             }
         }
@@ -160,6 +179,7 @@ impl Repo {
                 );
             }
         }
+        crate::sparse::keep(&mut index, &skipped);
         self.write_index(&mut index)?;
         if underway {
             self.clear_merge_state()?;

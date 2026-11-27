@@ -195,6 +195,29 @@ impl Repo {
         }
     }
 
+    /// The commit `HEAD` records for the submodule at `path`, if it is one there.
+    fn head_gitlink(&self, path: &BStr) -> Result<Option<ObjectId>> {
+        let tree = self.head_tree()?;
+        let tree = self.repo.find_tree(tree).ctx("cannot read the HEAD tree")?;
+        let entry = tree
+            .lookup_entry_by_path(gix::path::from_bstr(path).ctx("invalid path")?.as_ref())
+            .ctx("cannot read the HEAD tree")?;
+        Ok(entry
+            .filter(|e| e.mode().kind() == gix::objs::tree::EntryKind::Commit)
+            .map(|e| e.object_id()))
+    }
+
+    /// `path` is a submodule of this repository (a gitlink in the index or in `HEAD`).
+    pub(crate) fn is_gitlink(&self, index: &gix::index::State, path: &BStr) -> Result<bool> {
+        if index
+            .entry_by_path_and_stage(path, Stage::Unconflicted)
+            .is_some_and(|e| e.mode == Mode::COMMIT)
+        {
+            return Ok(true);
+        }
+        Ok(self.head_gitlink(path)?.is_some())
+    }
+
     fn set_entry(
         &self,
         index: &mut gix::index::File,
@@ -216,7 +239,17 @@ impl Repo {
         for path in paths {
             let rel = self.index_path_of(path)?;
             let shown = self.api_path(rel.as_bstr());
+            // Outside the sparse checkout: Git assumes it unchanged, never a deletion.
+            if crate::sparse::assumed(rel.as_bstr(), &index).is_some() {
+                continue;
+            }
             match pipeline.worktree_file_to_object(rel.as_bstr(), &index)? {
+                // A registered submodule: its checked-out commit becomes the gitlink.
+                Some((id, gix::objs::tree::EntryKind::Commit, _))
+                    if self.is_gitlink(&index, rel.as_bstr())? =>
+                {
+                    self.set_entry(&mut index, rel.as_bstr(), Some((id, Mode::COMMIT)));
+                }
                 Some((_, gix::objs::tree::EntryKind::Commit, _)) => {
                     return Err(fail(format!("{shown} is a nested repository")));
                 }
@@ -251,7 +284,10 @@ impl Repo {
         for path in paths {
             let rel = self.index_path_of(path)?;
             let head = self.head_side(rel.as_bstr())?;
-            let entry = head.id.zip(head.mode);
+            let entry = match self.head_gitlink(rel.as_bstr())? {
+                Some(id) => Some((id, Mode::COMMIT)),
+                None => head.id.zip(head.mode),
+            };
             self.set_entry(&mut index, rel.as_bstr(), entry);
         }
         self.write_index(&mut index)

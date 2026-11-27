@@ -1,0 +1,28 @@
+[package]
+name = "tk-plugin-host"
+description = "Tailor Kit: WebAssembly plugin host (wasmi, fuel, memory limit, manifest, permissions, plugin folder) shared by RequestTailor and GitTailor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+# wasmi is a pure-Rust interpreter (no JIT), so the same engine runs natively, on iOS and
+# inside the browser's WebAssembly. `validate` checks every module before it runs;
+# `auto-dispatch` falls back to the portable interpreter loop where tail calls are not
+# reliable (debug builds, some targets).
+wasmi = { version = "2", default-features = false, features = ["std", "validate", "auto-dispatch"] }
+# std::time panics on wasm32-unknown-unknown.
+web-time = "1"
+
+[dev-dependencies]
+# Test plugins are written as WAT fixtures.
+wat = "1"
+
+[lints]
+workspace = true

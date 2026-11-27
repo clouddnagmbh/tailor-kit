@@ -15,7 +15,7 @@
      or label when an extension offers something for it (`GitExtension.graphDrops`, `./drops.ts`):
      the choices open as a menu at the drop point. -->
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
 
   import type { GitGraphCommit } from "../types";
   import type { GitActionTarget, GitHintTarget, GraphDragSource, GraphDropTarget } from "../extensions";
@@ -191,7 +191,20 @@
     })();
   });
 
-  // A new `select` while the view is open (a link from another view).
+  // A reload of the host (after a Git action from anywhere: a drop, a dialog, undo) loads the
+  // graph again, keeping the selection where it still exists.
+  let reloadedAt: number | undefined;
+  $effect(() => {
+    const n = host.reloadCount;
+    if (reloadedAt === undefined || n === reloadedAt) {
+      reloadedAt = n;
+      return;
+    }
+    reloadedAt = n;
+    void untrack(() => reload());
+  });
+
+    // A new `select` while the view is open (a link from another view).
   let lastSelect: string | undefined | null = null;
   $effect(() => {
     const s = select;

@@ -38,6 +38,9 @@ impl CredentialSource for TokenCredentials<'_> {
             username: match self.kind {
                 ReviewKind::Github => "x-access-token".to_owned(),
                 ReviewKind::Gitlab => "oauth2".to_owned(),
+                ReviewKind::Bitbucket => "x-token-auth".to_owned(),
+                ReviewKind::Azure => "pat".to_owned(),
+                ReviewKind::Gitea => "oauth2".to_owned(),
             },
             password: self.token.to_owned(),
         }))

@@ -5,7 +5,7 @@
 //!
 //! [`Repo::with_signing`] carries a distribution's [`crate::sign::Signing`]. Every commit the
 //! app writes (commit, merge, cherry-pick, revert, amend, `commit_to_branch`, `write_commit`,
-//! `commit_staged`) goes through [`Repo::commit_on`] or [`Repo::write_commit_object`]: with no
+//! `commit_staged`, and the stash commits) goes through [`Repo::commit_on`] or [`Repo::write_commit_object`]: with no
 //! signer these are exactly the calls the writers made before (same objects, same reflog
 //! lines); with one, the payload (the commit without `gpgsig`) is handed to the signer and its
 //! armor is stored in the `gpgsig` header, as `git commit -S` does. The core carries no GPG or

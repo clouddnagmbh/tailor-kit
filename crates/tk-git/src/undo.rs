@@ -70,12 +70,36 @@ pub(crate) fn snapshot_tree(whole: &Repo) -> Result<ObjectId> {
 }
 
 /// Writes a commit that no ref points to (yet), by `identity` (else the product's own).
+/// Never signed: it is for backups and snapshots (see [`write_signed_commit`]).
 pub(crate) fn write_commit(
     repo: &Repo,
     tree: ObjectId,
     parents: Vec<ObjectId>,
     message: &str,
     identity: Option<&GitIdentity>,
+) -> Result<ObjectId> {
+    write_commit_with(repo, tree, parents, message, identity, false)
+}
+
+/// As [`write_commit`], but through the repository's signer (if one is set), like
+/// `Repo::commit`: for commits a user keeps, such as stash commits.
+pub(crate) fn write_signed_commit(
+    repo: &Repo,
+    tree: ObjectId,
+    parents: Vec<ObjectId>,
+    message: &str,
+    identity: Option<&GitIdentity>,
+) -> Result<ObjectId> {
+    write_commit_with(repo, tree, parents, message, identity, true)
+}
+
+fn write_commit_with(
+    repo: &Repo,
+    tree: ObjectId,
+    parents: Vec<ObjectId>,
+    message: &str,
+    identity: Option<&GitIdentity>,
+    sign: bool,
 ) -> Result<ObjectId> {
     let sig = match identity {
         Some(id) => crate::commit::signature(id),
@@ -94,6 +118,9 @@ pub(crate) fn write_commit(
         message: message.into(),
         extra_headers: Vec::new(),
     };
+    if sign {
+        return repo.write_commit_object(commit);
+    }
     Ok(repo
         .repo
         .write_object(&commit)

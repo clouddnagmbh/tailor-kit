@@ -26,7 +26,7 @@ use tk_git_types::actions::{GitBlockReason, GitPlan, GitRefMove, GitStash};
 
 use crate::actions::{Ctx, Done, PlanExt, Run, block, plural_s, short, slash};
 use crate::repo::Repo;
-use crate::undo::{tree_with, write_commit};
+use crate::undo::{tree_with, write_signed_commit};
 use crate::util::{Blob, Context, Flat, Result, fail, flatten};
 use crate::worktree::{FileState, Probe, same};
 
@@ -261,7 +261,7 @@ impl Repo {
         let subject = format!("{} {}", short(&head), self.subject(head));
         let index = whole.load_index()?;
         let i_tree = whole.tree_from_index(&index)?;
-        let i = write_commit(
+        let i = write_signed_commit(
             whole,
             i_tree,
             vec![head],
@@ -273,7 +273,7 @@ impl Repo {
         if !untracked.is_empty() {
             let empty = ObjectId::empty_tree(self.repo.object_hash());
             let u_tree = tree_with(whole, empty, &untracked)?;
-            parents.push(write_commit(
+            parents.push(write_signed_commit(
                 whole,
                 u_tree,
                 Vec::new(),
@@ -287,7 +287,7 @@ impl Repo {
             .map(str::to_owned)
             .unwrap_or_else(|| format!("Parked on {}", cx.cur.as_deref().unwrap_or("HEAD")));
         let w_message = format!("On {label}: {text}");
-        let w = write_commit(
+        let w = write_signed_commit(
             whole,
             w_tree,
             parents,

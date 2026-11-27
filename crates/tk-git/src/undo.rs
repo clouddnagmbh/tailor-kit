@@ -39,6 +39,13 @@ pub(crate) fn tree_with(whole: &Repo, base: ObjectId, files: &[&GitFile]) -> Res
             editor.remove(path.as_bstr()).ctx("cannot build the tree")?;
             continue;
         }
+        // Outside the sparse checkout: what the index holds.
+        if let Some(b) = crate::sparse::assumed(path.as_bstr(), &index) {
+            editor
+                .upsert(path.as_bstr(), crate::commit::entry_kind(b.mode), b.id)
+                .ctx("cannot build the tree")?;
+            continue;
+        }
         match pipeline.worktree_file_to_object(path.as_bstr(), &index)? {
             Some((_, gix::objs::tree::EntryKind::Commit, _)) => {}
             Some((id, kind, _)) => {
@@ -246,6 +253,12 @@ impl Repo {
                 }
             }
         }
+        // Skip-worktree flags (sparse checkout) survive the rebuild.
+        let mut skipped = std::collections::BTreeSet::new();
+        for claim in claims {
+            skipped.extend(crate::sparse::skipped(claim));
+        }
+        crate::sparse::keep(&mut index, &skipped);
         Ok(index)
     }
 

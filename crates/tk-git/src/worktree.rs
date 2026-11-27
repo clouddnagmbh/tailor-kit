@@ -78,7 +78,7 @@ impl<'r> Probe<'r> {
 
     /// For writing the files of `target` (the index being checked out): the content filter
     /// follows its `.gitattributes`.
-    fn for_checkout(repo: &'r Repo, target: &gix::index::State) -> Result<Self> {
+    pub(crate) fn for_checkout(repo: &'r Repo, target: &gix::index::State) -> Result<Self> {
         Ok(Self {
             repo: &repo.repo,
             workdir: &repo.workdir,
@@ -99,7 +99,11 @@ impl<'r> Probe<'r> {
     }
 
     /// What the working tree holds at `path`. `index` lets unchanged files skip hashing.
+    /// A skip-worktree entry (sparse checkout) is what the index says, as Git assumes.
     pub fn state(&mut self, path: &BStr, index: &gix::index::State) -> Result<FileState> {
+        if let Some(blob) = crate::sparse::assumed(path, index) {
+            return Ok(FileState::File(blob));
+        }
         let file = fs_path(self.workdir, path)?;
         let md = match std::fs::symlink_metadata(&file) {
             Ok(md) => md,
@@ -209,7 +213,7 @@ fn set_executable(_file: &Path, _exec: bool) -> std::io::Result<()> {
 }
 
 /// Removes `path` and the folders above it that became empty (up to the work tree root).
-fn remove(workdir: &Path, path: &BStr) -> Result<()> {
+pub(crate) fn remove(workdir: &Path, path: &BStr) -> Result<()> {
     let file = fs_path(workdir, path)?;
     match std::fs::remove_file(&file) {
         Ok(()) => {}
@@ -312,7 +316,10 @@ pub fn switch(
     if !blocked_paths.is_empty() {
         return Err(blocked_error(repo, what, &blocked_paths));
     }
-    let paths = changed(&from, &to_flat);
+    // Skip-worktree files (sparse checkout) stay off the disk and keep their flag.
+    let skipped = crate::sparse::skipped(&old);
+    let mut paths = changed(&from, &to_flat);
+    paths.retain(|p| !skipped.contains(p));
     for p in &paths {
         if !to_flat.contains_key(p) {
             remove(&repo.workdir, p.as_bstr())?;
@@ -348,5 +355,6 @@ pub fn switch(
             entry.stat = prev.stat;
         }
     }
+    crate::sparse::keep(&mut index, &skipped);
     Ok(index)
 }

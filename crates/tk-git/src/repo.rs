@@ -154,7 +154,7 @@ pub struct Repo {
     /// The identity the product chose for commits here (a profile); wins over the Git
     /// configuration. `None`: the Git configuration, then the caller's fallback.
     pub(crate) author: Option<GitIdentity>,
-    /// Pushes and publishes write a journal entry and can be undone (see [`Repo::with_push_undo`]).
+    /// Network actions write a journal entry and can be undone (see [`Repo::with_push_undo`]).
     pub(crate) push_undo: bool,
 }
 
@@ -264,10 +264,12 @@ impl Repo {
         self
     }
 
-    /// Makes [`GitAction::Push`](tk_git_types::actions::GitAction::Push) and `Publish`
-    /// undoable: they write a journal entry, and undo sets the branch on the remote back to
-    /// what it was, with a lease: only while the remote still points at what was pushed (never
-    /// over someone else's commits). Off by default (a product opts in).
+    /// Makes the network actions undoable: [`GitAction::Push`](tk_git_types::actions::GitAction::Push),
+    /// `Publish` and `PushTag` write a journal entry, and undo sets the ref on the remote back
+    /// to what it was (a pushed tag: deleted again), with a lease: only while the remote still
+    /// points at what was sent (never over someone else's work); `Fetch` writes one when it
+    /// moved remote-tracking refs, and undo puts them back. Off by default (a product opts in,
+    /// and leaves it off for fetches in the background).
     pub fn with_push_undo(mut self, on: bool) -> Self {
         self.push_undo = on;
         self
@@ -543,14 +545,33 @@ impl Repo {
         std::fs::rename(&tmp, dir.join("config")).ctx("cannot write the repository configuration")
     }
 
+    /// The files of a merge, cherry-pick or revert in progress that exist, with their text.
+    pub(crate) fn merge_files(&self) -> Result<Vec<(String, String)>> {
+        let mut out = Vec::new();
+        for name in crate::state::MERGE_FILES {
+            match std::fs::read_to_string(self.git_dir().join(name)) {
+                Ok(text) => out.push((name.to_owned(), text)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(fail(format!("cannot read the merge state: {e}"))),
+            }
+        }
+        Ok(out)
+    }
+
+    /// Writes the merge state [`Repo::merge_files`] read (after [`Repo::clear_merge_state`]).
+    pub(crate) fn write_merge_files(&self, files: &[(String, String)]) -> Result<()> {
+        for (name, text) in files {
+            if !crate::state::MERGE_FILES.contains(&name.as_str()) {
+                return Err(fail("invalid journal"));
+            }
+            std::fs::write(self.git_dir().join(name), text)
+                .map_err(|e| fail(format!("cannot write the merge state: {e}")))?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn clear_merge_state(&self) -> Result<()> {
-        for name in [
-            "MERGE_HEAD",
-            "MERGE_MSG",
-            "MERGE_MODE",
-            "CHERRY_PICK_HEAD",
-            "REVERT_HEAD",
-        ] {
+        for name in crate::state::MERGE_FILES {
             match std::fs::remove_file(self.git_dir().join(name)) {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

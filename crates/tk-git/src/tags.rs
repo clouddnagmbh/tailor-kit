@@ -133,7 +133,8 @@ impl Repo {
         remote: &str,
     ) -> Result<GitPlan> {
         p.network = true;
-        p.undoable = false;
+        // Undo deletes the tag on the remote again, with a lease (where the product opts in).
+        p.undoable = self.push_undo;
         let at = self.tag_value(name)?;
         if at.is_none() {
             p.stop(Some(block(
@@ -166,7 +167,15 @@ impl Repo {
         let at = self
             .tag_value(name)?
             .ok_or_else(|| fail(format!("There is no tag {name}.")))?;
-        self.push_ref(remote, at, &tag_full(name), run.opts.credentials)?;
+        let before = self.push_ref(remote, at, &tag_full(name), run.opts.credentials)?;
+        if self.push_undo {
+            run.pushed = Some(crate::remote::Pushed {
+                remote: remote.to_owned(),
+                remote_ref: tag_full(name),
+                before: before.map(|id| id.to_string()),
+                after: Some(at.to_string()),
+            });
+        }
         Ok(Done::new(
             format!("Sent the tag {name} to {remote}."),
             false,

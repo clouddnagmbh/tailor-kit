@@ -126,9 +126,16 @@ pub(crate) fn open(path: &Path, options: &crate::Options) -> Result<gix::Reposit
     ))
 }
 
+/// What `name` points to as the remote advertises it: the object itself (an annotated tag
+/// stays the tag object, as on the wire), a symbolic ref followed.
 fn peeled(repo: &gix::Repository, name: &str) -> Result<Option<ObjectId>> {
     match repo.try_find_reference(name).ctx("cannot read a branch")? {
-        Some(mut r) => Ok(Some(r.peel_to_id().ctx("cannot read a branch")?.detach())),
+        Some(mut r) => match r.target() {
+            gix::refs::TargetRef::Object(id) => Ok(Some(id.to_owned())),
+            gix::refs::TargetRef::Symbolic(_) => {
+                Ok(Some(r.peel_to_id().ctx("cannot read a branch")?.detach()))
+            }
+        },
         None => Ok(None),
     }
 }

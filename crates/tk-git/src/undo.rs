@@ -10,9 +10,12 @@
 //! moves the working files from the state the action left to the state before it. Files
 //! edited since then block the undo like a checkout would (nothing is overwritten).
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use gix::ObjectId;
 use gix::bstr::{BString, ByteSlice};
-use gix::index::entry::Stage;
+use gix::index::entry::{Flags, Mode, Stage, Stat};
+use serde::{Deserialize, Serialize};
 use tk_git_types::actions::GitActionResult;
 use tk_git_types::{GitFile, GitFileState, GitIdentity};
 
@@ -105,7 +108,96 @@ pub(crate) fn snapshot_commit(whole: &Repo, message: &str) -> Result<ObjectId> {
     write_commit(whole, tree, parents, message, None)
 }
 
+/// How the index differed from `HEAD`'s tree before an action (private to the journal): undo
+/// writes the index for `HEAD` and puts these entries back, so staged changes and conflict
+/// stages survive an action and its undo.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct IndexDelta {
+    /// Entries `HEAD`'s tree does not have as they are: `(path, mode, id, stage)`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entries: Vec<(String, u32, String, u8)>,
+    /// Paths of `HEAD`'s tree without an unconflicted entry in the index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<String>,
+}
+
+/// How a recorded change left the index (private to the journal).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct IndexMove {
+    /// Its difference from `HEAD`'s tree after the change; `None`: just that tree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<IndexDelta>,
+}
+
 impl Repo {
+    /// How the index differs from `HEAD`'s tree; `None` when it is just that tree.
+    pub(crate) fn index_delta(&self) -> Result<Option<IndexDelta>> {
+        let index = self.load_index()?;
+        let head = self
+            .repo
+            .index_from_tree(&self.head_tree()?)
+            .ctx("cannot build the index")?;
+        let mut want: BTreeMap<&[u8], (Mode, ObjectId)> = BTreeMap::new();
+        for e in head.entries() {
+            want.insert(e.path(&head).as_bytes(), (e.mode, e.id));
+        }
+        let mut delta = IndexDelta::default();
+        let mut seen: BTreeSet<&[u8]> = BTreeSet::new();
+        for e in index.entries() {
+            let path = e.path(&index).as_bytes();
+            let stage = e.stage();
+            if stage == Stage::Unconflicted {
+                seen.insert(path);
+                if want.get(path) == Some(&(e.mode, e.id)) {
+                    continue;
+                }
+            }
+            delta.entries.push((
+                path.to_str_lossy().into_owned(),
+                e.mode.bits(),
+                e.id.to_string(),
+                stage as u8,
+            ));
+        }
+        for path in want.keys() {
+            if !seen.contains(path) {
+                delta.missing.push(path.to_str_lossy().into_owned());
+            }
+        }
+        Ok((!delta.entries.is_empty() || !delta.missing.is_empty()).then_some(delta))
+    }
+
+    /// Puts the entries of `delta` back into the index (which is `HEAD`'s tree now).
+    pub(crate) fn apply_index_delta(&self, delta: &IndexDelta) -> Result<()> {
+        let mut index = self.load_index()?;
+        let paths: BTreeSet<BString> = delta
+            .entries
+            .iter()
+            .map(|(p, ..)| BString::from(p.as_str()))
+            .chain(delta.missing.iter().map(|p| BString::from(p.as_str())))
+            .collect();
+        index.remove_entries(|_, p, _| paths.contains(p));
+        for (path, mode, id, stage) in &delta.entries {
+            let id = ObjectId::from_hex(id.as_bytes()).ctx("invalid journal")?;
+            let mode = Mode::from_bits(*mode).ok_or_else(|| fail("invalid journal"))?;
+            let stage = match stage {
+                0 => Stage::Unconflicted,
+                1 => Stage::Base,
+                2 => Stage::Ours,
+                3 => Stage::Theirs,
+                _ => return Err(fail("invalid journal")),
+            };
+            index.dangerously_push_entry(
+                Stat::default(),
+                id,
+                Flags::from_stage(stage),
+                mode,
+                BString::from(path.as_str()).as_bstr(),
+            );
+        }
+        self.write_index(&mut index)
+    }
+
     /// The index for `tree` (normally `HEAD`'s), keeping every stat that is still a true
     /// claim (same path, same blob) from `claims`, so unchanged files are not hashed again and
     /// changed ones always are.
@@ -181,19 +273,25 @@ impl Repo {
         }
         if let Some(pushed) = &line.restore.pushed {
             let tracking = line.restore.remote_refs.iter().find(|m| {
-                m.after.as_deref() == Some(pushed.after.as_str())
+                m.after == pushed.after
                     && m.name
                         .starts_with(&format!("refs/remotes/{}/", pushed.remote))
             });
             if let Some(t) = tracking
-                && self.ref_value(&t.name)?.map(|id| id.to_string()).as_deref()
-                    != Some(pushed.after.as_str())
+                && self.ref_value(&t.name)?.map(|id| id.to_string()) != pushed.after
             {
                 return Ok(Some(
                     "The branch on the server changed since, so undoing the push would lose newer work. Make a commit that reverts it instead."
                         .into(),
                 ));
             }
+        }
+        if let Some(moved) = &line.restore.index_moved
+            && self.index_delta()? != moved.after
+        {
+            return Ok(Some(
+                "The staged changes changed since, so undoing would lose newer work.".into(),
+            ));
         }
         if let Some((_, after)) = &line.restore.config
             && &self.config_text()? != after
@@ -276,7 +374,11 @@ impl Repo {
 
         // The remote first: when it refuses (someone pushed on top), nothing local changes.
         if let Some(pushed) = &r.pushed {
-            let after = ObjectId::from_hex(pushed.after.as_bytes()).ctx("invalid journal")?;
+            let after = pushed
+                .after
+                .as_deref()
+                .map(|h| ObjectId::from_hex(h.as_bytes()).ctx("invalid journal"))
+                .transpose()?;
             let before = pushed
                 .before
                 .as_deref()
@@ -286,7 +388,7 @@ impl Repo {
                 &pushed.remote,
                 before,
                 &pushed.remote_ref,
-                Some(Some(after)),
+                Some(after),
                 creds,
             )
             .map_err(|e| match e {
@@ -360,20 +462,29 @@ impl Repo {
         if let Some((before, _)) = &r.config {
             self.write_config_text(before)?;
         }
-        if r.underway {
+        if r.underway || !r.merge.is_empty() {
             self.clear_merge_state()?;
         }
+        // A merge the action stopped is in progress again.
+        self.write_merge_files(&r.merge)?;
         let repo = self.reopen()?;
         let head_after = repo.head_commit()?;
         let mut reload = head_before != head_after;
+        let mut reindexed = true;
         if let Some((from, to)) = worktree {
             let whole = repo.whole()?;
             whole.move_worktree(from, to, "undo")?;
             reload = true;
-        } else if reload || r.underway {
+        } else if reload || r.underway || !r.merge.is_empty() || r.index_moved.is_some() {
             let old = repo.load_index()?;
             let mut index = repo.reindex(repo.head_tree()?, &[&old])?;
             repo.write_index(&mut index)?;
+        } else {
+            reindexed = false;
+        }
+        // The index is `HEAD`'s tree now: what was staged (or conflicted) before comes back.
+        if reindexed && let Some(delta) = &r.index {
+            repo.apply_index_delta(delta)?;
         }
         journal.remove(at);
         self.write_journal(&journal)?;

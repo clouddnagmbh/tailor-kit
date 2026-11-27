@@ -28,7 +28,8 @@ pub(crate) struct Pushed {
     pub remote_ref: String,
     /// `None`: the push created it.
     pub before: Option<String>,
-    pub after: String,
+    /// `None`: it deleted it (the redo of an undone publish or pushed tag sets it again).
+    pub after: Option<String>,
 }
 
 /// The branch the current branch pulls from and pushes to.
@@ -222,7 +223,7 @@ impl Repo {
             remote: upstream.remote,
             remote_ref: upstream.merge,
             before: before.map(|id| id.to_string()),
-            after: head.to_string(),
+            after: Some(head.to_string()),
         })
     }
 

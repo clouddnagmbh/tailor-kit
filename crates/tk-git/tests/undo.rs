@@ -307,14 +307,33 @@ fn undo_is_refused_while_the_app_has_unsaved_changes_or_files_were_edited() {
 }
 
 #[test]
-fn network_actions_have_no_undo() {
+fn network_actions_without_the_products_opt_in() {
     let f = fixture("undo-push");
     f.commit("ahead", &[("notes.txt", "ahead\n")]);
-    for a in [r#"{"action":"push"}"#, r#"{"action":"fetch"}"#] {
-        let p = plan(&f.repo(), &act(a));
-        assert!(!p.undoable && p.network, "{a}");
-        assert!(apply(&f.repo(), &act(a)).undo.is_none(), "{a}");
-    }
+    // Push changes the remote: undoable only where the product opts in (`with_push_undo`).
+    let p = plan(&f.repo(), &act(r#"{"action":"push"}"#));
+    assert!(!p.undoable && p.network);
+    assert!(
+        apply(&f.repo(), &act(r#"{"action":"push"}"#))
+            .undo
+            .is_none()
+    );
+    // So is fetch (a fetch in the background stays out of the journal).
+    let p = plan(&f.repo(), &act(r#"{"action":"fetch"}"#));
+    assert!(!p.undoable && p.network);
+    assert!(
+        apply(&f.repo(), &act(r#"{"action":"fetch"}"#))
+            .undo
+            .is_none()
+    );
+    // With the opt-in, a fetch that brings nothing new writes no entry either.
+    let pushing = f.repo().with_push_undo(true);
+    assert!(plan(&pushing, &act(r#"{"action":"fetch"}"#)).undoable);
+    assert!(
+        apply(&pushing, &act(r#"{"action":"fetch"}"#))
+            .undo
+            .is_none()
+    );
     assert!(f.repo().last_action().unwrap().is_none());
 }
 

@@ -109,6 +109,8 @@ mod commit_action;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
 mod file_tree;
+/// Wave 2 (GitTailor), strand D: the merge forecast in memory (`Repo::merge_forecast`).
+mod forecast;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
 mod graph;
 /// Wave 12, strand G: walking and rewriting the whole history.
@@ -153,6 +155,7 @@ mod worktree;
 pub use actions::ActionOptions;
 pub use changelog_commits::CommitMessage;
 pub use credentials::{CredentialSource, Credentials, NoCredentials};
+pub use forecast::{MergeForecast, ReviewHead};
 pub use history_rewrite::{
     BranchRewrite, HistoryEdit, HistoryRewrite, HistoryTips, HistoryVisitor,
 };

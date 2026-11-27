@@ -111,3 +111,70 @@ fn text_of_skips_binary_and_huge_files() {
     assert_eq!(text_of(&[0xff, 0xfe, b'a']), None);
     assert_eq!(text_of(&vec![b'a'; MAX_SCAN_BYTES + 1]), None);
 }
+
+fn kinds(text: &str) -> Vec<(u32, String)> {
+    Scanner::new("kit:allow", "kit:allow-next-line")
+        .scan(&[("a", text)])
+        .into_iter()
+        .map(|f| (f.line, f.kind))
+        .collect()
+}
+
+#[test]
+fn assignments_with_equals_are_found() {
+    let v = ["ghp_", "abcdefghijklmnopqrstuvwxyz0123456789"].concat();
+    let w = ["abc123", "def456"].concat();
+    for text in [
+        format!("export GITHUB_TOKEN={v}\n"),
+        "DB_PASSWORD=hunter2hunter2\n".to_owned(),
+        "API_KEY=\"abc123def456\"\n".to_owned(),
+        format!("api_key = '{w}'\n"),
+        format!("set API_KEY={w}\n"),
+        "  export SECRET=abc123 # note\n".to_owned(),
+        "PASSWORD := abc123;\n".to_owned(),
+        "const password = \"demo\";\n".to_owned(),
+    ] {
+        assert_eq!(kinds(&text).len(), 1, "{text}");
+    }
+    let f = Scanner::new("a", "b").scan_values("a", "DB_PASSWORD=\"hunter2\" # c\n");
+    assert_eq!(f[0].1, ["hunter2"]);
+    assert_eq!(f[0].0.snippet, "DB_PASSWORD=\"***\" # c");
+    assert_eq!(
+        kinds("export AWS_SECRET_ACCESS_KEY=abc\n")[0].1,
+        "AWS secret access key"
+    );
+}
+
+#[test]
+fn assignments_ignore_operators_code_and_references() {
+    for text in [
+        "x = y\n",
+        "if token == \"abcdef123\" {}\n",
+        "if token != \"abcdef123\" {}\n",
+        "if token <= abcdef123 {}\n",
+        "if token >= abcdef123 {}\n",
+        "password => \"abcdef123\"\n",
+        "PASSWORD=\n",
+        "PASSWORD=\"\"\n",
+        "TOKEN=$OTHER\n",
+        "TOKEN=${OTHER}\n",
+        "TOKEN=\"${OTHER}\"\n",
+        "TOKEN=$(pass show x)\n",
+        "TOKEN=`cat f`\n",
+        "token = read_token(x)\n",
+        "token = a b\n",
+        "TOKEN=<your-token>\n",
+        "TOKEN=***\n",
+        "name=value\n",
+        "csrf_token=abc123\n",
+    ] {
+        assert!(kinds(text).is_empty(), "{text}: {:?}", kinds(text));
+    }
+}
+
+#[test]
+fn assignments_honour_the_allow_markers() {
+    assert!(kinds("PASSWORD=demo # kit:allow\n").is_empty());
+    assert!(kinds("# kit:allow-next-line\nPASSWORD=demo\n").is_empty());
+    assert_eq!(kinds("PASSWORD: demo\n").len(), 1);
+}

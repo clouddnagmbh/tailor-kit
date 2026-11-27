@@ -968,10 +968,69 @@ pub struct NoRules;
 
 impl Rules for NoRules {}
 
+/// A shell, `.env` or source-style assignment `NAME=value` (also `NAME = "value"`, `NAME := value`,
+/// `export NAME=value`, `set NAME=value`): the name and the span of the value. Operators
+/// (`==`, `!=`, `<=`, `>=`, `=>`, `=~`) are no assignments. An unquoted value is one word; code
+/// (`token = read(x)`, `token = a b`) is not a literal.
+fn assignment(text: &str) -> Option<(&str, Span)> {
+    let bytes = text.as_bytes();
+    let eq = text.find('=')?;
+    if matches!(bytes.get(eq + 1), Some(b'=' | b'>' | b'~'))
+        || (eq > 0 && matches!(bytes[eq - 1], b'<' | b'>' | b'!' | b'='))
+    {
+        return None;
+    }
+    let head = text[..eq].trim_end_matches([' ', '\t', ':', '+', '"', '\'']);
+    let name_start = head
+        .rfind(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-')))
+        .map_or(0, |i| i + 1);
+    let name = &head[name_start..];
+    // `?token=…` and `&token=…` in a URL are the URL rules' business.
+    if name.is_empty()
+        || name.len() > 100
+        || (name_start > 0 && !matches!(bytes[name_start - 1], b' ' | b'\t' | b'"' | b'\''))
+    {
+        return None;
+    }
+    let mut start = eq + 1;
+    while start < bytes.len() && matches!(bytes[start], b' ' | b'\t') {
+        start += 1;
+    }
+    let span = match *bytes.get(start)? {
+        q @ (b'"' | b'\'') => Span {
+            start: start + 1,
+            end: closing_quote(bytes, start, q)?,
+        },
+        b'#' | b'`' | b'(' | b'{' | b'[' => return None,
+        _ => {
+            let rest = &text[start..];
+            let end = rest.find(" #").unwrap_or(rest.len());
+            let value = rest[..end].trim_end().trim_end_matches([';', ',']);
+            if value.is_empty() || value.starts_with("$(") || value.contains([' ', '\t', '(', ')'])
+            {
+                return None;
+            }
+            Span {
+                start,
+                end: start + value.len(),
+            }
+        }
+    };
+    Some((name, span))
+}
+
 /// Rule 2, and rule 3 through the product: the value of a key that names a credential.
 fn keyed(rules: &dyn Rules, lines: &[Line<'_>], i: usize, hits: &mut Vec<Hit>) {
     let line = &lines[i];
-    let (Some(key), Some(span)) = (line.key, line.value) else {
+    let assigned = if line.key.is_none() {
+        assignment(line.text)
+    } else {
+        None
+    };
+    let (Some(key), Some(span)) = (
+        line.key.or(assigned.map(|a| a.0)),
+        line.value.or(assigned.map(|a| a.1)),
+    ) else {
         return;
     };
     let value = &line.text[span.start..span.end];

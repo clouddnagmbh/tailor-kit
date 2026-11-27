@@ -189,7 +189,23 @@ fn scene(name: &str, conflict: bool) -> Fixture {
 fn todo_file(dir: &Path, text: &str) -> String {
     let p = dir.join("todo.txt");
     std::fs::write(&p, text).unwrap();
-    p.to_string_lossy().into_owned()
+    sh_path(&p)
+}
+
+/// A message without comment lines and surrounding blank lines (what a commit keeps of it).
+fn strip_comments(text: &str) -> String {
+    text.lines()
+        .filter(|l| !l.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_owned()
+}
+
+/// `p` for an editor command, which Git runs through `sh` (also on Windows, where `sh` would
+/// eat the backslashes): forward slashes, quoted.
+fn sh_path(p: &Path) -> String {
+    format!("'{}'", p.to_string_lossy().replace('\\', "/"))
 }
 
 /// `git rebase -i --empty=drop <args>` with `todo` as its todo (`None`: as Git proposes it).
@@ -400,7 +416,10 @@ fn a1_a_conflict_stops_in_gits_format_and_git_continues_it() {
         let ours = std::fs::read_to_string(d.join(".git/rebase-merge").join(n)).unwrap();
         let theirs =
             std::fs::read_to_string(witness.path().join(".git/rebase-merge").join(n)).unwrap();
-        if !["done", "git-rebase-todo"].contains(&n) {
+        if n == "message" {
+            // Newer Git adds a `# Conflicts:` block, which a commit strips again.
+            assert_eq!(strip_comments(&ours), strip_comments(&theirs), "{n}");
+        } else if !["done", "git-rebase-todo"].contains(&n) {
             assert_eq!(ours.trim(), theirs.trim(), "{n}");
         }
     }
@@ -502,6 +521,22 @@ fn a1_a_rebase_git_started_is_continued_here() {
     let (ok, _) = git_rebase(d, &["main"], None, &[]);
     assert!(!ok);
     let witness = copy(d, "rebase-git-started-git");
+    // What newer Git writes into the message of a conflict stop (older Git writes none): the
+    // continue strips it, as Git's commit does.
+    let msg = d.join(".git/rebase-merge/message");
+    let text = std::fs::read_to_string(&msg).unwrap();
+    if !text.contains("# Conflicts:") {
+        std::fs::write(&msg, format!("{text}\n# Conflicts:\n#\tnotes.txt\n")).unwrap();
+    }
+    assert_eq!(
+        f.repo()
+            .rebase_message()
+            .unwrap()
+            .as_deref()
+            .map(str::trim_end),
+        Some(text.trim_end()),
+        "the proposed message has no comments"
+    );
     let s = f.repo().rebase_state().unwrap().unwrap();
     assert_eq!(s.stop, GitRebaseStop::Conflict);
     assert_eq!(s.conflicts, ["/notes.txt"]);
@@ -554,7 +589,7 @@ fn a1_edit_and_reword_stop_and_continue_like_git() {
     let side = tmp("rebase-edit-msg");
     let msg = side.path().join("msg");
     std::fs::write(&msg, "notes, reworded\n").unwrap();
-    let editor = format!("cp {}", msg.display());
+    let editor = format!("cp {}", sh_path(&msg));
     let (ok, out) = git_rebase(witness.path(), &["main"], Some(&todo), &[]);
     assert!(ok, "{out}");
     std::fs::write(witness.path().join("b.txt"), "b2\n").unwrap();
@@ -661,7 +696,7 @@ fn a1_squash_fixup_reword_with_messages_and_autosquash_match_git() {
         &script,
         format!(
             "#!/bin/sh\nn=$(cat {dir}/n 2>/dev/null || echo 0)\nn=$((n+1))\necho $n > {dir}/n\nif [ $n = 1 ]; then printf 'b, reworded\\n' > \"$1\"; fi\nif [ $n = 2 ]; then printf 'b and a, squashed\\n\\nGiven.\\n' > \"$1\"; fi\n",
-            dir = side.path().display()
+            dir = sh_path(side.path())
         ),
     )
     .unwrap();
@@ -671,7 +706,7 @@ fn a1_squash_fixup_reword_with_messages_and_autosquash_match_git() {
         .arg(&script)
         .status()
         .unwrap();
-    let editor = script.to_string_lossy().into_owned();
+    let editor = sh_path(&script);
     let (ok, out) = git_rebase(
         witness.path(),
         &["main"],
@@ -722,6 +757,11 @@ fn a1_a_squash_that_conflicts_stops_and_git_continues_it() {
         let theirs =
             std::fs::read_to_string(witness.path().join(".git/rebase-merge").join(n)).unwrap();
         if n == "amend" {
+            continue;
+        }
+        if n == "message" {
+            // Newer Git adds a `# Conflicts:` block, which the commit strips again.
+            assert_eq!(strip_comments(&ours), strip_comments(&theirs), "{n}");
             continue;
         }
         assert_eq!(ours, theirs, "{n}");
@@ -851,7 +891,10 @@ fn a1_pull_rebase_gives_what_git_pull_rebase_gives() {
     // A colleague pushes; we commit locally.
     let colleague = tmp("rebase-pull-colleague");
     let remote = f.remote.path().to_string_lossy().into_owned();
-    g(colleague.path(), &["clone", "-q", &remote, "c"]);
+    g(
+        colleague.path(),
+        &["clone", "-q", "-b", "main", &remote, "c"],
+    );
     let c = colleague.path().join("c");
     set_user(&c, "Bob");
     std::fs::write(c.join("bob.txt"), "bob\n").unwrap();

@@ -84,7 +84,12 @@ pub(crate) fn clean_whitespace(text: &str) -> String {
 
 /// Git's `--cleanup=strip`: comment lines (`#`) off, then [`clean_whitespace`].
 fn clean_strip(text: &str) -> String {
-    let kept: Vec<&str> = text.lines().filter(|l| !l.starts_with('#')).collect();
+    clean_strip_as(text, "#")
+}
+
+/// [`clean_strip`] with the comment string `comment` (`core.commentString`).
+fn clean_strip_as(text: &str, comment: &str) -> String {
+    let kept: Vec<&str> = text.lines().filter(|l| !l.starts_with(comment)).collect();
     clean_whitespace(&kept.join("\n"))
 }
 
@@ -1008,7 +1013,18 @@ impl Repo {
         if let Some(amend) = d.amend {
             return Ok(Some(whole.message_of(amend)));
         }
-        Ok(d.message)
+        Ok(d.message
+            .map(|m| clean_strip_as(&m, &self.comment_string())))
+    }
+
+    /// The comment string of commit messages: `core.commentString`, else `core.commentChar`,
+    /// else `#` (also for `auto`, which picks a character only while Git edits a message).
+    fn comment_string(&self) -> String {
+        self.config_value("core.commentString")
+            .or_else(|| self.config_value("core.commentChar"))
+            .map(|v| v.trim().to_owned())
+            .filter(|v| !v.is_empty() && v != "auto")
+            .unwrap_or_else(|| "#".into())
     }
 }
 
@@ -1378,7 +1394,13 @@ impl Repo {
                                 .then(|| given(&l.message))
                                 .flatten()
                         })
-                        .or_else(|| d.message.as_deref().map(clean_whitespace))
+                        // Newer Git writes the `# Conflicts:` block into the message and
+                        // strips comments when it commits on continue; so does this.
+                        .or_else(|| {
+                            d.message
+                                .as_deref()
+                                .map(|m| clean_strip_as(m, &self.comment_string()))
+                        })
                         .unwrap_or_else(|| p.message.clone());
                     let author = d.author.clone().unwrap_or(p.author.clone());
                     current = engine.commit(tree, vec![head], author, &msg)?;
@@ -2101,6 +2123,10 @@ mod tests {
     fn cleanups_follow_git() {
         assert_eq!(clean_whitespace("\n\n a  \n\n\n b\n\n"), " a\n\n b\n");
         assert_eq!(clean_strip("# x\none\n# y\n\ntwo"), "one\n\ntwo\n");
+        assert_eq!(
+            clean_strip_as("feat notes\n\n; Conflicts:\n;\tnotes.txt\n", ";"),
+            "feat notes\n"
+        );
         assert_eq!(clean_whitespace("   \n"), "");
     }
 

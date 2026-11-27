@@ -35,9 +35,7 @@ pub enum Endpoint {
     /// A repository on this machine (local path or `file://`).
     Local(PathBuf),
     Http(HttpTarget),
-    /// `ssh://` and `user@host:path`; run by the product's `SshConnector`.
-    #[allow(dead_code)]
-    // read by the transport that runs over the connector (wave 1, strand A)
+    /// `ssh://` and `user@host:path`; run by the product's `SshConnector` (`crate::ssh`).
     Ssh(tk_git_types::ssh::SshTarget),
 }
 

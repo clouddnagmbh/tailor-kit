@@ -4,9 +4,11 @@
 //! Upstreams, fetch, push, pull and clone.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use gix::ObjectId;
 use gix::refs::transaction::PreviousValue;
+use tk_git_types::ssh::SshConnector;
 use tk_git_types::{GitError, GitIdentity, GitPullResult};
 
 use crate::branch::branch_ref;
@@ -58,13 +60,10 @@ impl Repo {
         Ok(Upstream::new(&remote, &merge))
     }
 
-    /// What an SSH remote answers until the transport runs over the connector (the follow-up of
-    /// this seam): no connector, or not wired yet.
-    pub(crate) fn ssh_pending(&self) -> GitError {
-        GitError::Unsupported(if self.ssh.is_some() {
-            "SSH remotes are not wired into fetch and push yet".into()
-        } else {
-            "SSH remotes need an SSH connector (Repo::with_ssh)".into()
+    /// The connector that reaches SSH remotes (seam N10); without one they are unsupported.
+    pub(crate) fn ssh_connector(&self) -> Result<&dyn SshConnector> {
+        self.ssh.as_deref().ok_or_else(|| {
+            GitError::Unsupported("SSH remotes need an SSH connector (Repo::with_ssh)".into())
         })
     }
 
@@ -90,7 +89,13 @@ impl Repo {
             Endpoint::Http(target) => {
                 crate::net::fetch(&self.repo, remote, &target, creds, with_head)
             }
-            Endpoint::Ssh(_) => Err(self.ssh_pending()),
+            Endpoint::Ssh(target) => crate::ssh::fetch_remote(
+                &self.repo,
+                remote,
+                &target,
+                self.ssh_connector()?,
+                with_head,
+            ),
         }
     }
 
@@ -108,7 +113,14 @@ impl Repo {
             Endpoint::Local(path) => {
                 crate::local::push(&self.repo, &path, &self.options, new, remote_ref)
             }
-            Endpoint::Ssh(_) => Err(self.ssh_pending()),
+            Endpoint::Ssh(target) => crate::ssh::push(
+                &self.repo,
+                &target,
+                self.ssh_connector()?,
+                new,
+                remote_ref,
+                self.product().agent,
+            ),
             Endpoint::Http(target) => crate::http::push(
                 &self.repo,
                 &target,
@@ -162,7 +174,14 @@ impl Repo {
             Endpoint::Local(path) => {
                 crate::local::push(&self.repo, &path, &self.options, head, &upstream.merge)?;
             }
-            Endpoint::Ssh(_) => return Err(self.ssh_pending()),
+            Endpoint::Ssh(target) => crate::ssh::push(
+                &self.repo,
+                &target,
+                self.ssh_connector()?,
+                head,
+                &upstream.merge,
+                self.product().agent,
+            )?,
             Endpoint::Http(target) => {
                 crate::http::push(
                     &self.repo,
@@ -345,7 +364,7 @@ fn is_network(url: &str) -> bool {
 }
 
 /// Clones `url` into `<parent>/<repository name>` and checks out the remote's default
-/// branch. `url` is an HTTPS URL or a repository on this machine: an absolute path, `~/…`,
+/// branch. `url` is an HTTPS URL (SSH: [`clone_with_ssh`]) or a repository on this machine: an absolute path, `~/…`,
 /// `file://…`, or a relative path (to `parent`, else to the home folder); a bare repository
 /// or the folder of a normal one. Refuses if the target folder exists and is not empty.
 /// Returns the new folder.
@@ -365,6 +384,19 @@ pub fn clone_with_home(
     home: Option<&Path>,
     creds: &dyn CredentialSource,
     options: &impl crate::AsOptions,
+) -> Result<PathBuf> {
+    clone_with_ssh(url, parent, home, creds, options, None)
+}
+
+/// [`clone_with_home`] that also reaches SSH remotes (`ssh://…`, `user@host:path`) through
+/// `ssh` (seam N10); the new repository is opened with it for the fetch.
+pub fn clone_with_ssh(
+    url: &str,
+    parent: &Path,
+    home: Option<&Path>,
+    creds: &dyn CredentialSource,
+    options: &impl crate::AsOptions,
+    ssh: Option<Arc<dyn SshConnector>>,
 ) -> Result<PathBuf> {
     let options: Options = options.options();
     let options = &options;
@@ -421,7 +453,7 @@ pub fn clone_with_home(
         }
     }
     std::fs::create_dir_all(&target).ctx("cannot create the folder")?;
-    let result = clone_into(&url, &target, creds, options);
+    let result = clone_into(&url, &target, creds, options, ssh);
     if result.is_err() {
         // Leave nothing half-cloned behind.
         let _ = std::fs::remove_dir_all(&target);
@@ -437,6 +469,7 @@ fn clone_into(
     target: &Path,
     creds: &dyn CredentialSource,
     options: &Options,
+    ssh: Option<Arc<dyn SshConnector>>,
 ) -> Result<()> {
     let repo = gix::ThreadSafeRepository::init_opts(
         target,
@@ -458,7 +491,7 @@ fn clone_into(
             ),
         ],
     )?;
-    let repo = Repo::require(target, options)?;
+    let repo = Repo::require(target, options)?.with_ssh(ssh);
     let head = repo.fetch("origin", creds, true)?;
     let candidates = head
         .into_iter()

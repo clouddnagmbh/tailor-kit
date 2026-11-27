@@ -137,6 +137,90 @@ pub fn check_report(body: &[u8], remote_ref: &str) -> Result<()> {
     Err(fail("the server did not confirm the push"))
 }
 
+/// What a push sends after the ref advertisement.
+pub(crate) enum PushRequest {
+    /// The remote ref already has the value: nothing to send (over a stream: just a flush).
+    UpToDate,
+    /// The update command, a flush and the pack.
+    Send(Vec<u8>),
+}
+
+/// The request that sets `remote_ref` to `new` on a remote that advertised `adv`: refused
+/// unless it is a fast-forward, with a pack of the objects the remote lacks. Shared by the
+/// HTTP and the SSH push (`crate::ssh`).
+pub(crate) fn prepare_push(
+    repo: &gix::Repository,
+    adv: &Advertisement,
+    new: ObjectId,
+    remote_ref: &str,
+    agent: &str,
+) -> Result<PushRequest> {
+    let current = adv.refs.get(remote_ref).copied();
+    if current == Some(new) {
+        return Ok(PushRequest::UpToDate);
+    }
+    if let Some(cur) = current
+        && (!repo.has_object(cur) || !is_ancestor(repo, cur, new))
+    {
+        return Err(fail(
+            "the remote branch has commits you do not have: pull first",
+        ));
+    }
+
+    // Everything reachable from advertised commits we know is on the remote.
+    let known: Vec<ObjectId> = adv
+        .refs
+        .values()
+        .copied()
+        .filter(|id| repo.find_commit(*id).is_ok())
+        .collect();
+    let mut remote_has: HashSet<ObjectId> = HashSet::new();
+    if !known.is_empty() {
+        let walk = repo
+            .rev_walk(known.iter().copied())
+            .all()
+            .ctx("cannot walk the history")?;
+        for info in walk {
+            remote_has.insert(info.ctx("cannot walk the history")?.id);
+        }
+        // The trees of the advertised tips, so unchanged files are not sent again.
+        let mut seen = HashSet::new();
+        let mut tip_objects = Vec::new();
+        for id in &known {
+            let tree = repo
+                .find_commit(*id)
+                .ctx("cannot read a commit")?
+                .tree_id()
+                .ctx("cannot read a commit")?
+                .detach();
+            tree_objects(repo, tree, &|_| false, &mut seen, &mut tip_objects)?;
+        }
+        remote_has.extend(tip_objects);
+    }
+    let ids = missing_objects(repo, &[new], &|id| remote_has.contains(id))?;
+    let pack = crate::pack::write(repo, &ids)?;
+
+    let zero = ObjectId::null(repo.object_hash());
+    let mut caps = Vec::new();
+    for wanted in ["report-status"] {
+        if adv.capabilities.iter().any(|c| c == wanted) {
+            caps.push(wanted.to_owned());
+        }
+    }
+    caps.push(format!("agent={agent}"));
+    let command = format!(
+        "{} {} {}\0{}\n",
+        current.unwrap_or(zero),
+        new,
+        remote_ref,
+        caps.join(" ")
+    );
+    let mut payload = pkt_line(command.as_bytes());
+    payload.extend_from_slice(b"0000");
+    payload.extend_from_slice(&pack);
+    Ok(PushRequest::Send(payload))
+}
+
 struct Client<'a> {
     http: reqwest::blocking::Client,
     target: &'a HttpTarget,
@@ -226,70 +310,10 @@ pub fn push(
         )));
     }
     let adv = parse_advertisement(&body)?;
-
-    let current = adv.refs.get(remote_ref).copied();
-    if current == Some(new) {
-        return Ok(());
-    }
-    if let Some(cur) = current
-        && (!repo.has_object(cur) || !is_ancestor(repo, cur, new))
-    {
-        return Err(fail(
-            "the remote branch has commits you do not have: pull first",
-        ));
-    }
-
-    // Everything reachable from advertised commits we know is on the remote.
-    let known: Vec<ObjectId> = adv
-        .refs
-        .values()
-        .copied()
-        .filter(|id| repo.find_commit(*id).is_ok())
-        .collect();
-    let mut remote_has: HashSet<ObjectId> = HashSet::new();
-    if !known.is_empty() {
-        let walk = repo
-            .rev_walk(known.iter().copied())
-            .all()
-            .ctx("cannot walk the history")?;
-        for info in walk {
-            remote_has.insert(info.ctx("cannot walk the history")?.id);
-        }
-        // The trees of the advertised tips, so unchanged files are not sent again.
-        let mut seen = HashSet::new();
-        let mut tip_objects = Vec::new();
-        for id in &known {
-            let tree = repo
-                .find_commit(*id)
-                .ctx("cannot read a commit")?
-                .tree_id()
-                .ctx("cannot read a commit")?
-                .detach();
-            tree_objects(repo, tree, &|_| false, &mut seen, &mut tip_objects)?;
-        }
-        remote_has.extend(tip_objects);
-    }
-    let ids = missing_objects(repo, &[new], &|id| remote_has.contains(id))?;
-    let pack = crate::pack::write(repo, &ids)?;
-
-    let zero = ObjectId::null(repo.object_hash());
-    let mut caps = Vec::new();
-    for wanted in ["report-status"] {
-        if adv.capabilities.iter().any(|c| c == wanted) {
-            caps.push(wanted.to_owned());
-        }
-    }
-    caps.push(format!("agent={agent}"));
-    let command = format!(
-        "{} {} {}\0{}\n",
-        current.unwrap_or(zero),
-        new,
-        remote_ref,
-        caps.join(" ")
-    );
-    let mut payload = pkt_line(command.as_bytes());
-    payload.extend_from_slice(b"0000");
-    payload.extend_from_slice(&pack);
+    let payload = match prepare_push(repo, &adv, new, remote_ref, agent)? {
+        PushRequest::UpToDate => return Ok(()),
+        PushRequest::Send(payload) => payload,
+    };
 
     let url = format!("{}/git-receive-pack", client.base);
     let resp = client.send(|c| {

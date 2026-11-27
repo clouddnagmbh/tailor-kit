@@ -87,6 +87,15 @@
 //! working copy, file tree and blobs, blame, history search and reflog, the plumbing (`pick`,
 //! `write_tree`, `write_commit`), the index operations and signing ([`sign`]).
 
+//!
+//! # Working state (GitTailor wave 2)
+//!
+//! [`state`]: the refs ([`Repo::ref_state`]), the working files, the index with its conflict
+//! stages and a merge in progress as objects ([`Repo::capture_working_state`], without
+//! touching `.git/index`), records under the product's namespace ([`Repo::set_own_ref`]) and
+//! setting a captured state back with expected old values ([`Repo::set_state`]): the
+//! building blocks of a time machine, of undo through a snapshot and of parking changes.
+
 /// Wave 15, strand D: amend, abort, restore and rewrite actions, text conflict result.
 mod abort;
 /// Wave 14, strand G: the Git wizards' actions (plan, apply, undo).
@@ -139,6 +148,8 @@ pub mod sign;
 mod signing;
 mod ssh;
 mod stash;
+/// Wave 2 of GitTailor: the state of a working tree as objects, and setting it back.
+pub mod state;
 mod status;
 mod tags;
 /// Committing files onto a branch without a checkout (since wave 13).

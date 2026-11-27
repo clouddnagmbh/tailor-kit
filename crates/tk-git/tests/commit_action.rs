@@ -230,8 +230,17 @@ fn commit_action_stops_on_a_finding_of_the_scanner_before_anything_moves() {
         "{e:?}"
     );
     assert_eq!(raw_state(f.dir()), before);
-    // No backup ref either.
-    assert!(!state(f.dir()).contains("refs/tailor/backup"));
+    // No backup ref either (`state` leaves the product's own refs out, so look for them).
+    let backups = || {
+        gix::open(f.dir())
+            .unwrap()
+            .references()
+            .unwrap()
+            .prefixed("refs/tailor/backup/")
+            .unwrap()
+            .count()
+    };
+    assert_eq!(backups(), 0);
     let staged = f.repo().with_scanner(Some(Arc::new(NoTokens)));
     staged.stage(&paths(&["/notes.txt"])).unwrap();
     let e = staged
@@ -245,6 +254,7 @@ fn commit_action_stops_on_a_finding_of_the_scanner_before_anything_moves() {
         )
         .unwrap_err();
     assert!(matches!(e, tk_git::GitError::SecretsFound(_)), "{e:?}");
+    assert_eq!(backups(), 0);
 }
 
 #[test]

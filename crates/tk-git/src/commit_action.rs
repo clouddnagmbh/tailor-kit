@@ -173,12 +173,41 @@ impl Repo {
         paths: &[String],
         staged: bool,
     ) -> Result<Done> {
-        let (_, branch) =
+        let (full, branch) =
             Self::commit_branch(cx).ok_or_else(|| fail("You are not on a branch."))?;
+        let first = run.backups.len();
         if cx.head.is_some() {
             run.backup(self, &branch, cx.head)?;
         }
-        let made = if staged {
+        let made = match self.make_commit(cx, run, message, paths, staged) {
+            Ok(made) => made,
+            Err(e) => {
+                // Refused (the scanner, the signer, an empty message) before the branch moved:
+                // the backup of this run points where the branch still is, so it goes again and
+                // a refused commit leaves no trace.
+                if self.ref_value(&full)? == cx.head {
+                    for name in run.backups.drain(first..) {
+                        self.put_ref(&name, None, cx.head, "backup not needed")?;
+                    }
+                }
+                return Err(e);
+            }
+        };
+        Ok(Done::new(
+            format!("Committed \"{}\" on {branch}.", made.summary),
+            false,
+        ))
+    }
+
+    fn make_commit(
+        &self,
+        cx: &Ctx,
+        run: &Run<'_>,
+        message: &str,
+        paths: &[String],
+        staged: bool,
+    ) -> Result<tk_git_types::GitCommit> {
+        Ok(if staged {
             cx.whole.commit_staged(
                 &GitStagedCommit {
                     message: message.to_owned(),
@@ -188,10 +217,6 @@ impl Repo {
         } else {
             cx.whole
                 .commit(message, &self.commit_paths(paths)?, run.opts.identity)?
-        };
-        Ok(Done::new(
-            format!("Committed \"{}\" on {branch}.", made.summary),
-            false,
-        ))
+        })
     }
 }

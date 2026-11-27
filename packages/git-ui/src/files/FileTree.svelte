@@ -35,7 +35,7 @@
   function entryMenu(entry: GitTreeEntry, e: MouseEvent) {
     const items = gitActionEntries(
       extensions,
-      { kind: "file", repository: host.activeRepository ?? "", path: entry.path, rev: rev ?? undefined },
+      { kind: "file", repository: host.activeRepository ?? "", path: entry.path, rev: rev ?? undefined, directory: entry.kind === "dir" || undefined },
       (m) => host.notifyError(m),
     ).slice(1);
     if (items.length === 0) return;

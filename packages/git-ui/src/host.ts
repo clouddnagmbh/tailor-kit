@@ -14,7 +14,9 @@ import type { Command, HintStore, ShellStorage } from "@tailor-kit/shell";
 import { getContext, setContext, type Component } from "svelte";
 
 import type { GitHostBackend, GitOwnerInfo } from "./api";
+import { withBuiltinFileActions } from "./builtin-actions";
 import type { ProvidedGitExtensions } from "./extensions";
+import { GIT_VIEWS_KEY } from "./views.svelte";
 import type { ContentDiff, MergeState, RepositoryEntry, ReviewRepo, TreeNode } from "./types";
 import type { GitView, GitViews } from "./views.svelte";
 
@@ -229,7 +231,9 @@ export function fileOwnership(host: GitHost, owner: string | null | undefined): 
   return { semantic: false, activatable: owner, other: content.owners.find((o) => o.id === owner) };
 }
 
-/** The Git part of the product's extensions with their context, or `null` (`GitHost.extensions`). */
+/** The Git part of the product's extensions with their context (`GitHost.extensions`), plus the
+ *  kit's own "Blame" and "File history" file actions when the host has no `content`; `null`: none. */
 export function getGitExtensions(): ProvidedGitExtensions | null {
-  return getGitHost().extensions;
+  const host = getGitHost();
+  return withBuiltinFileActions(host.extensions, host, getContext<GitViews | undefined>(GIT_VIEWS_KEY));
 }

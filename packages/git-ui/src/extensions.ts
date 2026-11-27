@@ -86,8 +86,11 @@ export type GitActionTarget =
   | { kind: "commits"; repository: string; commits: string[] }
   /** A branch, tag or remote branch (`GitRef.full`). */
   | { kind: "ref"; repository: string; ref: string }
-  /** A file in the changes view, the file tree or a history list; `rev` absent: working tree. */
-  | { kind: "file"; repository: string; path: string; rev?: string }
+  /** A file in the changes view, the file tree or a history list; `rev` absent: working tree.
+   *  `directory` (since tailor-kit 0.3): a folder of the file tree. Without `GitHost.content` the
+   *  kit adds "Blame" and "File history" (ids `blame`, `file-history`) to every file; an
+   *  extension's action with one of these ids replaces it (./builtin-actions). */
+  | { kind: "file"; repository: string; path: string; rev?: string; directory?: boolean }
   /** The changed files of the working copy as a whole. */
   | { kind: "changes"; repository: string; paths: string[] }
   /** A parked change (`GitStash.index`). */

@@ -18,7 +18,9 @@
 //!   the working files before and after (as commits/trees), the repository configuration and
 //!   the stash list when the action changed them.
 //!
-//! Network actions (fetch, push, publish, push-tag) are not undoable and write no entry.
+//! Network actions (fetch, push, publish, push-tag) are not undoable and write no entry, except
+//! push and publish where the product opts in ([`Repo::with_push_undo`]): their entry records
+//! what moved on the remote, and undo sets it back with a lease.
 //! Unsaved changes in the app are the caller's to know: it passes [`ActionOptions::unsaved`].
 
 use std::cell::OnceCell;
@@ -227,6 +229,8 @@ pub(crate) struct Run<'a> {
     pub opts: &'a ActionOptions<'a>,
     pub time: i64,
     pub backups: Vec<String>,
+    /// What a push or publish moved on the remote (for its undo).
+    pub pushed: Option<crate::remote::Pushed>,
 }
 
 impl Run<'_> {
@@ -283,6 +287,9 @@ pub(crate) struct Restore {
     /// The action left a merge (cherry-pick, revert) in progress.
     #[serde(default)]
     pub underway: bool,
+    /// A push or publish ([`Repo::with_push_undo`]): undo sets the remote branch back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pushed: Option<crate::remote::Pushed>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,6 +553,11 @@ impl Repo {
                 tip,
                 summary,
             } => self.plan_rewrite(cx, p, branch, tip, summary),
+            GitAction::Commit {
+                message,
+                paths,
+                staged,
+            } => self.plan_commit(cx, p, message, paths, *staged),
         }
     }
 
@@ -601,6 +613,11 @@ impl Repo {
                 tip,
                 summary,
             } => self.run_rewrite(cx, run, branch, tip, summary),
+            GitAction::Commit {
+                message,
+                paths,
+                staged,
+            } => self.run_commit(cx, run, message, paths, *staged),
         }
     }
 
@@ -639,6 +656,7 @@ impl Repo {
             opts,
             time,
             backups: Vec::new(),
+            pushed: None,
         };
         if !plan.undoable {
             let done = self.run_action(&cx, action, &plan, &mut run)?;
@@ -698,6 +716,7 @@ impl Repo {
             config: (config_before != config_after).then_some((config_before, config_after)),
             stash_log: (stash_before != stash_after).then_some((stash_before, stash_after)),
             underway: after_repo.underway()?.is_some(),
+            pushed: run.pushed.take(),
             ..Restore::default()
         };
         if let Some(before) = worktree_before {
@@ -793,6 +812,7 @@ pub(crate) fn action_tag(action: &GitAction) -> &'static str {
         GitAction::RestoreBranch { .. } => "restore-branch",
         GitAction::RestoreFiles { .. } => "restore-files",
         GitAction::Rewrite { .. } => "rewrite",
+        GitAction::Commit { .. } => "commit",
     }
 }
 

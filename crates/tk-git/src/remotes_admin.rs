@@ -285,7 +285,7 @@ impl Repo {
         remote: &str,
     ) -> Result<GitPlan> {
         p.network = true;
-        p.undoable = false;
+        p.undoable = self.push_undo;
         let full = format!("refs/heads/{branch}");
         let at = if check_ref_name(branch).is_ok() {
             self.ref_value(&full)?
@@ -319,6 +319,11 @@ impl Repo {
         p.steps.push(format!(
             "Puts {branch} on {remote} and links the two, so Pull and Push work from now on."
         ));
+        if self.push_undo {
+            p.steps.push(format!(
+                "Undo can take {branch} off {remote} again as long as nobody pushed on top."
+            ));
+        }
         let tracking = format!("refs/remotes/{remote}/{branch}");
         p.refs.push(GitRefMove {
             before: self.ref_value(&tracking)?.map(|id| id.to_string()),
@@ -338,7 +343,15 @@ impl Repo {
         let at = self
             .ref_value(&full)?
             .ok_or_else(|| fail(format!("There is no branch {branch}.")))?;
-        self.push_ref(remote, at, &full, run.opts.credentials)?;
+        let before = self.push_ref(remote, at, &full, run.opts.credentials)?;
+        if self.push_undo {
+            run.pushed = Some(crate::remote::Pushed {
+                remote: remote.to_owned(),
+                remote_ref: full.clone(),
+                before: before.map(|id| id.to_string()),
+                after: at.to_string(),
+            });
+        }
         self.repo
             .reference(
                 format!("refs/remotes/{remote}/{branch}"),

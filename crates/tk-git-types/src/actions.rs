@@ -235,6 +235,20 @@ pub enum GitAction {
         tip: String,
         summary: String,
     },
+
+    // ---- GitTailor wave 1 (strand F). Additive, as above.
+    /// A new commit on the current branch (also the first one of an unborn branch, and the one
+    /// that concludes a merge in progress): the current content of `paths` (repository-relative,
+    /// leading `/`; new, changed or deleted files) or, with `staged`, what the index holds. The
+    /// files go through the commit scanner first. Undo moves the branch back; the files keep
+    /// their content and show as changes again.
+    Commit {
+        message: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        paths: Vec<String>,
+        #[serde(default)]
+        staged: bool,
+    },
 }
 
 /// Why an action cannot run now. The UI explains each in plain words and offers the way out.
@@ -332,7 +346,8 @@ pub struct GitPlan {
     /// A backup ref and an undo entry are written.
     #[serde(default)]
     pub backup: bool,
-    /// Undo can take it back (pushes cannot).
+    /// Undo can take it back (pushes only where the product opts in: then undo sets the remote
+    /// branch back with a lease).
     #[serde(default)]
     pub undoable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -499,6 +514,26 @@ mod tests {
             assert_eq!(back["action"], tag, "{json}");
             assert_eq!(serde_json::from_value::<GitAction>(back).unwrap(), a);
         }
+        let c: GitAction =
+            serde_json::from_str(r#"{"action":"commit","message":"m","paths":["/a.txt"]}"#)
+                .unwrap();
+        assert_eq!(
+            c,
+            GitAction::Commit {
+                message: "m".into(),
+                paths: vec!["/a.txt".into()],
+                staged: false
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(GitAction::Commit {
+                message: "m".into(),
+                paths: Vec::new(),
+                staged: true
+            })
+            .unwrap(),
+            serde_json::json!({"action": "commit", "message": "m", "staged": true})
+        );
         // A stash without paths (waves 14) still parses and serializes without the field.
         let a: GitAction = serde_json::from_str(r#"{"action":"stash"}"#).unwrap();
         assert_eq!(

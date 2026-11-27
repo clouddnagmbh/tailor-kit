@@ -250,3 +250,68 @@ fn errors_of_the_connector_reach_the_caller_and_no_connector_is_unsupported() {
     assert!(matches!(err, GitError::Auth(_)), "{err:?}");
     assert!(!parent.path().join("b").exists());
 }
+
+/// The undo of a push (GitTailor wave 1, `Repo::with_push_undo`) over SSH: the branch on the
+/// server goes back with a lease, and only while nobody pushed on top.
+#[test]
+fn a_push_over_ssh_is_undone_with_a_lease() {
+    if !have_git() {
+        eprintln!("skipped: git is not installed");
+        return;
+    }
+    let server = tmp("ssh-undo-server");
+    let author = tmp("ssh-undo-author");
+    let origin = origin(server.path(), author.path());
+    let connector = LocalGit::new(server.path());
+    let first = ref_id(&origin, "refs/heads/main").unwrap();
+    let parent = tmp("ssh-undo-parent");
+    let dir = clone_with_ssh(
+        "ssh://git@example.com/srv/origin.git",
+        parent.path(),
+        None,
+        &NoCredentials,
+        &opts(),
+        Some(connector.clone()),
+    )
+    .unwrap();
+    set_user(&dir, "Ada");
+    write(&dir, "a.txt", "two\n");
+    let second = with_ssh(&dir, &connector)
+        .commit("second", &paths(&["a.txt"]), None)
+        .unwrap()
+        .oid;
+    let options = tk_git::ActionOptions {
+        unsaved: false,
+        credentials: &NoCredentials,
+        identity: None,
+    };
+    let push: tk_git_types::actions::GitAction =
+        serde_json::from_str(r#"{"action":"push"}"#).unwrap();
+    let undoing = || with_ssh(&dir, &connector).with_push_undo(true);
+    let entry = undoing().apply(&push, &options).unwrap().undo.unwrap();
+    assert_eq!(
+        ref_id(&origin, "refs/heads/main").as_deref(),
+        Some(second.as_str())
+    );
+    undoing()
+        .undo_with(&entry.id, false, &NoCredentials)
+        .unwrap();
+    assert_eq!(
+        ref_id(&origin, "refs/heads/main").as_deref(),
+        Some(first.as_str())
+    );
+
+    // Pushed again, then the author pushes on top: the undo is refused, the server keeps both.
+    let entry = undoing().apply(&push, &options).unwrap().undo.unwrap();
+    let theirs = reopen(author.path());
+    theirs.pull(&NoCredentials, None).unwrap();
+    write(author.path(), "b.txt", "bob\n");
+    theirs.commit("on top", &paths(&["b.txt"]), None).unwrap();
+    reopen(author.path()).push(&NoCredentials).unwrap();
+    let top = ref_id(&origin, "refs/heads/main");
+    let e = undoing()
+        .undo_with(&entry.id, false, &NoCredentials)
+        .unwrap_err();
+    assert!(e.to_string().contains("revert"), "{e}");
+    assert_eq!(ref_id(&origin, "refs/heads/main"), top);
+}

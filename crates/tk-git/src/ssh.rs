@@ -22,7 +22,7 @@ use gix::bstr::ByteSlice;
 use tk_git_types::GitError;
 use tk_git_types::ssh::{SshConnector, SshStream, SshTarget};
 
-use crate::http::{PushRequest, check_report, parse_advertisement, pkt_line, prepare_push};
+use crate::http::{PushRequest, check_report, parse_advertisement, pkt_line, prepare_update};
 use crate::util::{Context, Result, fail};
 
 /// `host`, or `host:port` when the URL names a port: what messages and `GitError::Auth` carry
@@ -168,16 +168,19 @@ fn read_pkt(reader: &mut dyn Read, host: &str) -> Result<Option<Vec<u8>>> {
     Ok(Some(payload))
 }
 
-/// Pushes `new` to `remote_ref` (e.g. `refs/heads/main`) of the SSH remote `target`, as `agent`
-/// (the `agent=` capability). Fast-forward only, as over HTTP.
-pub(crate) fn push(
+/// Pushes to `remote_ref` (e.g. `refs/heads/main`) of the SSH remote `target`, as `agent` (the
+/// `agent=` capability): sets it to `new` (`None`: deletes it) as
+/// [`crate::http::prepare_update`] decides with `lease` (fast-forward only without one, as over
+/// HTTP), and returns what the server had before.
+pub(crate) fn update(
     repo: &gix::Repository,
     target: &SshTarget,
     connector: &dyn SshConnector,
-    new: ObjectId,
+    new: Option<ObjectId>,
     remote_ref: &str,
+    lease: Option<Option<ObjectId>>,
     agent: &str,
-) -> Result<()> {
+) -> Result<Option<ObjectId>> {
     let SshStream {
         mut reader,
         mut writer,
@@ -193,12 +196,13 @@ pub(crate) fn push(
     body.extend_from_slice(b"0000");
     let adv = parse_advertisement(&body)?;
 
-    let request = match prepare_push(repo, &adv, new, remote_ref, agent) {
+    let before = adv.refs.get(remote_ref).copied();
+    let request = match prepare_update(repo, &adv, new, remote_ref, lease, agent) {
         Ok(PushRequest::Send(payload)) => payload,
         done => {
             // A flush tells the server that no update follows; it then ends cleanly.
             let _ = writer.write_all(b"0000").and_then(|()| writer.flush());
-            return done.map(|_| ());
+            return done.map(|_| before);
         }
     };
     writer
@@ -213,10 +217,9 @@ pub(crate) fn push(
         check_report(&report, remote_ref).map_err(|e| match e {
             GitError::Failed(m) => fail(format!("{host}: {m}")),
             other => other,
-        })
-    } else {
-        Ok(())
+        })?;
     }
+    Ok(before)
 }
 
 #[cfg(test)]

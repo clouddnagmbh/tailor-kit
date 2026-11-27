@@ -145,27 +145,59 @@ pub(crate) enum PushRequest {
     Send(Vec<u8>),
 }
 
-/// The request that sets `remote_ref` to `new` on a remote that advertised `adv`: refused
-/// unless it is a fast-forward, with a pack of the objects the remote lacks. Shared by the
-/// HTTP and the SSH push (`crate::ssh`).
-pub(crate) fn prepare_push(
+/// The request that sets `remote_ref` to `new` on a remote that advertised `adv`, with a pack
+/// of the objects the remote lacks; shared by the HTTP and the SSH push (`crate::ssh`). `lease`
+/// `None`: fast-forward only; `Some(expected)`: only while the server still has `expected`
+/// (`--force-with-lease`, in any direction: the undo of a push). `new` `None` deletes the ref
+/// (the server must allow `delete-refs`).
+pub(crate) fn prepare_update(
     repo: &gix::Repository,
     adv: &Advertisement,
-    new: ObjectId,
+    new: Option<ObjectId>,
     remote_ref: &str,
+    lease: Option<Option<ObjectId>>,
     agent: &str,
 ) -> Result<PushRequest> {
     let current = adv.refs.get(remote_ref).copied();
-    if current == Some(new) {
+    match lease {
+        Some(expected) if current != expected => {
+            return Err(fail(
+                "the branch on the server changed since: someone pushed on top of it",
+            ));
+        }
+        Some(_) => {}
+        None => {
+            if let (Some(cur), Some(new)) = (current, new)
+                && (!repo.has_object(cur) || !is_ancestor(repo, cur, new))
+            {
+                return Err(fail(
+                    "the remote branch has commits you do not have: pull first",
+                ));
+            }
+        }
+    }
+    if current == new {
         return Ok(PushRequest::UpToDate);
     }
-    if let Some(cur) = current
-        && (!repo.has_object(cur) || !is_ancestor(repo, cur, new))
-    {
-        return Err(fail(
-            "the remote branch has commits you do not have: pull first",
-        ));
-    }
+    let zero = ObjectId::null(repo.object_hash());
+    let report = adv.capabilities.iter().any(|c| c == "report-status");
+    let Some(new) = new else {
+        let Some(cur) = current else {
+            return Ok(PushRequest::UpToDate);
+        };
+        if !adv.capabilities.iter().any(|c| c == "delete-refs") {
+            return Err(fail("the server does not allow deleting branches"));
+        }
+        let mut caps = vec!["delete-refs".to_owned()];
+        if report {
+            caps.push("report-status".to_owned());
+        }
+        caps.push(format!("agent={agent}"));
+        let command = format!("{cur} {zero} {remote_ref}\0{}\n", caps.join(" "));
+        let mut payload = pkt_line(command.as_bytes());
+        payload.extend_from_slice(b"0000");
+        return Ok(PushRequest::Send(payload));
+    };
 
     // Everything reachable from advertised commits we know is on the remote.
     let known: Vec<ObjectId> = adv
@@ -200,12 +232,9 @@ pub(crate) fn prepare_push(
     let ids = missing_objects(repo, &[new], &|id| remote_has.contains(id))?;
     let pack = crate::pack::write(repo, &ids)?;
 
-    let zero = ObjectId::null(repo.object_hash());
     let mut caps = Vec::new();
-    for wanted in ["report-status"] {
-        if adv.capabilities.iter().any(|c| c == wanted) {
-            caps.push(wanted.to_owned());
-        }
+    if report {
+        caps.push("report-status".to_owned());
     }
     caps.push(format!("agent={agent}"));
     let command = format!(
@@ -277,6 +306,20 @@ pub fn push(
     remote_ref: &str,
     agent: &str,
 ) -> Result<()> {
+    update(repo, target, creds, Some(new), remote_ref, None, agent).map(|_| ())
+}
+
+/// Sets (`Some`) or deletes (`None`) `remote_ref` on `target` as [`prepare_update`] decides
+/// with `lease`, and returns what the server had before.
+pub fn update(
+    repo: &gix::Repository,
+    target: &HttpTarget,
+    creds: &dyn CredentialSource,
+    new: Option<ObjectId>,
+    remote_ref: &str,
+    lease: Option<Option<ObjectId>>,
+    agent: &str,
+) -> Result<Option<ObjectId>> {
     ensure_tls();
     let http = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -310,8 +353,9 @@ pub fn push(
         )));
     }
     let adv = parse_advertisement(&body)?;
-    let payload = match prepare_push(repo, &adv, new, remote_ref, agent)? {
-        PushRequest::UpToDate => return Ok(()),
+    let before = adv.refs.get(remote_ref).copied();
+    let payload = match prepare_update(repo, &adv, new, remote_ref, lease, agent)? {
+        PushRequest::UpToDate => return Ok(before),
         PushRequest::Send(payload) => payload,
     };
 
@@ -326,10 +370,9 @@ pub fn push(
         .bytes()
         .map_err(|e| fail(format!("cannot read the server's answer: {e}")))?;
     if adv.capabilities.iter().any(|c| c == "report-status") {
-        check_report(&body, remote_ref)
-    } else {
-        Ok(())
+        check_report(&body, remote_ref)?;
     }
+    Ok(before)
 }
 
 #[cfg(test)]

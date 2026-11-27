@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use gix::ObjectId;
 use gix::refs::transaction::PreviousValue;
+use serde::{Deserialize, Serialize};
 use tk_git_types::ssh::SshConnector;
 use tk_git_types::{GitError, GitIdentity, GitPullResult};
 
@@ -18,6 +19,17 @@ use crate::net::{Endpoint, endpoint};
 use crate::repo::{Options, Repo, set_local_config};
 use crate::util::{Context, Result, fail};
 use crate::worktree::switch;
+
+/// What a push moved on the remote: the undo of a push needs it ([`Repo::with_push_undo`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Pushed {
+    pub remote: String,
+    /// On the remote, e.g. `refs/heads/main`.
+    pub remote_ref: String,
+    /// `None`: the push created it.
+    pub before: Option<String>,
+    pub after: String,
+}
 
 /// The branch the current branch pulls from and pushes to.
 pub(crate) struct Upstream {
@@ -100,33 +112,49 @@ impl Repo {
     }
 
     /// Sets `remote_ref` on `remote` to `new` (a commit, or an annotated tag object), sending
-    /// what the remote lacks. Fast-forward only for branches; a ref that exists with another
-    /// value is refused for tags.
+    /// what the remote lacks; returns what it was. Fast-forward only for branches; a ref that
+    /// exists with another value is refused for tags.
     pub(crate) fn push_ref(
         &self,
         remote: &str,
         new: ObjectId,
         remote_ref: &str,
         creds: &dyn CredentialSource,
-    ) -> Result<()> {
+    ) -> Result<Option<ObjectId>> {
+        self.update_remote_ref(remote, Some(new), remote_ref, None, creds)
+    }
+
+    /// Sets `remote_ref` on `remote` to `new` (`None`: deletes it) and returns what it was.
+    /// `lease` `None`: fast-forward only; `Some(expected)`: only while it still is `expected`
+    /// (`--force-with-lease`), in any direction. Used by the undo of a push.
+    pub(crate) fn update_remote_ref(
+        &self,
+        remote: &str,
+        new: Option<ObjectId>,
+        remote_ref: &str,
+        lease: Option<Option<ObjectId>>,
+        creds: &dyn CredentialSource,
+    ) -> Result<Option<ObjectId>> {
         match self.remote_endpoint(remote, true)? {
             Endpoint::Local(path) => {
-                crate::local::push(&self.repo, &path, &self.options, new, remote_ref)
+                crate::local::update(&self.repo, &path, &self.options, new, remote_ref, lease)
             }
-            Endpoint::Ssh(target) => crate::ssh::push(
+            Endpoint::Ssh(target) => crate::ssh::update(
                 &self.repo,
                 &target,
                 self.ssh_connector()?,
                 new,
                 remote_ref,
+                lease,
                 self.product().agent,
             ),
-            Endpoint::Http(target) => crate::http::push(
+            Endpoint::Http(target) => crate::http::update(
                 &self.repo,
                 &target,
                 creds,
                 new,
                 remote_ref,
+                lease,
                 self.product().agent,
             ),
         }
@@ -153,6 +181,11 @@ impl Repo {
     /// Pushes the current branch to its upstream; without one to `origin/<branch>`, which
     /// then becomes the upstream. Fast-forward only.
     pub fn push(&self, creds: &dyn CredentialSource) -> Result<()> {
+        self.push_upstream(creds).map(|_| ())
+    }
+
+    /// [`Repo::push`], saying what moved on the remote.
+    pub(crate) fn push_upstream(&self, creds: &dyn CredentialSource) -> Result<Pushed> {
         let branch = self
             .head_branch()?
             .ok_or_else(|| fail("not on a branch: switch to one before pushing"))?;
@@ -170,29 +203,7 @@ impl Repo {
                 true,
             ),
         };
-        match self.remote_endpoint(&upstream.remote, true)? {
-            Endpoint::Local(path) => {
-                crate::local::push(&self.repo, &path, &self.options, head, &upstream.merge)?;
-            }
-            Endpoint::Ssh(target) => crate::ssh::push(
-                &self.repo,
-                &target,
-                self.ssh_connector()?,
-                head,
-                &upstream.merge,
-                self.product().agent,
-            )?,
-            Endpoint::Http(target) => {
-                crate::http::push(
-                    &self.repo,
-                    &target,
-                    creds,
-                    head,
-                    &upstream.merge,
-                    self.product().agent,
-                )?;
-            }
-        }
+        let before = self.push_ref(&upstream.remote, head, &upstream.merge, creds)?;
         self.repo
             .reference(
                 upstream.tracking.as_str(),
@@ -207,7 +218,12 @@ impl Repo {
                 ("branch", &branch, "merge", &upstream.merge),
             ])?;
         }
-        Ok(())
+        Ok(Pushed {
+            remote: upstream.remote,
+            remote_ref: upstream.merge,
+            before: before.map(|id| id.to_string()),
+            after: head.to_string(),
+        })
     }
 
     /// Fetches the upstream and brings the current branch up to date with it: nothing to do,

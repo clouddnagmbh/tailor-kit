@@ -105,6 +105,7 @@ mod blob;
 mod branch;
 mod changelog_commits;
 mod commit;
+mod commit_action;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
 mod file_tree;

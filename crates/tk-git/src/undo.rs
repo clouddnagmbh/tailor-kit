@@ -179,6 +179,22 @@ impl Repo {
                 names.join(", ")
             )));
         }
+        if let Some(pushed) = &line.restore.pushed {
+            let tracking = line.restore.remote_refs.iter().find(|m| {
+                m.after.as_deref() == Some(pushed.after.as_str())
+                    && m.name
+                        .starts_with(&format!("refs/remotes/{}/", pushed.remote))
+            });
+            if let Some(t) = tracking
+                && self.ref_value(&t.name)?.map(|id| id.to_string()).as_deref()
+                    != Some(pushed.after.as_str())
+            {
+                return Ok(Some(
+                    "The branch on the server changed since, so undoing the push would lose newer work. Make a commit that reverts it instead."
+                        .into(),
+                ));
+            }
+        }
         if let Some((_, after)) = &line.restore.config
             && &self.config_text()? != after
         {
@@ -197,9 +213,33 @@ impl Repo {
         Ok(None)
     }
 
+    /// What the journal entry `id` moved on a remote, as (remote, ref on the remote), when it is
+    /// an undoable push or publish ([`Repo::with_push_undo`]): a product checks its own rules
+    /// (protected branches) before it undoes one.
+    pub fn pushed_ref(&self, id: &str) -> Result<Option<(String, String)>> {
+        Ok(self
+            .journal()?
+            .into_iter()
+            .find(|l| l.entry.id == id)
+            .and_then(|l| l.restore.pushed)
+            .map(|p| (p.remote, p.remote_ref)))
+    }
+
     /// Takes back the journal entry `id` (see the module docs). `unsaved`: the app has
-    /// unsaved edits (refused).
+    /// unsaved edits (refused). The undo of a push needs credentials: [`Repo::undo_with`].
     pub fn undo(&self, id: &str, unsaved: bool) -> Result<GitActionResult> {
+        self.undo_with(id, unsaved, &crate::credentials::NoCredentials)
+    }
+
+    /// [`Repo::undo`] with credentials for the remote: the undo of a push or publish
+    /// ([`Repo::with_push_undo`]) sets the branch on the remote back to what it was, with a lease
+    /// (only while it still points at what was pushed), before anything local changes.
+    pub fn undo_with(
+        &self,
+        id: &str,
+        unsaved: bool,
+        creds: &dyn crate::credentials::CredentialSource,
+    ) -> Result<GitActionResult> {
         let mut journal = self.journal()?;
         let Some(at) = journal.iter().position(|l| l.entry.id == id) else {
             return Err(fail("This action can no longer be undone."));
@@ -233,6 +273,29 @@ impl Repo {
             None => None,
         };
         let head_before = self.head_commit()?;
+
+        // The remote first: when it refuses (someone pushed on top), nothing local changes.
+        if let Some(pushed) = &r.pushed {
+            let after = ObjectId::from_hex(pushed.after.as_bytes()).ctx("invalid journal")?;
+            let before = pushed
+                .before
+                .as_deref()
+                .map(|h| ObjectId::from_hex(h.as_bytes()).ctx("invalid journal"))
+                .transpose()?;
+            self.update_remote_ref(
+                &pushed.remote,
+                before,
+                &pushed.remote_ref,
+                Some(Some(after)),
+                creds,
+            )
+            .map_err(|e| match e {
+                crate::GitError::Auth(_) => e,
+                other => fail(format!(
+                    "Cannot undo the push: {other}. Make a commit that reverts it instead."
+                )),
+            })?;
+        }
 
         // Refs: first those that get a value back, then HEAD, then those to delete.
         let parse = |v: &Option<String>| -> Result<Option<ObjectId>> {

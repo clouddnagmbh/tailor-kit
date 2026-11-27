@@ -72,9 +72,12 @@ impl Repo {
         let names = self.local_ref_names()?;
         let message = format!("{}: working files before {action}", self.product().name);
         let whole = self.whole()?;
-        let before = self.capture(names, files.then_some(message.as_str()), &whole)?;
+        let mut before = self.capture(names, files.then_some(message.as_str()), &whole)?;
         let time = now();
         let out = change(self)?;
+        // A branch or tag the change created (the undo of a delete brings it back) was absent
+        // before: the entry deletes it again, so the redo leaves exactly the state after.
+        before.add_absent(self.reopen()?.local_ref_names()?);
         let entry = self.journal_after(
             before,
             Recorded {

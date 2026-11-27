@@ -331,6 +331,20 @@ pub(crate) struct Before {
     pub worktree: Option<ObjectId>,
 }
 
+impl Before {
+    /// Adds the refs of `names` it does not hold yet, as absent before: what a change created
+    /// (an undo brings a deleted branch or tag back), so the undo of the change deletes them
+    /// again.
+    pub(crate) fn add_absent(&mut self, names: Vec<String>) {
+        for name in names {
+            if !self.names.contains(&name) {
+                self.names.push(name);
+                self.values.push(None);
+            }
+        }
+    }
+}
+
 /// What the journal entry of a change says about it ([`Repo::journal_after`]).
 pub(crate) struct Recorded<'a> {
     pub action: &'a str,

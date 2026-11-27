@@ -488,6 +488,9 @@ export interface GitPlan {
   /** GitTailor wave 3: the rebase's resolved todo and how far it goes. */
   rebase?: GitRebasePreview;
   destructive: boolean;
+  /** GitTailor wave 4: the equivalent Git command line(s), set by the product; the kit never
+   *  fills it. */
+  command?: string[];
   warnings?: string[];
   blocked?: GitBlock;
 }

@@ -407,6 +407,11 @@ pub struct GitPlan {
     /// It would lose work that no backup covers; the wizard asks once more.
     #[serde(default)]
     pub destructive: bool,
+    /// GitTailor wave 4: the equivalent Git command line(s), one per line, shown with the plan
+    /// "to learn from". The kit never fills it; a product sets it after planning (empty: the
+    /// plan shows none).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub command: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
     /// Why it cannot run now; `apply` refuses with this message.

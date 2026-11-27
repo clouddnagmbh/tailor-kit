@@ -212,17 +212,11 @@ impl Repo {
     /// removal); a conflicted file counts as resolved, like `git add`.
     pub fn stage(&self, paths: &[String]) -> Result<()> {
         let mut index = self.load_index()?;
-        let (mut pipeline, _) = self
-            .repo
-            .filter_pipeline(None)
-            .ctx("cannot read the attributes")?;
+        let mut pipeline = crate::filter::Filters::new(self)?;
         for path in paths {
             let rel = self.index_path_of(path)?;
             let shown = self.api_path(rel.as_bstr());
-            match pipeline
-                .worktree_file_to_object(rel.as_bstr(), &index)
-                .ctx("cannot read a file")?
-            {
+            match pipeline.worktree_file_to_object(rel.as_bstr(), &index)? {
                 Some((_, gix::objs::tree::EntryKind::Commit, _)) => {
                     return Err(fail(format!("{shown} is a nested repository")));
                 }

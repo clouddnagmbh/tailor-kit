@@ -32,20 +32,14 @@ pub(crate) fn tree_with(whole: &Repo, base: ObjectId, files: &[&GitFile]) -> Res
     }
     let index = whole.load_index()?;
     let mut editor = whole.repo.edit_tree(base).ctx("cannot read a tree")?;
-    let (mut pipeline, _) = whole
-        .repo
-        .filter_pipeline(None)
-        .ctx("cannot read the attributes")?;
+    let mut pipeline = crate::filter::Filters::new(whole)?;
     for f in files {
         let path = BString::from(f.path.as_str());
         if f.state == GitFileState::Deleted {
             editor.remove(path.as_bstr()).ctx("cannot build the tree")?;
             continue;
         }
-        match pipeline
-            .worktree_file_to_object(path.as_bstr(), &index)
-            .ctx("cannot read a file")?
-        {
+        match pipeline.worktree_file_to_object(path.as_bstr(), &index)? {
             Some((_, gix::objs::tree::EntryKind::Commit, _)) => {}
             Some((id, kind, _)) => {
                 editor

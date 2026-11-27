@@ -868,7 +868,9 @@ impl Repo {
         }
         let file = crate::worktree::fs_path(&whole.workdir, p.as_bstr())?;
         let old = match std::fs::symlink_metadata(&file) {
-            Ok(md) if md.is_file() => Some(std::fs::read(&file).ctx("cannot read a file")?),
+            Ok(md) if md.is_file() => {
+                Some(whole.cleaned(p.as_bstr(), std::fs::read(&file).ctx("cannot read a file")?)?)
+            }
             _ => None,
         };
         let new = match whole.record_entry(files, &p.to_str_lossy())? {

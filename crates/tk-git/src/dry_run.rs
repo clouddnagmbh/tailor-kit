@@ -805,10 +805,7 @@ impl Repo {
                 .repo
                 .edit_tree(head_tree)
                 .ctx("cannot read the HEAD tree")?;
-            let (mut pipeline, _) = self
-                .repo
-                .filter_pipeline(None)
-                .ctx("cannot read the attributes")?;
+            let mut pipeline = crate::filter::Filters::new(self)?;
             let mut updates = Vec::new();
             let mut files = Vec::new();
             for p in paths {
@@ -816,10 +813,7 @@ impl Repo {
                     Some(rel) => self.repo_path(rel)?,
                     None => self.scope.abs(p)?,
                 };
-                match pipeline
-                    .worktree_file_to_object(repo_path.as_bstr(), &index)
-                    .ctx("cannot read a file")?
-                {
+                match pipeline.worktree_file_to_object(repo_path.as_bstr(), &index)? {
                     Some((_, EntryKind::Commit, _)) => {
                         return Err(fail(format!("{p} is a nested repository")));
                     }

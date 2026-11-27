@@ -11,7 +11,8 @@ export interface LineOp {
   text: string;
 }
 
-/** Above this many cells of the LCS table the diff is "everything removed, everything added". */
+/** Above this many cells of the LCS table the diff is anchored on the lines that occur once on
+ *  both sides (patience diff) and only the stretches between anchors use a table. */
 const MAX_CELLS = 4_000_000;
 
 export function splitLines(text: string | null): string[] {
@@ -31,7 +32,7 @@ export function lineOps(old: string | null, next: string | null): LineOp[] {
   const bm = b.slice(head, b.length - tail);
   const ops: LineOp[] = a.slice(0, head).map((text) => ({ kind: "same", text }));
   if ((am.length + 1) * (bm.length + 1) > MAX_CELLS) {
-    ops.push(...am.map((text): LineOp => ({ kind: "removed", text })), ...bm.map((text): LineOp => ({ kind: "added", text })));
+    for (const op of anchoredOps(am, bm)) ops.push(op);
   } else {
     const lcs = Array.from({ length: am.length + 1 }, () => new Array<number>(bm.length + 1).fill(0));
     for (let i = am.length - 1; i >= 0; i--) {
@@ -102,4 +103,138 @@ export function lineDiff(path: string, old: string | null, next: string | null, 
     });
   }
   return { path, binary: false, hunks };
+}
+
+/**
+ * The diff of two long line lists: lines that occur exactly once on both sides anchor the
+ * match (the longest run that keeps its order), and every stretch between anchors is done the
+ * same way, or with a table once it is small. Lines of a stretch without anchors are removed
+ * and added whole. Linear in the number of lines for files with scattered edits, which is
+ * what a 10 MB file is.
+ */
+export function anchoredOps(am: string[], bm: string[]): LineOp[] {
+  const ids = new Map<string, number>();
+  const id = (line: string): number => {
+    let n = ids.get(line);
+    if (n === undefined) {
+      n = ids.size;
+      ids.set(line, n);
+    }
+    return n;
+  };
+  const a = Int32Array.from(am, id);
+  const b = Int32Array.from(bm, id);
+  // Matched positions, as pairs (old, new) in order.
+  const pairs: number[] = [];
+  matchRange(a, b, 0, a.length, 0, b.length, pairs);
+  const ops: LineOp[] = [];
+  let i = 0;
+  let j = 0;
+  const flush = (toI: number, toJ: number) => {
+    while (i < toI) ops.push({ kind: "removed", text: am[i++] ?? "" });
+    while (j < toJ) ops.push({ kind: "added", text: bm[j++] ?? "" });
+  };
+  for (let k = 0; k < pairs.length; k += 2) {
+    flush(pairs[k] ?? 0, pairs[k + 1] ?? 0);
+    ops.push({ kind: "same", text: am[i] ?? "" });
+    i++;
+    j++;
+  }
+  flush(am.length, bm.length);
+  return ops;
+}
+
+function matchRange(a: Int32Array, b: Int32Array, aFrom: number, aTo: number, bFrom: number, bTo: number, out: number[]): void {
+  while (aFrom < aTo && bFrom < bTo && a[aFrom] === b[bFrom]) {
+    out.push(aFrom++, bFrom++);
+  }
+  const tail: number[] = [];
+  while (aFrom < aTo && bFrom < bTo && a[aTo - 1] === b[bTo - 1]) {
+    aTo--;
+    bTo--;
+    tail.push(aTo, bTo);
+  }
+  const n = aTo - aFrom;
+  const m = bTo - bFrom;
+  if (n > 0 && m > 0) {
+    if ((n + 1) * (m + 1) <= MAX_CELLS) tableMatch(a, b, aFrom, aTo, bFrom, bTo, out);
+    else patience(a, b, aFrom, aTo, bFrom, bTo, out);
+  }
+  for (let k = tail.length - 2; k >= 0; k -= 2) out.push(tail[k] ?? 0, tail[k + 1] ?? 0);
+}
+
+function tableMatch(a: Int32Array, b: Int32Array, aFrom: number, aTo: number, bFrom: number, bTo: number, out: number[]): void {
+  const n = aTo - aFrom;
+  const m = bTo - bFrom;
+  const w = m + 1;
+  const table = new Uint32Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      table[i * w + j] =
+        a[aFrom + i] === b[bFrom + j]
+          ? (table[(i + 1) * w + j + 1] ?? 0) + 1
+          : Math.max(table[(i + 1) * w + j] ?? 0, table[i * w + j + 1] ?? 0);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[aFrom + i] === b[bFrom + j]) {
+      out.push(aFrom + i++, bFrom + j++);
+    } else if ((table[(i + 1) * w + j] ?? 0) >= (table[i * w + j + 1] ?? 0)) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+}
+
+function patience(a: Int32Array, b: Int32Array, aFrom: number, aTo: number, bFrom: number, bTo: number, out: number[]): void {
+  // How often each line occurs on each side, and where it is on the new side.
+  const countA = new Map<number, number>();
+  for (let i = aFrom; i < aTo; i++) countA.set(a[i] ?? 0, (countA.get(a[i] ?? 0) ?? 0) + 1);
+  const countB = new Map<number, number>();
+  const where = new Map<number, number>();
+  for (let j = bFrom; j < bTo; j++) {
+    const key = b[j] ?? 0;
+    countB.set(key, (countB.get(key) ?? 0) + 1);
+    where.set(key, j);
+  }
+  // Anchors in old order; the longest increasing run of their new positions.
+  const anchorI: number[] = [];
+  const anchorJ: number[] = [];
+  for (let i = aFrom; i < aTo; i++) {
+    const key = a[i] ?? 0;
+    if (countA.get(key) === 1 && countB.get(key) === 1) {
+      anchorI.push(i);
+      anchorJ.push(where.get(key) ?? 0);
+    }
+  }
+  const tails: number[] = [];
+  const prev = new Int32Array(anchorI.length).fill(-1);
+  for (let k = 0; k < anchorI.length; k++) {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((anchorJ[tails[mid] ?? 0] ?? 0) < (anchorJ[k] ?? 0)) lo = mid + 1;
+      else hi = mid;
+    }
+    prev[k] = lo > 0 ? (tails[lo - 1] ?? -1) : -1;
+    tails[lo] = k;
+  }
+  const chain: number[] = [];
+  for (let k = tails.length > 0 ? (tails[tails.length - 1] ?? -1) : -1; k >= 0; k = prev[k] ?? -1) chain.push(k);
+  chain.reverse();
+  let ia = aFrom;
+  let jb = bFrom;
+  for (const k of chain) {
+    const i = anchorI[k] ?? 0;
+    const j = anchorJ[k] ?? 0;
+    matchRange(a, b, ia, i, jb, j, out);
+    out.push(i, j);
+    ia = i + 1;
+    jb = j + 1;
+  }
+  if (chain.length > 0) matchRange(a, b, ia, aTo, jb, bTo, out);
 }

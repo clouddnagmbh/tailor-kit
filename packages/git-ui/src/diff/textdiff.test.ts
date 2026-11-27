@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { lineDiff, lineOps } from "./textdiff";
+import { anchoredOps, lineDiff, lineOps } from "./textdiff";
 
 describe("lineOps", () => {
   it("marks removed, added and unchanged lines in order", () => {
@@ -45,5 +45,32 @@ describe("lineDiff", () => {
     const old = Array.from({ length: 30 }, (_, i) => `l${i}`).join("\n");
     const next = old.replace("l2\n", "x\n").replace("l27\n", "y\n");
     expect(lineDiff("f", old, next).hunks).toHaveLength(2);
+  });
+
+  it("diffs a long file with scattered edits line by line, not as one removal", () => {
+    const n = 200_000;
+    const lines = Array.from({ length: n }, (_, i) => `line ${i} of the file`);
+    const edited = lines.slice();
+    for (let i = 1000; i < n; i += 25_000) edited[i] = `changed ${i}`;
+    edited.splice(100_000, 3); // three lines deleted
+    edited.splice(150_000, 0, "new a", "new b"); // two lines inserted
+    const started = performance.now();
+    const ops = lineOps(lines.join("\n"), edited.join("\n"));
+    expect(performance.now() - started).toBeLessThan(3000);
+    const changed = ops.filter((o) => o.kind !== "same");
+    // 8 replaced lines (removed + added), 3 deleted, 2 inserted: a few lines, not 400 000.
+    expect(changed.filter((o) => o.kind === "removed")).toHaveLength(8 + 3);
+    expect(changed.filter((o) => o.kind === "added")).toHaveLength(8 + 2);
+    // Both sides come back whole.
+    expect(ops.filter((o) => o.kind !== "added").map((o) => o.text)).toEqual(lines);
+    expect(ops.filter((o) => o.kind !== "removed").map((o) => o.text)).toEqual(edited);
+  });
+
+  it("falls back to whole-side changes where no line is unique", () => {
+    const a = Array.from({ length: 5000 }, (_, i) => `x${i % 2}`);
+    const b = Array.from({ length: 5000 }, (_, i) => `y${i % 2}`);
+    const ops = anchoredOps(a, b);
+    expect(ops.filter((o) => o.kind === "removed")).toHaveLength(5000);
+    expect(ops.filter((o) => o.kind === "added")).toHaveLength(5000);
   });
 });

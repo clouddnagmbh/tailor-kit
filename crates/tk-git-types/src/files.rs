@@ -186,7 +186,7 @@ pub struct GitBlob {
 }
 
 /// Text shown in viewers up to this size (bytes).
-pub const BLOB_TEXT_LIMIT: u64 = 8 * 1024 * 1024;
+pub const BLOB_TEXT_LIMIT: u64 = 16 * 1024 * 1024;
 /// Images shown up to this size (bytes).
 pub const BLOB_IMAGE_LIMIT: u64 = 16 * 1024 * 1024;
 

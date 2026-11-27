@@ -115,6 +115,8 @@ mod branch;
 mod changelog_commits;
 mod commit;
 mod commit_action;
+/// GitTailor wave 2, strand C: dry runs in memory, accepted exactly as previewed.
+mod dry_run;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
 mod file_tree;
@@ -166,6 +168,7 @@ mod worktree;
 pub use actions::ActionOptions;
 pub use changelog_commits::CommitMessage;
 pub use credentials::{CredentialSource, Credentials, NoCredentials};
+pub use dry_run::{DRY_RUN_GRAPH_LIMIT, DryRunOutcome, dry_run_supported};
 pub use forecast::{MergeForecast, ReviewHead};
 pub use history_rewrite::{
     BranchRewrite, HistoryEdit, HistoryRewrite, HistoryTips, HistoryVisitor,

@@ -481,6 +481,12 @@ impl Repo {
     }
 
     pub(crate) fn ctx(&self, unsaved: bool) -> Result<Ctx> {
+        self.ctx_with(self.whole()?, unsaved)
+    }
+
+    /// [`Repo::ctx`] with `whole` as the repository without the scope (a dry run passes one
+    /// that writes objects to memory, `dry_run.rs`).
+    pub(crate) fn ctx_with(&self, whole: Repo, unsaved: bool) -> Result<Ctx> {
         let head = self.head_commit()?;
         let head_ref = self.head_ref()?;
         let cur = match head {
@@ -493,7 +499,7 @@ impl Repo {
             head_ref,
             cur,
             underway: self.underway()?,
-            whole: self.whole()?,
+            whole,
             changes: OnceCell::new(),
         })
     }
@@ -504,7 +510,7 @@ impl Repo {
         self.plan_with(&cx, action)
     }
 
-    fn plan_with(&self, cx: &Ctx, action: &GitAction) -> Result<GitPlan> {
+    pub(crate) fn plan_with(&self, cx: &Ctx, action: &GitAction) -> Result<GitPlan> {
         let p = new_plan(action);
         match action {
             GitAction::CreateBranch {

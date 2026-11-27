@@ -121,6 +121,8 @@ mod dry_run;
 mod file_log;
 mod file_tree;
 mod filter;
+/// GitTailor wave 3, strand B: force push with a lease, protected branches.
+mod force_push;
 /// Wave 2 (GitTailor), strand D: the merge forecast in memory (`Repo::merge_forecast`).
 mod forecast;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).
@@ -174,6 +176,7 @@ pub use actions::ActionOptions;
 pub use changelog_commits::CommitMessage;
 pub use credentials::{CredentialSource, Credentials, NoCredentials};
 pub use dry_run::{DRY_RUN_GRAPH_LIMIT, DryRunOutcome, dry_run_supported};
+pub use force_push::{ForcePushTarget, OVERWRITTEN_LIMIT, protected_glob};
 pub use forecast::{MergeForecast, ReviewHead};
 pub use history_rewrite::{
     BranchRewrite, HistoryEdit, HistoryRewrite, HistoryTips, HistoryVisitor,

@@ -639,10 +639,9 @@ impl Repo {
             }
             GitAction::RebaseSkip => self.plan_rebase_resume(cx, p, None, true),
             GitAction::PullRebase => self.plan_pull_rebase(cx, p),
-            GitAction::ForcePush { .. } => Ok(p.blocked_by(block(
-                GitBlockReason::Unsupported,
-                "Force push with lease is not available yet (GitTailor wave 3, strand B).",
-            ))),
+            GitAction::ForcePush { branch, expect } => {
+                self.plan_force_push(cx, p, branch.as_deref(), expect)
+            }
         }
     }
 
@@ -716,8 +715,9 @@ impl Repo {
             }
             GitAction::RebaseSkip => self.run_rebase_resume(cx, run, None, true),
             GitAction::PullRebase => self.run_pull_rebase(cx, run),
-            // Planned blocked above, so `apply` never gets here.
-            GitAction::ForcePush { .. } => Err(fail("not available yet (GitTailor wave 3)")),
+            GitAction::ForcePush { branch, expect } => {
+                self.run_force_push(cx, run, branch.as_deref(), expect)
+            }
         }
     }
 

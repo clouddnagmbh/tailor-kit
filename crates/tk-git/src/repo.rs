@@ -138,6 +138,8 @@ pub struct Repo {
     pub(crate) options: Options,
     /// What commits are signed and verified with (wave 15); the default signs nothing.
     pub(crate) signing: crate::sign::Signing,
+    /// Runs the commands of SSH remotes (seam N10); without one they are unsupported.
+    pub(crate) ssh: Option<Arc<dyn tk_git_types::ssh::SshConnector>>,
     /// Where the app's own refs and files live (seam N8); the profile's by default.
     pub(crate) namespace: RefNamespace,
     /// What merges files on their model (seam N1); the profile's by default, `None`: Git's
@@ -207,6 +209,7 @@ impl Repo {
             scope,
             options,
             signing: crate::sign::Signing::default(),
+            ssh: None,
             namespace: profile.namespace,
             merger: profile.merger,
             scanner: profile.scanner,
@@ -237,6 +240,7 @@ impl Repo {
     pub(crate) fn reopen(&self) -> Result<Self> {
         Ok(Self::require(&self.root, &self.options)?
             .with_signing(self.signing.clone())
+            .with_ssh(self.ssh.clone())
             .with_namespace(self.namespace)
             .with_merger(self.merger.clone())
             .with_scanner(self.scanner.clone())
@@ -247,6 +251,12 @@ impl Repo {
     /// every commit stays unsigned.
     pub fn with_signing(mut self, signing: crate::sign::Signing) -> Self {
         self.signing = signing;
+        self
+    }
+
+    /// Reaches SSH remotes through `ssh` (seam N10); `None`: they answer `Unsupported`.
+    pub fn with_ssh(mut self, ssh: Option<Arc<dyn tk_git_types::ssh::SshConnector>>) -> Self {
+        self.ssh = ssh;
         self
     }
 
@@ -478,6 +488,7 @@ impl Repo {
             scope: Scope::whole(),
             options: self.options.clone(),
             signing: self.signing.clone(),
+            ssh: self.ssh.clone(),
             namespace: self.namespace,
             merger: self.merger.clone(),
             scanner: self.scanner.clone(),

@@ -85,6 +85,7 @@ impl Repo {
         match endpoint(&url, &self.workdir)? {
             Endpoint::Local(path) => self.fetch_local(&path, &specs)?,
             Endpoint::Http(target) => self.fetch_http(&target, &specs, creds)?,
+            Endpoint::Ssh(_) => return Err(self.ssh_pending()),
         }
         let head = self.rev_parse(&head_ref)?;
         let merge_base = self

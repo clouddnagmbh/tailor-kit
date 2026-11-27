@@ -613,6 +613,32 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
         p.backup = true;
         return p;
       }
+      case "commit": {
+        if (!c.current) return { ...p, blocked: block("detached", "You are not on a branch, so a new commit would belong to none. Create a branch here or switch to one first.") };
+        const message = action.message.trim();
+        if (!message) return { ...p, blocked: block("invalid-name", "Write a commit message first.") };
+        if (!action.staged) stop(await unsaved());
+        const merging = c.mergeHead !== null;
+        const wanted = (action.paths ?? []).map(unslash);
+        const files = action.staged ? [] : c.files().filter((f) => wanted.includes(f.path));
+        const open = [...c.conflicts].filter((x) => action.staged || !files.some((f) => f.path === x));
+        if (open.length > 0) stop(block("in-progress", `Resolve the conflicts in ${plural(open.length, "file")} first, then commit.`));
+        if (!action.staged && files.length === 0 && !merging) {
+          return {
+            ...p,
+            undoable: false,
+            blocked: p.blocked ?? block("nothing-to-do", wanted.length === 0 ? "Choose the files to commit." : "The selected files have no changes to commit."),
+          };
+        }
+        const subject = message.split("\n")[0];
+        p.steps.push(merging ? `Finishes the merge in progress on ${c.current} with the commit "${subject}".` : `Commits ${plural(files.length, "file")} on ${c.current} as "${subject}".`);
+        p.steps.push(head ? `Your files do not change. Undo moves ${c.current} back and keeps the changes in your files.` : `This is the first commit of ${c.current}. Undo removes it again and keeps your files.`);
+        if (merging) p.warnings = ["Undoing this commit later does not start the merge again: the merged files stay as changes."];
+        p.files = files.map((f) => slash(f.path));
+        p.refs.push({ name: branchRef(c.current), before: head, after: null });
+        p.backup = head !== null;
+        return p;
+      }
       case "abort": {
         if (!c.mergeHead && c.conflicts.size === 0) return { ...p, undoable: false, blocked: block("nothing-to-do", "Nothing is in progress that could be stopped.") };
         const files = c.files();
@@ -985,6 +1011,13 @@ export function mockGitActions<S>(git: MockGit<S>): MockGitActions {
         backupRef(cur!, head, t, backups);
         c.branchesMap.set(cur!, c.newCommit(commit.parents, tree, text, commit.author));
         return { message: `Replaced the last commit on ${cur} with "${text.split("\n")[0]}".`, reload: false };
+      }
+      case "commit": {
+        backupRef(cur ?? c.current!, head, t, backups);
+        const done = action.staged
+          ? await git.commitStaged({ message: action.message })
+          : await git.commit(action.message, (action.paths ?? []).map(unslash));
+        return { message: `Committed "${done.summary}" on ${c.current}.`, reload: false };
       }
       case "abort": {
         backupRef("worktree", c.newCommit(head ? [head] : [], clone(c.work), "Backup of the working files", c.fixtures.author), t, backups);

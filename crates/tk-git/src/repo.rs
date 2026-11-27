@@ -151,6 +151,11 @@ pub struct Repo {
     /// Which files of the scope count (seam N3); the profile's by default, `None`: every
     /// regular file.
     pub(crate) files: Option<Arc<dyn ScopeFiles>>,
+    /// The identity the product chose for commits here (a profile); wins over the Git
+    /// configuration. `None`: the Git configuration, then the caller's fallback.
+    pub(crate) author: Option<GitIdentity>,
+    /// Pushes and publishes write a journal entry and can be undone (see [`Repo::with_push_undo`]).
+    pub(crate) push_undo: bool,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -214,6 +219,8 @@ impl Repo {
             merger: profile.merger,
             scanner: profile.scanner,
             files: profile.files,
+            author: None,
+            push_undo: false,
         }))
     }
 
@@ -244,7 +251,26 @@ impl Repo {
             .with_namespace(self.namespace)
             .with_merger(self.merger.clone())
             .with_scanner(self.scanner.clone())
-            .with_files(self.files.clone()))
+            .with_files(self.files.clone())
+            .with_author(self.author.clone())
+            .with_push_undo(self.push_undo))
+    }
+
+    /// Commits made here carry `author` (author and committer) instead of the identity of the
+    /// Git configuration: the identity a product chose for this repository (a profile). The
+    /// Git configuration is not written. `None`: the Git configuration, then the fallback.
+    pub fn with_author(mut self, author: Option<GitIdentity>) -> Self {
+        self.author = author;
+        self
+    }
+
+    /// Makes [`GitAction::Push`](tk_git_types::actions::GitAction::Push) and `Publish`
+    /// undoable: they write a journal entry, and undo sets the branch on the remote back to
+    /// what it was, with a lease: only while the remote still points at what was pushed (never
+    /// over someone else's commits). Off by default (a product opts in).
+    pub fn with_push_undo(mut self, on: bool) -> Self {
+        self.push_undo = on;
+        self
     }
 
     /// Signs and verifies commits with `signing` (a distribution's hook, `sign`); without it
@@ -493,6 +519,8 @@ impl Repo {
             merger: self.merger.clone(),
             scanner: self.scanner.clone(),
             files: self.files.clone(),
+            author: self.author.clone(),
+            push_undo: self.push_undo,
         })
     }
 
@@ -560,10 +588,12 @@ impl Repo {
         (!name.is_empty() && !email.is_empty()).then_some(GitIdentity { name, email })
     }
 
-    /// The identity commits are made with: Git configuration first, then `fallback` (the app's
-    /// own identity).
+    /// The identity commits are made with: the product's choice ([`Repo::with_author`]), then
+    /// the Git configuration, then `fallback` (the app's own identity).
     pub(crate) fn identity_or(&self, fallback: Option<&GitIdentity>) -> Result<GitIdentity> {
-        self.config_identity()
+        self.author
+            .clone()
+            .or_else(|| self.config_identity())
             .or_else(|| fallback.cloned())
             .ok_or_else(|| fail("no author identity: set your name and email first"))
     }

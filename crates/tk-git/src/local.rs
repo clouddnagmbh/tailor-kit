@@ -142,6 +142,21 @@ pub fn push(
     new: ObjectId,
     remote_ref: &str,
 ) -> Result<()> {
+    update(src, path, options, Some(new), remote_ref, None).map(|_| ())
+}
+
+/// Sets `remote_ref` in the repository at `path` to `new` (`None`: deletes it), copying what it
+/// lacks, and returns what it was before. `lease` `None`: fast-forward only; `Some(expected)`:
+/// in any direction, but only while the ref still is `expected` (`None` inside: absent), like
+/// `git push --force-with-lease=<ref>:<expected>`.
+pub fn update(
+    src: &gix::Repository,
+    path: &Path,
+    options: &impl crate::AsOptions,
+    new: Option<ObjectId>,
+    remote_ref: &str,
+    lease: Option<Option<ObjectId>>,
+) -> Result<Option<ObjectId>> {
     let dst = open(path, &options.options())?;
     if !dst.is_bare()
         && dst
@@ -155,25 +170,56 @@ pub fn push(
         ));
     }
     let current = peeled(&dst, remote_ref)?;
-    if current == Some(new) {
-        return Ok(());
+    match lease {
+        Some(expected) if current != expected => {
+            return Err(fail(
+                "the branch on the server changed since: someone pushed on top of it",
+            ));
+        }
+        Some(_) => {}
+        None => {
+            if current == new {
+                return Ok(current);
+            }
+            if let (Some(cur), Some(new)) = (current, new)
+                && (!src.has_object(cur) || !is_ancestor(src, cur, new))
+            {
+                return Err(fail(
+                    "the remote branch has commits you do not have: pull first",
+                ));
+            }
+        }
     }
-    if let Some(cur) = current
-        && (!src.has_object(cur) || !is_ancestor(src, cur, new))
-    {
-        return Err(fail(
-            "the remote branch has commits you do not have: pull first",
-        ));
+    if current == new {
+        return Ok(current);
     }
-    let ids = missing_objects(src, &[new], &|id| dst.has_object(id))?;
-    copy_objects(src, &dst, &ids)?;
     let expected = match current {
         Some(cur) => PreviousValue::ExistingMustMatch(gix::refs::Target::Object(cur)),
         None => PreviousValue::MustNotExist,
     };
-    dst.reference(remote_ref, new, expected, "push")
-        .ctx("cannot update the remote branch")?;
-    Ok(())
+    match new {
+        Some(new) => {
+            let ids = missing_objects(src, &[new], &|id| dst.has_object(id))?;
+            copy_objects(src, &dst, &ids)?;
+            dst.reference(remote_ref, new, expected, "push")
+                .ctx("cannot update the remote branch")?;
+        }
+        None => {
+            use gix::refs::transaction::{Change, RefEdit, RefLog};
+            dst.edit_reference(RefEdit {
+                change: Change::Delete {
+                    expected,
+                    log: RefLog::AndReference,
+                },
+                name: remote_ref
+                    .try_into()
+                    .map_err(|_| fail(format!("invalid ref {remote_ref}")))?,
+                deref: false,
+            })
+            .ctx("cannot delete the remote branch")?;
+        }
+    }
+    Ok(current)
 }
 
 /// Fetches every branch of the repository at `path` into `refs/remotes/<remote_name>/*`.

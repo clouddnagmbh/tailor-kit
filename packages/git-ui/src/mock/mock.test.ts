@@ -69,6 +69,26 @@ describe("the Git mock over plain text files", () => {
     expect((await git.status()).branch).toBe("main");
   });
 
+  it("a commit runs as an action with a backup and an undo that keeps the files", async () => {
+    const git = await repo("showcase");
+    const head = await git.revParse("HEAD");
+    const blocked = await git.plan({ action: "commit", message: " ", paths: ["/README.md"] });
+    expect(blocked.blocked?.reason).toBe("invalid-name");
+    expect((await git.plan({ action: "commit", message: "m", paths: [] })).blocked?.reason).toBe("nothing-to-do");
+    const action = { action: "commit" as const, message: "Edit the readme", paths: ["/README.md"] };
+    const plan = await git.plan(action);
+    expect(plan.blocked).toBeFalsy();
+    expect(plan).toMatchObject({ backup: true, undoable: true, files: ["/README.md"] });
+    const done = await git.apply(action);
+    expect(done.undo?.action).toBe("commit");
+    expect((await git.log(1))[0]!.summary).toBe("Edit the readme");
+    const before = (await git.status()).files.map((f) => f.path);
+    expect(before).not.toContain("README.md");
+    await git.undo(done.undo!.id);
+    expect(await git.revParse("HEAD")).toBe(head);
+    expect((await git.status()).files.map((f) => f.path)).toContain("README.md");
+  });
+
   it("the working copy and the commit graph carry no product fields", async () => {
     const git = await repo("showcase");
     const copy = await git.workingCopy();

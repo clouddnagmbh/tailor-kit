@@ -683,7 +683,7 @@ impl Repo {
     pub(crate) fn plan_push(&self, cx: &Ctx, mut p: GitPlan) -> Result<GitPlan> {
         p.stop(cx.need_branch());
         p.network = true;
-        p.undoable = false;
+        p.undoable = self.push_undo;
         let up = self.upstream()?;
         if let Some(cur) = &cx.cur
             && up.is_none()
@@ -696,11 +696,20 @@ impl Repo {
         if let (Some(_), Some(up), Some(head)) = (&cx.cur, &up, cx.head) {
             let theirs = self.ref_commit(&up.tracking)?;
             let (ahead, behind) = self.ahead_behind(&up.tracking)?;
-            p.steps.push(format!(
-                "Sends {} to {}. Sending cannot be undone from the app.",
-                plural_s(ahead as usize, "commit"),
-                up.display
-            ));
+            p.steps.push(if self.push_undo {
+                format!(
+                    "Sends {} to {}. Undo can take them off {} again as long as nobody pushed on top.",
+                    plural_s(ahead as usize, "commit"),
+                    up.display,
+                    up.display
+                )
+            } else {
+                format!(
+                    "Sends {} to {}. Sending cannot be undone from the app.",
+                    plural_s(ahead as usize, "commit"),
+                    up.display
+                )
+            });
             p.refs.push(GitRefMove {
                 name: up.tracking.clone(),
                 before: theirs.map(|id| id.to_string()),
@@ -737,7 +746,10 @@ impl Repo {
 
     pub(crate) fn run_push(&self, cx: &Ctx, run: &mut Run<'_>) -> Result<Done> {
         let up = self.upstream()?.map(|u| u.display).unwrap_or_default();
-        self.push(run.opts.credentials)?;
+        let pushed = self.push_upstream(run.opts.credentials)?;
+        if self.push_undo {
+            run.pushed = Some(pushed);
+        }
         Ok(Done::new(
             format!("Sent {} to {up}.", cx.cur.as_deref().unwrap_or("HEAD")),
             false,

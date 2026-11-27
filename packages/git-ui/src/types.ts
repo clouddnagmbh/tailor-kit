@@ -363,7 +363,10 @@ export type GitAction =
   | { action: "abort" }
   | { action: "restore-branch"; name: string; target: string }
   | { action: "restore-files"; rev: string; paths: string[] }
-  | { action: "rewrite"; branch: string; tip: string; summary: string };
+  | { action: "rewrite"; branch: string; tip: string; summary: string }
+  // GitTailor wave 1 (strand F): a commit with plan, backup and undo (`paths`: the current
+  // content of these files; `staged`: what the index holds).
+  | { action: "commit"; message: string; paths?: string[]; staged?: boolean };
 
 /** Why an action cannot run now; the UI explains each and offers the way out. */
 export type GitBlockReason =

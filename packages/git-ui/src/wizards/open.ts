@@ -59,6 +59,8 @@ const TITLES: Record<GitWizardKind, string> = {
   "restore-branch": "Bring back a branch",
   "restore-files": "Restore files",
   rewrite: "Rewrite history",
+  // GitTailor wave 1 (strand F).
+  commit: "Commit",
   diverged: "Branches went apart",
   detached: "Not on a branch",
   clone: "Clone repository",

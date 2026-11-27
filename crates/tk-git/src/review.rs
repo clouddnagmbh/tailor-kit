@@ -85,7 +85,7 @@ impl Repo {
         match endpoint(&url, &self.workdir)? {
             Endpoint::Local(path) => self.fetch_local(&path, &specs)?,
             Endpoint::Http(target) => self.fetch_http(&target, &specs, creds)?,
-            Endpoint::Ssh(_) => return Err(self.ssh_pending()),
+            Endpoint::Ssh(target) => self.fetch_ssh(&target, &specs)?,
         }
         let head = self.rev_parse(&head_ref)?;
         let merge_base = self
@@ -115,6 +115,29 @@ impl Repo {
                 .ctx("cannot update a review ref")?;
         }
         Ok(())
+    }
+
+    fn fetch_ssh(
+        &self,
+        target: &tk_git_types::ssh::SshTarget,
+        specs: &[(&str, &str)],
+    ) -> Result<()> {
+        let refspecs: Vec<String> = specs.iter().map(|(r, l)| format!("+{r}:{l}")).collect();
+        let remote = self
+            .repo
+            .find_remote("origin")
+            .ctx("no remote named origin")?
+            .with_refspecs(
+                refspecs.iter().map(String::as_str),
+                gix::remote::Direction::Fetch,
+            )
+            .ctx("cannot fetch the pull request")?;
+        // Only the refspecs added above: the user's other branches stay as they are.
+        let options = gix::remote::ref_map::Options {
+            prefix_from_spec_as_filter_on_remote: true,
+            ..Default::default()
+        };
+        crate::ssh::fetch(remote, target, self.ssh_connector()?, options).map(|_| ())
     }
 
     fn fetch_http(

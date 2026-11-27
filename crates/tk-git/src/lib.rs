@@ -44,7 +44,10 @@
 //!   gitoxide cannot push yet.
 //! - Local paths and `file://`: both directions run in-process, the other repository opened
 //!   with gitoxide and the missing objects copied ([`mod@local`]). No `git` program is spawned.
-//! - SSH and `git://` are not supported (`GitError::Unsupported`).
+//! - `ssh://` and `user@host:path` (seam N10): the product's `SshConnector`
+//!   ([`Repo::with_ssh`], [`clone_with_ssh`]) runs `git-upload-pack`/`git-receive-pack` on the
+//!   server; fetch is gitoxide's client over its streams, push the same client as over HTTP.
+//!   Without a connector they are `GitError::Unsupported`. `git://` is not supported.
 //! - A remote that asks for credentials, or rejects them, fails with `GitError::Auth(host)`.
 //!   Credentials come from a [`CredentialSource`] (the product's secret store); they are sent
 //!   over plain `http://` only to loopback hosts, elsewhere HTTPS is required. The host string
@@ -131,6 +134,7 @@ mod rewrite_branch;
 /// Wave 15 interface: commit signing and verification hooks for distributions (strand F).
 pub mod sign;
 mod signing;
+mod ssh;
 mod stash;
 mod status;
 mod tags;
@@ -151,7 +155,7 @@ pub use credentials::{CredentialSource, Credentials, NoCredentials};
 pub use history_rewrite::{
     BranchRewrite, HistoryEdit, HistoryRewrite, HistoryTips, HistoryVisitor,
 };
-pub use remote::{clone, clone_with_home, expand_home};
+pub use remote::{clone, clone_with_home, clone_with_ssh, expand_home};
 pub use repo::{AsOptions, Options, Product, Profile, Repo, global_identity, init};
 pub use tree_commit::TreeFile;
 pub use util::canonical;

@@ -16,11 +16,14 @@
     label,
     size = "sm",
     trigger,
+    draggable = false,
   }: {
     label: RefLabel;
     size?: "sm" | "md";
     /** Dropdown trigger attributes: the label becomes the menu's button. */
     trigger?: TriggerProps;
+    /** In a graph row: the label drags itself (the row reads `data-ref`, since tailor-kit 0.3). */
+    draggable?: boolean;
   } = $props();
 
   const ref = $derived(label.ref);
@@ -46,7 +49,9 @@
   class:current={ref.current && ref.kind === "local"}
   data-testid="graph-ref"
   data-ref={ref.full}
+  data-name={ref.name}
   data-kind={ref.kind}
+  draggable={draggable ? "true" : undefined}
   use:tooltip={{ text: help, placement: "bottom" }}
 >
   <span class="chip"><Chip

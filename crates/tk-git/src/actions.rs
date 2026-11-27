@@ -307,7 +307,14 @@ pub(crate) struct Restore {
     /// The merge (cherry-pick, revert) the action stopped: its files in `.git`, for undo.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub merge: Vec<(String, String)>,
+    /// The files of a rebase in progress (`rebase-merge/*` and the files next to it) before
+    /// and after, when the action changed them: undo puts the ones before back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebase: Option<RebaseFiles>,
 }
+
+/// The files of a rebase in progress, before and after an action ([`Restore::rebase`]).
+pub(crate) type RebaseFiles = (Vec<(String, String)>, Vec<(String, String)>);
 
 /// The repository before a recorded change ([`Repo::capture`]).
 pub(crate) struct Before {
@@ -319,6 +326,7 @@ pub(crate) struct Before {
     remote: std::collections::BTreeMap<String, ObjectId>,
     index: Option<crate::undo::IndexDelta>,
     merge: Vec<(String, String)>,
+    rebase: Vec<(String, String)>,
     /// A commit of the working files before.
     pub worktree: Option<ObjectId>,
 }
@@ -609,13 +617,28 @@ impl Repo {
                 paths,
                 staged,
             } => self.plan_commit(cx, p, message, paths, *staged),
-            GitAction::Rebase { .. }
-            | GitAction::RebaseContinue { .. }
-            | GitAction::RebaseSkip
-            | GitAction::PullRebase => Ok(p.blocked_by(block(
-                GitBlockReason::Unsupported,
-                "Rebasing is not available yet (GitTailor wave 3, strand A).",
-            ))),
+            GitAction::Rebase {
+                branch,
+                onto,
+                upstream,
+                steps,
+                autosquash,
+                allow_published,
+            } => self.plan_rebase(
+                cx,
+                p,
+                branch,
+                onto,
+                upstream,
+                steps,
+                *autosquash,
+                *allow_published,
+            ),
+            GitAction::RebaseContinue { message } => {
+                self.plan_rebase_resume(cx, p, message.as_deref(), false)
+            }
+            GitAction::RebaseSkip => self.plan_rebase_resume(cx, p, None, true),
+            GitAction::PullRebase => self.plan_pull_rebase(cx, p),
             GitAction::ForcePush { .. } => Ok(p.blocked_by(block(
                 GitBlockReason::Unsupported,
                 "Force push with lease is not available yet (GitTailor wave 3, strand B).",
@@ -680,12 +703,21 @@ impl Repo {
                 paths,
                 staged,
             } => self.run_commit(cx, run, message, paths, *staged),
+            GitAction::Rebase {
+                branch,
+                onto,
+                upstream,
+                steps,
+                autosquash,
+                ..
+            } => self.run_rebase(cx, run, branch, onto, upstream, steps, *autosquash),
+            GitAction::RebaseContinue { message } => {
+                self.run_rebase_resume(cx, run, message.as_deref(), false)
+            }
+            GitAction::RebaseSkip => self.run_rebase_resume(cx, run, None, true),
+            GitAction::PullRebase => self.run_pull_rebase(cx, run),
             // Planned blocked above, so `apply` never gets here.
-            GitAction::Rebase { .. }
-            | GitAction::RebaseContinue { .. }
-            | GitAction::RebaseSkip
-            | GitAction::PullRebase
-            | GitAction::ForcePush { .. } => Err(fail("not available yet (GitTailor wave 3)")),
+            GitAction::ForcePush { .. } => Err(fail("not available yet (GitTailor wave 3)")),
         }
     }
 
@@ -792,6 +824,7 @@ impl Repo {
             remote: self.remote_refs()?,
             index: self.index_delta()?,
             merge: self.merge_files()?,
+            rebase: self.rebase_files()?,
             worktree: match worktree {
                 Some(message) => Some(crate::undo::snapshot_commit(whole, message)?),
                 None => None,
@@ -839,6 +872,10 @@ impl Repo {
         if !before.merge.is_empty() && after_repo.merge_files()? != before.merge {
             restore.merge = before.merge;
         }
+        let rebase_after = after_repo.rebase_files()?;
+        if rebase_after != before.rebase {
+            restore.rebase = Some((before.rebase, rebase_after));
+        }
         let mut files_moved = false;
         if let Some(b) = before.worktree {
             let whole = after_repo.whole()?;
@@ -874,6 +911,7 @@ impl Repo {
             && restore.remote_refs.is_empty()
             && restore.index_moved.is_none()
             && restore.merge.is_empty()
+            && restore.rebase.is_none()
             && restore.pushed.is_none()
             && !files_moved;
         if unchanged && (rec.fetch || rec.index_moved) {
@@ -972,6 +1010,10 @@ fn touches_worktree(action: &GitAction, plan: &GitPlan) -> bool {
         | GitAction::Discard { .. } => true,
         GitAction::Reset { mode, .. } => *mode == tk_git_types::actions::GitResetMode::Discard,
         GitAction::Abort | GitAction::RestoreFiles { .. } => true,
+        GitAction::Rebase { .. }
+        | GitAction::RebaseContinue { .. }
+        | GitAction::RebaseSkip
+        | GitAction::PullRebase => true,
         GitAction::Rewrite { .. } => !plan.files.is_empty(),
         _ => false,
     }
@@ -987,5 +1029,6 @@ fn worktree_backup(action: &GitAction) -> bool {
             | GitAction::Reset { .. }
             | GitAction::Abort
             | GitAction::RestoreFiles { .. }
+            | GitAction::RebaseSkip
     )
 }

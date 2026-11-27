@@ -1,9 +1,11 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- Wave 14, strand F: one row of the commit graph: its part of the lanes (`layout.ts`, drawn in
      its own height so the list can be virtualised), the ref labels, the message, the author,
      the date and the short id. An option of the graph's listbox; the list handles keys. -->
 <script lang="ts">
+  import type { GraphDragSource } from "../extensions";
   import type { GitGraphCommit } from "../types";
   import { getGitHost } from "../host";
   import { Avatar, tooltip } from "@tailor-kit/ui";
@@ -31,6 +33,7 @@
     onpick,
     onmenu,
     ondragstate,
+    drop = null,
   }: {
     id: string;
     position: number;
@@ -52,18 +55,31 @@
     now: number;
     onpick: (e: MouseEvent) => void;
     onmenu: (e: MouseEvent) => void;
-    /** The row is being dragged (true) or was dropped or cancelled (false). */
-    ondragstate?: (dragging: boolean) => void;
+    /** The row (or one of its branch labels, `source`) is being dragged (true) or was dropped
+     *  or cancelled (false). */
+    ondragstate?: (dragging: boolean, source?: GraphDragSource) => void;
+    /** A drop an extension accepts would land in this half of the row. */
+    drop?: "above" | "below" | null;
   } = $props();
   const host = getGitHost();
 
   function dragstart(e: DragEvent) {
+    // A branch or tag label of the row drags itself (since tailor-kit 0.3): the graph's drop
+    // targets see which; anything else gets its name to paste.
+    const label = (e.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-ref]");
+    const ref = label?.dataset.ref;
+    if (ref) {
+      e.dataTransfer?.setData("text/plain", label?.dataset.name ?? ref);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
+      ondragstate?.(true, { kind: "ref", ref, commit: commit.oid });
+      return;
+    }
     // The commit id travels with the drag: an editor that reorders commits reads it, anything
     // else gets a plain id to paste.
     e.dataTransfer?.setData("text/plain", commit.oid);
     e.dataTransfer?.setData(host.brand.commitMime, commit.oid);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "copyMove";
-    ondragstate?.(true);
+    ondragstate?.(true, { kind: "commit", commit: commit.oid });
   }
 
   const x = (l: number) => lane / 2 + l * lane;
@@ -82,6 +98,9 @@
   class:match
   class:head
   class:merge={row.merge}
+  class:drop-above={drop === "above"}
+  class:drop-below={drop === "below"}
+  data-drop={drop}
   role="option"
   tabindex="-1"
   aria-selected={selected}
@@ -117,7 +136,7 @@
   </svg>
   <span class="message">
     {#each shown as l (l.ref.full)}
-      <RefLabel label={l} />
+      <RefLabel label={l} draggable={l.ref.kind !== "head"} />
     {/each}
     {#if hidden > 0}<span class="more" use:tooltip={labels.slice(3).map((l) => l.ref.name).join(", ")}>+{hidden}</span>{/if}
     <span class="summary" data-testid="graph-summary">{commit.summary}</span>
@@ -161,6 +180,12 @@
   .row.selected {
     background: var(--rt-accent-subtle);
     color: var(--rt-accent-subtle-fg);
+  }
+  .row.drop-above {
+    box-shadow: inset 0 2px 0 var(--rt-accent);
+  }
+  .row.drop-below {
+    box-shadow: inset 0 -2px 0 var(--rt-accent);
   }
   :global(.graph-list:focus-visible) .row.selected {
     box-shadow: inset 0 0 0 var(--rt-focus-width) var(--rt-focus);

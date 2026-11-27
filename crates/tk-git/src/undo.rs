@@ -488,6 +488,10 @@ impl Repo {
         }
         // A merge the action stopped is in progress again.
         self.write_merge_files(&r.merge)?;
+        // So is a rebase (or the rebase the action started is gone).
+        if let Some((before, after)) = &r.rebase {
+            self.restore_rebase_files(before, after)?;
+        }
         let repo = self.reopen()?;
         let head_after = repo.head_commit()?;
         let mut reload = head_before != head_after;
@@ -496,7 +500,12 @@ impl Repo {
             let whole = repo.whole()?;
             whole.move_worktree(from, to, "undo")?;
             reload = true;
-        } else if reload || r.underway || !r.merge.is_empty() || r.index_moved.is_some() {
+        } else if reload
+            || r.underway
+            || !r.merge.is_empty()
+            || r.rebase.is_some()
+            || r.index_moved.is_some()
+        {
             let old = repo.load_index()?;
             let mut index = repo.reindex(repo.head_tree()?, &[&old])?;
             repo.write_index(&mut index)?;

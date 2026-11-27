@@ -209,17 +209,33 @@ impl Repo {
         repo: &'r gix::Repository,
         tw: &ThreeWay<'_>,
     ) -> Result<Computed<'r>> {
+        self.compute_merge_with(repo, tw, false)
+    }
+
+    /// [`Repo::compute_merge`], with `renames`: rename tracking as `git merge`'s ort strategy
+    /// does it (GitTailor wave 3: the rebase, compared with `git rebase`).
+    pub(crate) fn compute_merge_with<'r>(
+        &self,
+        repo: &'r gix::Repository,
+        tw: &ThreeWay<'_>,
+        renames: bool,
+    ) -> Result<Computed<'r>> {
         let branch = self.head_branch()?.unwrap_or_else(|| "HEAD".into());
         let labels = gix::merge::blob::builtin_driver::text::Labels {
             ancestor: Some(BStr::new("base")),
             current: Some(BStr::new(branch.as_str())),
             other: Some(BStr::new(tw.label)),
         };
-        // No rename tracking: a conflict is always about one path, the way the UI shows it.
+        // No rename tracking (unless `renames`): a conflict is always about one path, the way
+        // the UI shows it.
         let options = repo
             .tree_merge_options()
-            .ctx("cannot read the merge configuration")?
-            .with_rewrites(None);
+            .ctx("cannot read the merge configuration")?;
+        let options = if renames {
+            options
+        } else {
+            options.with_rewrites(None)
+        };
         let fail_merge = |e: gix::Error| fail(format!("cannot merge {}: {e}", tw.label));
         let (mut outcome, base) = match tw.kind {
             MergeKind::Merge => {
@@ -456,20 +472,16 @@ impl Repo {
         Ok(out)
     }
 
-    /// Applies a computed merge to `HEAD` and the working tree: a commit (a merge commit for
-    /// [`MergeKind::Merge`], else one parent) when it is clean; otherwise the merge stops like
-    /// `git merge`/`git cherry-pick`: `MERGE_HEAD` (or `CHERRY_PICK_HEAD`, `REVERT_HEAD`) and
-    /// `MERGE_MSG`, the conflict stages in the index, markers (or field comments) in the files.
-    /// `author`: kept from the picked commit; `None`: `identity`.
-    pub(crate) fn apply_merge(
+    /// The working tree and index part of [`Repo::apply_merge`] (GitTailor wave 3: also the
+    /// rebase's stop): writes the merged tree to the working files (markers or field comments
+    /// in conflicted files) and returns it with the new index (conflict stages for what
+    /// conflicts) and whether anything conflicts. The index is not written yet.
+    pub(crate) fn stage_merge(
         &self,
         mut c: Computed<'_>,
         tw: &ThreeWay<'_>,
-        identity: &GitIdentity,
-        author: Option<gix::actor::Signature>,
-        message: &str,
         what: &str,
-    ) -> Result<GitPullResult> {
+    ) -> Result<(ObjectId, gix::index::File, bool)> {
         let how = TreatAsUnresolved::git();
         let tree = c
             .outcome
@@ -516,6 +528,24 @@ impl Repo {
             .entries()
             .iter()
             .any(|e| e.stage() != Stage::Unconflicted);
+        Ok((tree, index, conflicted))
+    }
+
+    /// Applies a computed merge to `HEAD` and the working tree: a commit (a merge commit for
+    /// [`MergeKind::Merge`], else one parent) when it is clean; otherwise the merge stops like
+    /// `git merge`/`git cherry-pick`: `MERGE_HEAD` (or `CHERRY_PICK_HEAD`, `REVERT_HEAD`) and
+    /// `MERGE_MSG`, the conflict stages in the index, markers (or field comments) in the files.
+    /// `author`: kept from the picked commit; `None`: `identity`.
+    pub(crate) fn apply_merge(
+        &self,
+        c: Computed<'_>,
+        tw: &ThreeWay<'_>,
+        identity: &GitIdentity,
+        author: Option<gix::actor::Signature>,
+        message: &str,
+        what: &str,
+    ) -> Result<GitPullResult> {
+        let (tree, mut index, conflicted) = self.stage_merge(c, tw, what)?;
         if !conflicted {
             let committer = signature(identity);
             let author = author.unwrap_or_else(|| committer.clone());

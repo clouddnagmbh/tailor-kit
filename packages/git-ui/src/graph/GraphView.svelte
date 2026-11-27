@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright 2026 The RequestTailor Authors -->
+<!-- Copyright 2026 The Tailor Kit Authors -->
 <!-- Wave 14, strand F: the commit graph of the active collection's repository (all branches,
      remote branches, tags, HEAD) as coloured lanes (`--rt-lane-*`, `layout.ts`), virtualised
      (only the rows in view exist; pages of 2000 commits load while scrolling), with the commit
@@ -10,12 +11,14 @@
      changed files, Space marks the parent to compare with, the context-menu key or Shift+F10
      opens the menu, `/` searches (Enter/Shift+Enter: next/previous match, Escape: back to the
      list). Mod+click marks a second commit. Any repository: nothing here assumes the repository
-     is a collection. -->
+     is a collection. Since tailor-kit 0.3 a dragged row or branch label can be dropped on a row
+     or label when an extension offers something for it (`GitExtension.graphDrops`, `./drops.ts`):
+     the choices open as a menu at the drop point. -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
 
   import type { GitGraphCommit } from "../types";
-  import type { GitActionTarget, GitHintTarget } from "../extensions";
+  import type { GitActionTarget, GitHintTarget, GraphDragSource, GraphDropTarget } from "../extensions";
   import { extensionRangeActions } from "../extension-git";
   import { gitActionEntries, withRefActions } from "../extension-git";
   import { getGitExtensions } from "../host";
@@ -26,6 +29,7 @@
   import { getGitViews } from "../views.svelte";
   import { toMenu, type ActionHost } from "./actions";
   import CommitDetails from "./CommitDetails.svelte";
+  import { dropEntries, dropKey, dropPosition, graphDropActions, type GraphDropRef } from "./drops";
   import { GraphData, type GraphScope } from "./graph.svelte";
   import GraphRow from "./GraphRow.svelte";
   import { commitMenu, matches, refLabels, selectTarget, type GraphContext } from "./model";
@@ -59,6 +63,11 @@
   let notice = $state("");
   /** A commit row is being dragged (extensions' hints may offer what to do with it). */
   let dragging = $state(false);
+  /** What is dragged (since tailor-kit 0.3: drops on rows and labels, `GitExtension.graphDrops`). */
+  let dragSource: GraphDragSource | null = null;
+  /** Where an accepted drop would land (the row's mark). */
+  let dropAt = $state<{ oid: string; position: "above" | "below" } | null>(null);
+  let dropCache: { key: string; refs: GraphDropRef[] } | null = null;
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   const n = $derived(data.commits.length);
@@ -251,6 +260,63 @@
     openMenu(commit, { x: e.clientX, y: e.clientY });
   }
 
+  function onDragState(d: boolean, source?: GraphDragSource) {
+    dragging = d;
+    dragSource = d ? (source ?? null) : null;
+    if (!d) {
+      dropAt = null;
+      dropCache = null;
+    }
+  }
+
+  /** The drop `e` would make, if it is over a row and the drag started in this graph. */
+  function dropTarget(e: DragEvent): GraphDropTarget | null {
+    if (!dragSource) return null;
+    const el = e.target as HTMLElement | null;
+    const row = el?.closest?.<HTMLElement>("[data-oid]");
+    const oid = row?.dataset.oid;
+    if (!row || !oid) return null;
+    const commit = data.commits[data.index.get(oid) ?? -1];
+    if (!commit) return null;
+    const label = el?.closest?.<HTMLElement>("[data-ref]");
+    const rect = row.getBoundingClientRect();
+    return {
+      repository: host.activeRepository ?? "",
+      source: dragSource,
+      commit: oid,
+      refs: commit.refs ?? [],
+      ref: label?.dataset.ref,
+      position: dropPosition(e.clientY, rect.top, rect.height || ROW),
+    };
+  }
+
+  function dropChoices(t: GraphDropTarget): GraphDropRef[] {
+    const key = dropKey(t);
+    if (dropCache?.key !== key) dropCache = { key, refs: graphDropActions(extensions, t) };
+    return dropCache.refs;
+  }
+
+  function onDragOver(e: DragEvent) {
+    const t = dropTarget(e);
+    if (!t || dropChoices(t).length === 0) {
+      if (dropAt) dropAt = null;
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    if (dropAt?.oid !== t.commit || dropAt.position !== t.position) dropAt = { oid: t.commit, position: t.position };
+  }
+
+  function onDrop(e: DragEvent) {
+    const t = dropTarget(e);
+    const choices = t ? dropChoices(t) : [];
+    dropAt = null;
+    if (!t || choices.length === 0) return;
+    e.preventDefault();
+    menu = { items: dropEntries(choices, (m) => host.notifyError(m)), anchor: { x: e.clientX, y: e.clientY }, label: "What to do with the drop" };
+    menuOpen = true;
+  }
+
   function rowElement(i: number): HTMLElement | null {
     const oid = data.commits[i]?.oid;
     return oid ? (list?.querySelector<HTMLElement>(`[data-oid="${oid}"]`) ?? null) : null;
@@ -440,6 +506,11 @@
           bind:clientHeight={viewport}
           onscroll={() => (scrollTop = list?.scrollTop ?? 0)}
           onkeydown={onListKey}
+          ondragover={onDragOver}
+          ondragleave={(e) => {
+            if (!list?.contains(e.relatedTarget as Node | null)) dropAt = null;
+          }}
+          ondrop={onDrop}
         >
           <div class="spacer-rows" style:height="{n * ROW}px">
             {#each visible as i (i % pool)}
@@ -462,7 +533,8 @@
                 {now}
                 onpick={(e) => pick(i, e)}
                 onmenu={(e) => rowMenu(i, e)}
-                ondragstate={(d) => (dragging = d)}
+                ondragstate={onDragState}
+                drop={dropAt?.oid === commit.oid ? dropAt.position : null}
               />
             {/each}
           </div>

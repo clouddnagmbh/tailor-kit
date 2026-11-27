@@ -207,7 +207,10 @@ impl Repo {
                         .into(),
                 )
             }
-            Ok(md) if md.is_file() => Some(std::fs::read(&file).ctx("cannot read a file")?),
+            Ok(md) if md.is_file() => Some(self.cleaned(
+                repo_path.as_bstr(),
+                std::fs::read(&file).ctx("cannot read a file")?,
+            )?),
             Ok(_) => None,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
             Err(e) => return Err(fail(format!("cannot read {path}: {e}"))),

@@ -91,6 +91,12 @@ impl Repo {
                         .find_blob(id)
                         .ctx("cannot read a file from the repository")?
                         .take_data();
+                    // The content filter's file (an LFS object) rather than what Git stores.
+                    let mut data = self.smudged(repo_path.as_bstr(), data)?;
+                    let size = data.len() as u64;
+                    if size > read_limit {
+                        data.truncate(SNIFF);
+                    }
                     (data, size)
                 } else {
                     // Only enough to tell binary from text.

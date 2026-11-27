@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use gix::ObjectId;
 use gix::bstr::{BString, ByteSlice};
+use tk_git_types::filter::ContentFilter;
 use tk_git_types::{CommitScanner, FileMerger, GitIdentity, RefNamespace, ScopeFiles};
 
 use crate::util::{Context, Result, Scope, canonical, fail};
@@ -38,8 +39,9 @@ pub struct Product {
 }
 
 /// What a product plugs into every repository it opens: its name, its namespace (seam N8),
-/// its file merger (N1), commit scanner (N2) and scope files (N3). [`Profile::new`] is the
-/// generic core: Git's line merge for every file, nothing checked, every regular file counts.
+/// its file merger (N1), commit scanner (N2), scope files (N3) and content filter (N11).
+/// [`Profile::new`] is the generic core: Git's line merge for every file, nothing checked, every
+/// regular file counts, Git's own filters only.
 #[derive(Clone)]
 pub struct Profile {
     pub product: Product,
@@ -47,6 +49,9 @@ pub struct Profile {
     pub merger: Option<Arc<dyn FileMerger>>,
     pub scanner: Option<Arc<dyn CommitScanner>>,
     pub files: Option<Arc<dyn ScopeFiles>>,
+    /// Cleans and smudges the files whose `filter` attribute it handles (seam N11); also for
+    /// the checkout of a clone.
+    pub filter: Option<Arc<dyn ContentFilter>>,
 }
 
 impl Profile {
@@ -58,6 +63,7 @@ impl Profile {
             merger: None,
             scanner: None,
             files: None,
+            filter: None,
         }
     }
 }
@@ -70,6 +76,7 @@ impl std::fmt::Debug for Profile {
             .field("merger", &self.merger.is_some())
             .field("scanner", &self.scanner.is_some())
             .field("files", &self.files.is_some())
+            .field("filter", &self.filter.is_some())
             .finish()
     }
 }
@@ -162,6 +169,9 @@ pub struct Repo {
     /// GitTailor wave 3: branch patterns (`main`, `release/*`) whose published history is not
     /// rewritten and never force-pushed (see [`Repo::with_protected`]).
     pub(crate) protected: Arc<[String]>,
+    /// What cleans and smudges files by their `filter` attribute (seam N11); the profile's by
+    /// default, `None`: Git's own filters only.
+    pub(crate) filter: Option<Arc<dyn ContentFilter>>,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -229,6 +239,7 @@ impl Repo {
             push_undo: false,
             force_push: false,
             protected: Arc::from(Vec::new()),
+            filter: profile.filter,
         }))
     }
 
@@ -317,6 +328,13 @@ impl Repo {
     /// the profile's.
     pub fn with_namespace(mut self, namespace: RefNamespace) -> Self {
         self.namespace = namespace;
+        self
+    }
+
+    /// Cleans and smudges the files whose `filter` attribute `filter` handles (seam N11) instead
+    /// of the profile's; `None`: Git's own filters only.
+    pub fn with_content_filter(mut self, filter: Option<Arc<dyn ContentFilter>>) -> Self {
+        self.filter = filter;
         self
     }
 
@@ -550,6 +568,7 @@ impl Repo {
             push_undo: self.push_undo,
             force_push: self.force_push,
             protected: self.protected.clone(),
+            filter: self.filter.clone(),
         })
     }
 

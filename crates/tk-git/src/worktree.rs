@@ -5,12 +5,9 @@
 //! tree from one tree to another without losing local work ([`switch`]).
 
 use std::collections::BTreeSet;
-use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use gix::bstr::{BStr, BString, ByteSlice};
-use gix::filter::plumbing::driver::apply::{Delay, MaybeDelayed};
-use gix::filter::plumbing::pipeline::convert::{ToGitOutcome, ToWorktreeOutcome, to_worktree};
 use gix::index::entry::{Mode, Stage, Stat};
 
 use crate::repo::Repo;
@@ -62,24 +59,43 @@ pub fn stat_of(path: &Path) -> Stat {
         .unwrap_or_default()
 }
 
-/// Reads working-tree files the way Git sees them (after clean filters such as `eol`).
+/// Reads working-tree files the way Git sees them (after clean filters such as `eol` and the
+/// product's content filter).
 pub struct Probe<'r> {
     repo: &'r gix::Repository,
     workdir: &'r Path,
-    pipeline: gix::filter::Pipeline<'r>,
+    pipeline: crate::filter::Filters<'r>,
 }
 
 impl<'r> Probe<'r> {
     pub fn new(repo: &'r Repo) -> Result<Self> {
-        let (pipeline, _) = repo
-            .repo
-            .filter_pipeline(None)
-            .ctx("cannot read the attributes")?;
         Ok(Self {
             repo: &repo.repo,
             workdir: &repo.workdir,
-            pipeline,
+            pipeline: crate::filter::Filters::new(repo)?,
         })
+    }
+
+    /// For writing the files of `target` (the index being checked out): the content filter
+    /// follows its `.gitattributes`.
+    fn for_checkout(repo: &'r Repo, target: &gix::index::State) -> Result<Self> {
+        Ok(Self {
+            repo: &repo.repo,
+            workdir: &repo.workdir,
+            pipeline: crate::filter::Filters::for_checkout(repo, target)?,
+        })
+    }
+
+    /// Lets the content filter prepare writing `blobs` (repository paths), see
+    /// [`ContentFilter::prepare_smudge`](tk_git_types::filter::ContentFilter::prepare_smudge).
+    pub fn prepare(&mut self, blobs: &[(&BStr, Blob)]) -> Result<()> {
+        let mut files = Vec::new();
+        for (path, blob) in blobs {
+            if blob.mode != Mode::SYMLINK && self.pipeline.content_name(path)?.is_some() {
+                files.push((*path, blob_bytes(self.repo, blob.id)?));
+            }
+        }
+        self.pipeline.prepare_smudge(&files)
     }
 
     /// What the working tree holds at `path`. `index` lets unchanged files skip hashing.
@@ -128,20 +144,7 @@ impl<'r> Probe<'r> {
             }
         }
         let bytes = std::fs::read(&file).map_err(|e| fail(format!("cannot read {path}: {e}")))?;
-        let rel = gix::path::from_bstr(path).map_err(|_| fail(format!("invalid path {path}")))?;
-        let data = match self
-            .pipeline
-            .convert_to_git(&bytes[..], &rel, index)
-            .ctx("cannot convert a file")?
-        {
-            ToGitOutcome::Unchanged(_) => bytes,
-            ToGitOutcome::Buffer(buf) => buf.to_vec(),
-            ToGitOutcome::Process(mut read) => {
-                let mut out = Vec::new();
-                read.read_to_end(&mut out).ctx("cannot convert a file")?;
-                out
-            }
-        };
+        let data = self.pipeline.convert_to_git(path, bytes, index)?;
         let id = gix::objs::compute_hash(hash, gix::objs::Kind::Blob, &data)
             .ctx("cannot hash a file")?;
         Ok(FileState::File(Blob { mode, id }))
@@ -164,29 +167,7 @@ impl<'r> Probe<'r> {
             write_symlink(&data, &file).map_err(io)?;
             return Ok(file);
         }
-        let out = match self
-            .pipeline
-            .convert_to_worktree(
-                &data,
-                path,
-                to_worktree::Options {
-                    can_delay: Delay::Forbid,
-                    unknown_encoding: Default::default(),
-                },
-            )
-            .ctx("cannot convert a file")?
-        {
-            ToWorktreeOutcome::Unchanged(b) => b.to_vec(),
-            ToWorktreeOutcome::Buffer(b) => b.to_vec(),
-            ToWorktreeOutcome::Process(MaybeDelayed::Immediate(mut read)) => {
-                let mut out = Vec::new();
-                read.read_to_end(&mut out).ctx("cannot convert a file")?;
-                out
-            }
-            ToWorktreeOutcome::Process(MaybeDelayed::Delayed(_)) => {
-                return Err(fail(format!("a filter delayed {path}")));
-            }
-        };
+        let out = self.pipeline.convert_to_worktree(path, &data)?;
         std::fs::write(&file, out).map_err(io)?;
         set_executable(&file, blob.mode == Mode::FILE_EXECUTABLE).map_err(io)?;
         Ok(file)
@@ -337,7 +318,16 @@ pub fn switch(
             remove(&repo.workdir, p.as_bstr())?;
         }
     }
-    let mut probe = Probe::new(repo)?;
+    let mut index = repo
+        .repo
+        .index_from_tree(&to)
+        .ctx("cannot build the index")?;
+    let mut probe = Probe::for_checkout(repo, &index)?;
+    let wanted: Vec<(&BStr, Blob)> = paths
+        .iter()
+        .filter_map(|p| to_flat.get(p).map(|b| (p.as_bstr(), *b)))
+        .collect();
+    probe.prepare(&wanted)?;
     let mut written = std::collections::BTreeMap::new();
     for p in &paths {
         if let Some(blob) = to_flat.get(p) {
@@ -345,10 +335,7 @@ pub fn switch(
             written.insert(p.clone(), stat_of(&file));
         }
     }
-    let mut index = repo
-        .repo
-        .index_from_tree(&to)
-        .ctx("cannot build the index")?;
+    drop(probe);
     let (entries, backing) = index.entries_mut_and_pathbacking();
     for entry in entries {
         let path = entry.path_in(backing);

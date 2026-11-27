@@ -120,6 +120,7 @@ mod dry_run;
 /// Wave 12, strand D: `fileLog`.
 mod file_log;
 mod file_tree;
+mod filter;
 /// Wave 2 (GitTailor), strand D: the merge forecast in memory (`Repo::merge_forecast`).
 mod forecast;
 /// Wave 14, strand F: the commit graph (`graph`, `refs`, `changes`, `fileDiff`).

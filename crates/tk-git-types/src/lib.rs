@@ -29,9 +29,13 @@
 //!
 //! Seam N3: a program works on a [`RepoScope`] (the whole repository or a folder) and counts
 //! the files its [`ScopeFiles`] includes.
+//!
+//! Seam N11: a [`filter::ContentFilter`] cleans and smudges the files whose `filter` attribute it
+//! handles (Git LFS); without one, Git's attributes and configuration decide as before.
 
 pub mod actions;
 pub mod files;
+pub mod filter;
 pub mod graph;
 pub mod history;
 pub mod index;

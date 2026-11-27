@@ -270,6 +270,13 @@ export function refMove(move: { name: string; before: string | null; after: stri
   return { name, before: show(move.before), after: show(move.after) };
 }
 
+/** GitTailor wave 4: the plan's equivalent Git command line(s) as one copyable text, or `null`
+ *  when the product set none (then the wizard shows nothing). Blank lines are dropped. */
+export function planCommand(plan: Pick<GitPlan, "command"> | null | undefined): string | null {
+  const lines = (plan?.command ?? []).map((l) => l.trimEnd()).filter((l) => l.trim() !== "");
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
 /** The Git word a wizard explains at the top. */
 export function wizardTerm(kind: GitWizardKind): GitTerm | null {
   const map: Partial<Record<GitWizardKind, GitTerm>> = {

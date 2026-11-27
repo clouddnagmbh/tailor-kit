@@ -34,6 +34,7 @@
   } from "./model";
   import type { GitWizardKind, GitWizardRequest } from "./open";
   import { suggestRefName } from "./refname";
+  import PlanCommand from "./PlanCommand.svelte";
 
   let { close, props }: GitDialogProps = $props();
   const request = untrack(() => (props as unknown as { request: GitWizardRequest }).request);
@@ -632,6 +633,7 @@
             {#if plan.undoable}<Badge kind="label" tone="info" value="Can be undone" />{:else}<span data-testid="git-wizard-not-undoable"><Badge kind="label" tone="warn" value="Cannot be undone" /></span>{/if}
             {#if plan.network}<Badge kind="label" value="Talks to the server" />{/if}
           </div>
+          <PlanCommand {plan} />
         </section>
       {/if}
       {#if plan}

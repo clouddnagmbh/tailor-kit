@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GitPlan, GitRef } from "../types";
 import { GLOSSARY } from "../glossary";
-import { confirmLabel, destructiveQuestion, initialValues, nameProblem, refMove, toAction, wayOut, wizardTerm, type WizardContext } from "./model";
+import { confirmLabel, destructiveQuestion, initialValues, nameProblem, planCommand, refMove, toAction, wayOut, wizardTerm, type WizardContext } from "./model";
 import type { GitWizardKind } from "./open";
 import { refNameProblem, suggestRefName } from "./refname";
 
@@ -145,5 +145,19 @@ describe("wave 15 wizards (strand D)", () => {
       expect(GLOSSARY[term!].text.length).toBeGreaterThan(10);
     }
     expect(wayOut("published")).toBe("none");
+  });
+});
+
+describe("the Git command of a plan (GitTailor wave 4)", () => {
+  it("shows the command lines as one copyable text", () => {
+    expect(planCommand(plan({ command: ["git switch -c feature main"] }))).toBe("git switch -c feature main");
+    expect(planCommand(plan({ command: ["git fetch origin", "git merge origin/main"] }))).toBe("git fetch origin\ngit merge origin/main");
+    expect(planCommand(plan({ command: ["git push  ", ""] }))).toBe("git push");
+  });
+  it("shows nothing without a command", () => {
+    expect(planCommand(plan({}))).toBeNull();
+    expect(planCommand(plan({ command: [] }))).toBeNull();
+    expect(planCommand(plan({ command: ["  "] }))).toBeNull();
+    expect(planCommand(null)).toBeNull();
   });
 });

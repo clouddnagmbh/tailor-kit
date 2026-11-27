@@ -156,6 +156,12 @@ pub struct Repo {
     pub(crate) author: Option<GitIdentity>,
     /// Network actions write a journal entry and can be undone (see [`Repo::with_push_undo`]).
     pub(crate) push_undo: bool,
+    /// GitTailor wave 3: the product allows [`GitAction::ForcePush`](tk_git_types::actions::GitAction::ForcePush)
+    /// (see [`Repo::with_force_push`]).
+    pub(crate) force_push: bool,
+    /// GitTailor wave 3: branch patterns (`main`, `release/*`) whose published history is not
+    /// rewritten and never force-pushed (see [`Repo::with_protected`]).
+    pub(crate) protected: Arc<[String]>,
 }
 
 /// The folder at or above `start` that holds a `.git` (folder, or file for linked work trees).
@@ -221,6 +227,8 @@ impl Repo {
             files: profile.files,
             author: None,
             push_undo: false,
+            force_push: false,
+            protected: Arc::from(Vec::new()),
         }))
     }
 
@@ -253,7 +261,9 @@ impl Repo {
             .with_scanner(self.scanner.clone())
             .with_files(self.files.clone())
             .with_author(self.author.clone())
-            .with_push_undo(self.push_undo))
+            .with_push_undo(self.push_undo)
+            .with_force_push(self.force_push)
+            .with_protected(self.protected.to_vec()))
     }
 
     /// Commits made here carry `author` (author and committer) instead of the identity of the
@@ -272,6 +282,21 @@ impl Repo {
     /// and leaves it off for fetches in the background).
     pub fn with_push_undo(mut self, on: bool) -> Self {
         self.push_undo = on;
+        self
+    }
+
+    /// GitTailor wave 3, strand B: allows [`GitAction::ForcePush`](tk_git_types::actions::GitAction::ForcePush)
+    /// (always with a lease). Off by default: without it the action plans blocked.
+    pub fn with_force_push(mut self, on: bool) -> Self {
+        self.force_push = on;
+        self
+    }
+
+    /// GitTailor wave 3, strand B: branches matching one of `patterns` (`main`, `release/*`;
+    /// `*` stands for any characters but `/`) are protected: a force push there and a rebase
+    /// that replaces their published commits plan blocked with `Protected`. Empty by default.
+    pub fn with_protected(mut self, patterns: Vec<String>) -> Self {
+        self.protected = Arc::from(patterns);
         self
     }
 
@@ -523,6 +548,8 @@ impl Repo {
             files: self.files.clone(),
             author: self.author.clone(),
             push_undo: self.push_undo,
+            force_push: self.force_push,
+            protected: self.protected.clone(),
         })
     }
 

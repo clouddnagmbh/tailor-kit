@@ -249,6 +249,52 @@ pub enum GitAction {
         #[serde(default)]
         staged: bool,
     },
+
+    // ---- GitTailor wave 3 (interface commit). Additive, as above; until strands A and B land
+    // every one plans blocked with `unsupported`.
+    /// Strand A: rebase `branch` (`None`: the current one) onto `onto` as picks in memory
+    /// ([`crate::rebase`]); the branch moves once at the end (backup ref, journal, undo).
+    /// `upstream`: replay the commits after it (`git rebase --onto <onto> <upstream>`); `None`:
+    /// after the merge base of the branch and `onto`. `steps` empty: every such commit is picked
+    /// (with `autosquash`, `fixup!`/`squash!`/`amend!` commits are moved and folded as
+    /// `git rebase --autosquash` does). A step that stops writes `.git/rebase-merge/`. Replacing
+    /// commits that are on a remote needs `allow_published` (else [`GitBlockReason::Published`]),
+    /// and is refused on a protected branch ([`GitBlockReason::Protected`]).
+    Rebase {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<String>,
+        onto: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        upstream: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        steps: Vec<crate::rebase::GitRebaseStep>,
+        #[serde(default)]
+        autosquash: bool,
+        #[serde(default)]
+        allow_published: bool,
+    },
+    /// Strand A: go on with the rebase in progress (also one `git rebase` started) after the
+    /// conflicts are resolved or the commit edited; `message` for the step that stopped.
+    RebaseContinue {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+    /// Strand A: leave out the step that stopped and go on (`git rebase --skip`). Stopping a
+    /// rebase is [`GitAction::Abort`].
+    RebaseSkip,
+    /// Strand A: fetch, then rebase the current branch onto its upstream (`git pull --rebase`).
+    PullRebase,
+    /// Strand B: push `branch` (`None`: the current one) to its upstream, replacing what is
+    /// there, only while the remote branch still points at `expect` (`--force-with-lease=<ref>:<expect>`)
+    /// and that commit was integrated locally (`--force-if-includes`); else
+    /// [`GitBlockReason::Rejected`]. Only for products that opt in (`Repo::with_force_push`);
+    /// refused on a protected branch. A backup ref keeps the overwritten remote tip; undo puts
+    /// it back with a lease against the pushed value.
+    ForcePush {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        branch: Option<String>,
+        expect: String,
+    },
 }
 
 /// Why an action cannot run now. The UI explains each in plain words and offers the way out.
@@ -286,6 +332,9 @@ pub enum GitBlockReason {
     Unsupported,
     /// Since wave 15: it would replace commits that are already on a remote (history of others).
     Published,
+    /// GitTailor wave 3: the branch is protected (the product's patterns, by default `main`,
+    /// `master`, `release/*`): no rewrite of its published history and no force push.
+    Protected,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -352,6 +401,9 @@ pub struct GitPlan {
     pub undoable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge: Option<GitMergePreview>,
+    /// GitTailor wave 3: the resolved todo of a rebase and how far its in-memory run goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebase: Option<crate::rebase::GitRebasePreview>,
     /// It would lose work that no backup covers; the wizard asks once more.
     #[serde(default)]
     pub destructive: bool,

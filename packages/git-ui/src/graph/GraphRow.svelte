@@ -34,6 +34,7 @@
     onmenu,
     ondragstate,
     drop = null,
+    dropLabel = "",
   }: {
     id: string;
     position: number;
@@ -60,6 +61,8 @@
     ondragstate?: (dragging: boolean, source?: GraphDragSource) => void;
     /** A drop an extension accepts would land in this half of the row. */
     drop?: "above" | "below" | null;
+    /** Wave 8 (additive): names the action the drop would offer, at the end of the row. */
+    dropLabel?: string;
   } = $props();
   const host = getGitHost();
 
@@ -147,6 +150,7 @@
   </span>
   <span class="date" data-testid="graph-date" use:tooltip={absoluteTime(commit.time)}>{relativeTime(commit.time, now)}</span>
   <span class="sha">{shortId(commit.oid)}</span>
+  {#if drop && dropLabel}<span class="drop-label" aria-hidden="true" data-testid="graph-drop-label">{dropLabel}</span>{/if}
 </div>
 
 <style>
@@ -180,6 +184,22 @@
   .row.selected {
     background: var(--rt-accent-subtle);
     color: var(--rt-accent-subtle-fg);
+  }
+  .drop-label {
+    position: absolute;
+    right: var(--rt-space-5);
+    top: 50%;
+    transform: translateY(-50%);
+    max-width: 60%;
+    padding: 1px var(--rt-space-4);
+    border-radius: var(--rt-radius-md);
+    background: var(--rt-accent-solid);
+    color: var(--rt-accent-solid-fg);
+    font: var(--rt-font-caption);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
   }
   .row.drop-above {
     box-shadow: inset 0 2px 0 var(--rt-accent);

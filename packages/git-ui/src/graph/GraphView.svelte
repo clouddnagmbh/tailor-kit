@@ -35,7 +35,24 @@
   import { vimKeys, type VimList } from "../keys";
   import { commitMenu, matches, refLabels, selectTarget, type GraphContext } from "./model";
 
-  let { select }: { select?: string } = $props();
+  let {
+    select,
+    multi = false,
+    details = true,
+    dropLabels = false,
+    onselect,
+  }: {
+    select?: string;
+    /** Wave 8 (additive): Shift+click (or Shift+arrows) selects a range of commits; the actions of
+     *  the extensions then see all of them (`GitActionTarget` `commits`, newest first). */
+    multi?: boolean;
+    /** Wave 8 (additive): `false` leaves out the details column; the product shows them elsewhere
+     *  (`onselect` tells which commit is selected). */
+    details?: boolean;
+    /** Wave 8 (additive): the row a drop would land on names the action it would offer. */
+    dropLabels?: boolean;
+    onselect?: (commit: GitGraphCommit | null) => void;
+  } = $props();
 
   const host = getGitHost();
   const views = getGitViews();
@@ -67,7 +84,9 @@
   /** What is dragged (since tailor-kit 0.3: drops on rows and labels, `GitExtension.graphDrops`). */
   let dragSource: GraphDragSource | null = null;
   /** Where an accepted drop would land (the row's mark). */
-  let dropAt = $state<{ oid: string; position: "above" | "below" } | null>(null);
+  let dropAt = $state<{ oid: string; position: "above" | "below"; label: string } | null>(null);
+  /** Where a Shift+click range starts (the last plain selection). */
+  let anchor: string | null = null;
   let dropCache: { key: string; refs: GraphDropRef[] } | null = null;
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -108,6 +127,18 @@
     return i >= 0 ? data.commits[i]! : null;
   });
   const baseCommit = $derived(base ? (data.commits[data.index.get(base) ?? -1] ?? null) : null);
+  // The commits from the selection down to the marked one, newest first (`multi`).
+  const rangeOids = $derived.by(() => {
+    if (!multi || !base || !selected) return [] as string[];
+    const a = selectedIndex;
+    const b = data.index.get(base) ?? -1;
+    if (a < 0 || b < 0) return [];
+    return data.commits.slice(Math.min(a, b), Math.max(a, b) + 1).map((c) => c.oid);
+  });
+  const rangeSet = $derived(new Set(rangeOids));
+  $effect(() => {
+    if (onselect) onselect(detailsCommit);
+  });
   const ctx: GraphContext = $derived({ head: data.head, branch: data.branch });
   const lanes = $derived(Math.min(MAX_LANES, Math.max(2, data.maxWidth)));
   const first = $derived(Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN));
@@ -237,6 +268,14 @@
   function pick(i: number, e: MouseEvent) {
     const oid = data.commits[i]!.oid;
     list?.focus({ preventScroll: true });
+    if (multi && e.shiftKey) {
+      extendTo(i);
+      return;
+    }
+    if (multi && !(e.metaKey || e.ctrlKey)) {
+      anchor = oid;
+      base = null;
+    }
     if ((e.metaKey || e.ctrlKey) && selected && selected !== oid) {
       // The older of the two (further down) is where the comparison starts.
       if (i > selectedIndex) base = oid;
@@ -253,15 +292,36 @@
     selected = oid;
   }
 
+  /** Shift+click and Shift+arrows: the range from the anchor to row `i`. */
+  function extendTo(i: number) {
+    const from = anchor ?? selected;
+    if (!from) return;
+    anchor = from;
+    const a = data.index.get(from) ?? -1;
+    if (a < 0 || i < 0 || i >= n) return;
+    if (a === i) {
+      selected = from;
+      base = null;
+    } else {
+      // The newer end is the selection, the older one the mark (as with Ctrl/Cmd+click).
+      selected = data.commits[Math.min(a, i)]!.oid;
+      base = data.commits[Math.max(a, i)]!.oid;
+    }
+    reveal(i);
+    if (i > n - AHEAD) void data.loadMore();
+  }
+
   function openMenu(commit: GitGraphCommit, anchor: HTMLElement | { x: number; y: number }) {
     const repository = host.activeRepository ?? "";
     const fail = (message: string) => host.notifyError(message);
     // The extensions' actions on this commit (or on the two marked commits) close the menu,
     // those on a branch or tag sit in that label's submenu.
     const target: GitActionTarget =
-      base && base !== commit.oid && selected === commit.oid
-        ? { kind: "commits", repository, commits: [commit.oid, base] }
-        : { kind: "commit", repository, commit: commit.oid };
+      multi && rangeOids.length > 1 && rangeSet.has(commit.oid)
+        ? { kind: "commits", repository, commits: rangeOids }
+        : base && base !== commit.oid && selected === commit.oid
+          ? { kind: "commits", repository, commits: [commit.oid, base] }
+          : { kind: "commit", repository, commit: commit.oid };
     const own = withRefActions(extensions, repository, toMenu(commitMenu(commit, refLabels(commit.refs, data.byFull), ctx), actions), fail);
     menu = { items: [...own, ...gitActionEntries(extensions, target, fail)], anchor, label: `Commit ${commit.oid.slice(0, 7)} actions` };
     menuOpen = true;
@@ -270,7 +330,13 @@
   function rowMenu(i: number, e: MouseEvent) {
     e.preventDefault();
     const commit = data.commits[i]!;
-    selected = commit.oid;
+    if (!(multi && rangeOids.length > 1 && rangeSet.has(commit.oid))) {
+      selected = commit.oid;
+      if (multi) {
+        anchor = commit.oid;
+        base = null;
+      }
+    }
     openMenu(commit, { x: e.clientX, y: e.clientY });
   }
 
@@ -318,7 +384,9 @@
     }
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    if (dropAt?.oid !== t.commit || dropAt.position !== t.position) dropAt = { oid: t.commit, position: t.position };
+    const first = dropChoices(t)[0]?.action.label ?? "";
+    const label = dropLabels ? (dropChoices(t).length > 1 ? `${first} (+${dropChoices(t).length - 1})` : first) : "";
+    if (dropAt?.oid !== t.commit || dropAt.position !== t.position || dropAt.label !== label) dropAt = { oid: t.commit, position: t.position, label };
   }
 
   function onDrop(e: DragEvent) {
@@ -342,11 +410,13 @@
     switch (e.key) {
       case "ArrowDown":
       case "j":
-        move(i + 1);
+        if (multi && e.shiftKey && e.key === "ArrowDown") extendTo(Math.min(n - 1, ((data.index.get(base ?? "") ?? i) > i ? (data.index.get(base ?? "") ?? i) : i) + 1));
+        else move(i + 1);
         break;
       case "ArrowUp":
       case "k":
-        move(i < 0 ? 0 : i - 1);
+        if (multi && e.shiftKey && e.key === "ArrowUp") extendTo(Math.max(0, Math.min(i, data.index.get(base ?? "") ?? i) - 1));
+        else move(i < 0 ? 0 : i - 1);
         break;
       case "PageDown":
         move(i + page);
@@ -522,7 +592,7 @@
   {:else if n === 0}
     <EmptyState icon="commit" title="No commits yet" text="Commit your first change and it appears here, with every branch and tag that follows." data-testid="graph-empty" />
   {:else}
-    <div class="body">
+    <div class="body" class:no-details={!details}>
       <div class="list-pane" style:--graph-w="{Math.max(52, lanes * LANE + 6)}px">
         <div class="columns" aria-hidden="true">
           <span>Graph</span><span>Message</span><span class="c-author">Author</span><span class="c-date">Date</span><span class="c-sha">Commit</span>
@@ -560,7 +630,7 @@
                 lane={LANE}
                 {lanes}
                 selected={commit.oid === selected}
-                marked={commit.oid === base}
+                marked={multi ? rangeSet.has(commit.oid) && commit.oid !== selected : commit.oid === base}
                 match={hitSet.has(i)}
                 head={commit.oid === data.head}
                 {now}
@@ -568,12 +638,14 @@
                 onmenu={(e) => rowMenu(i, e)}
                 ondragstate={onDragState}
                 drop={dropAt?.oid === commit.oid ? dropAt.position : null}
+                dropLabel={dropAt?.oid === commit.oid ? dropAt.label : ""}
               />
             {/each}
           </div>
           {#if data.loading && data.more}<div class="loading-more" style:top="{n * ROW}px">Loading more…</div>{/if}
         </div>
       </div>
+      {#if details}
       <aside class="details-pane">
         {#if detailsCommit}
           <CommitDetails commit={detailsCommit} base={baseCommit} byFull={data.byFull} {ctx} {actions} {now} onclearbase={() => (base = null)} />
@@ -581,6 +653,7 @@
           <EmptyState size="sm" icon="commit" title="Pick a commit" text="Its message, author and changed files show here." />
         {/if}
       </aside>
+      {/if}
     </div>
   {/if}
 </div>
@@ -634,6 +707,9 @@
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(320px, 38%);
+  }
+  .body.no-details {
+    grid-template-columns: minmax(0, 1fr);
   }
   .list-pane {
     display: flex;

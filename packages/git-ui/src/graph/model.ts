@@ -123,17 +123,17 @@ export function commitMenu(commit: GitGraphCommit, labels: readonly RefLabel[], 
   const short = shortId(oid);
   const entries: GraphMenuEntry[] = [
     { id: "branch-here", label: "Branch from here…", icon: "branch", action: wizard("create-branch", { start: oid }) },
-    { id: "tag-here", label: "Tag this commit…", icon: "tag", action: wizard("create-tag", { target: oid }) },
+    { id: "tag-here", label: "Tag…", icon: "tag", action: wizard("create-tag", { target: oid }) },
     SEP,
     {
       id: "cherry-pick",
-      label: ctx.branch ? `Copy this commit to ${ctx.branch}` : "Copy this commit here",
+      label: ctx.branch ? `Cherry-pick to ${ctx.branch}` : "Cherry-pick here",
       icon: "copy",
       disabled: isHead,
       hint: isHead ? "Already here" : undefined,
       action: wizard("cherry-pick", { commit: oid }),
     },
-    { id: "revert", label: "Undo this commit…", icon: "undo", action: wizard("revert", { commit: oid }) },
+    { id: "revert", label: "Revert this commit…", icon: "undo", action: wizard("revert", { commit: oid }) },
     {
       id: "reset",
       label: ctx.branch ? `Move ${ctx.branch} here…` : "Move branch here…",

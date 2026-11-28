@@ -85,7 +85,15 @@
   import { getGitViews } from "./views.svelte";
   import { openGitWizard, type GitWizardKind } from "./wizards/open";
 
-  let { onopen }: { onopen: (info: GitOwnerInfo) => Promise<void> } = $props();
+  let {
+    onopen,
+    changes: showChanges = true,
+  }: {
+    onopen: (info: GitOwnerInfo) => Promise<void>;
+    /** Wave 8 (additive): `false` leaves out the "Changes" section (file list and commit form) for a
+     *  product that shows the working copy in its main area; everything else stays. */
+    changes?: boolean;
+  } = $props();
   const host = getGitHost();
   const views = getGitViews();
   const commands = $derived(host.commands(views));
@@ -108,7 +116,7 @@
   let message = $state("");
   // An extension asked for a message (`AppState.prefillCommitMessage`): shown when the field is empty.
   $effect(() => {
-    if (!host.commitPrefill) return;
+    if (!showChanges || !host.commitPrefill) return;
     const text = host.takeCommitPrefill();
     if (text !== null && untrack(() => message).trim() === "") message = text;
   });
@@ -594,8 +602,8 @@
       { id: "compare", label: "Compare with current", icon: "compare", disabled: onHead, run: () => views.open({ kind: "compare", from: c.oid, to: "HEAD" }) },
       { separator: true },
       { id: "branch", label: "Branch from here…", icon: "branch", run: () => wizard("create-branch", { start: c.oid }) },
-      { id: "cherry-pick", label: "Copy this commit here…", icon: "copy", disabled: onHead, run: () => wizard("cherry-pick", { commit: c.oid }) },
-      { id: "revert", label: "Undo this commit…", icon: "undo", run: () => wizard("revert", { commit: c.oid }) },
+      { id: "cherry-pick", label: "Cherry-pick this commit…", icon: "copy", disabled: onHead, run: () => wizard("cherry-pick", { commit: c.oid }) },
+      { id: "revert", label: "Revert this commit…", icon: "undo", run: () => wizard("revert", { commit: c.oid }) },
       { id: "tag", label: "Tag…", icon: "tag", run: () => wizard("create-tag", { target: c.oid }) },
       { separator: true },
       { id: "copy", label: "Copy commit id", hint: c.oid.slice(0, 7), run: () => navigator.clipboard?.writeText(c.oid) },
@@ -855,6 +863,7 @@
       </div>
     {/if}
 
+    {#if showChanges}
     <div class="changes" data-testid="git-changes">
       <Section title="Changes" count={files.length > 0 ? files.length : undefined}>
         {#snippet actions()}
@@ -952,6 +961,7 @@
         {/if}
       </Section>
     </div>
+    {/if}
 
     {#if stashes.length > 0}
       <div class="stashes" data-testid="git-stashes">

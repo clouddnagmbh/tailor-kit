@@ -20,6 +20,8 @@ export interface AiConfig {
   provider: AiProviderKind;
   model: string;
   base_url: string | null;
+  /** Embeddings: the model that turns text into vectors; absent when the profile has none. */
+  embedding_model?: string;
 }
 
 /** Wave 16: one model behind one provider (`rt_app::ai::AiProfile`, the config flattened). */

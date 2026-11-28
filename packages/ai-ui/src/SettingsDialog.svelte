@@ -25,6 +25,8 @@
     provider: AiProviderKind | "";
     model: string;
     baseUrl: string;
+    /** Kept as stored; this dialog does not edit it. */
+    embeddingModel?: string;
     /** A key typed in this dialog (never filled in from storage). */
     key: string;
     keySet: boolean;
@@ -59,6 +61,7 @@
       provider: p.provider,
       model: p.model,
       baseUrl: p.base_url ?? "",
+      embeddingModel: p.embedding_model,
       key: "",
       keySet: false,
       saved: true,
@@ -155,6 +158,7 @@
         provider: d.provider as AiProviderKind,
         model: d.model.trim(),
         base_url: d.baseUrl.trim() === "" ? null : d.baseUrl.trim(),
+        ...(d.embeddingModel ? { embedding_model: d.embeddingModel } : {}),
       }));
       const ids = new Set(profiles.map((p) => p.id));
       const settings: AiSettings = {

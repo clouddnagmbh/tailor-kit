@@ -18,7 +18,8 @@ use tk_net::transport::{HttpRequest, Transport};
 
 use super::sse::{Sse, SseEvent};
 use super::{
-    Decoder, Wire, Wired, base_url, json_request, role, schema_in_prompt, strict_compatible,
+    Decoder, Wire, Wired, base_url, json_request, missing_embedding_model, role, schema_in_prompt,
+    strict_compatible, vector_of,
 };
 use crate::{
     AiCall, AiConfig, AiDelta, AiError, AiMessage, AiProviderKind, AiReply, AiRole, AiStop,
@@ -43,11 +44,21 @@ pub(super) fn url(config: &AiConfig) -> String {
     )
 }
 
+/// `POST {base}/embeddings`: the same server, the same key.
+pub(super) fn embeddings_url(config: &AiConfig) -> String {
+    format!(
+        "{}/embeddings",
+        base_url(config, default_base(config.provider))
+    )
+}
+
 pub struct Chat {
     kind: AiProviderKind,
     key: Option<String>,
     model: String,
     url: String,
+    embedding_model: Option<String>,
+    embeddings_url: String,
 }
 
 /// Any chat completions server.
@@ -74,6 +85,13 @@ impl<'t, T: Transport> Wired<'t, T, Chat> {
                 key,
                 model: config.model.trim().to_owned(),
                 url: url(config),
+                embedding_model: config
+                    .embedding_model
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|m| !m.is_empty())
+                    .map(str::to_owned),
+                embeddings_url: embeddings_url(config),
             },
         })
     }
@@ -93,6 +111,17 @@ fn content_of(m: &AiMessage) -> Value {
 }
 
 impl Chat {
+    fn headers(&self) -> Vec<(String, String)> {
+        let mut headers = Vec::new();
+        if let Some(key) = &self.key {
+            match self.kind {
+                AiProviderKind::AzureOpenai => headers.push(("api-key".to_owned(), key.clone())),
+                _ => headers.push(("authorization".to_owned(), format!("Bearer {key}"))),
+            }
+        }
+        headers
+    }
+
     fn messages(&self, call: &AiCall) -> Vec<Value> {
         let system = match (&call.json, self.kind) {
             (Some(schema), AiProviderKind::OpenaiCompatible) => {
@@ -160,14 +189,7 @@ impl Wire for Chat {
                 "json_schema": { "name": "answer", "schema": schema, "strict": strict_compatible(schema) },
             });
         }
-        let mut headers = Vec::new();
-        if let Some(key) = &self.key {
-            match self.kind {
-                AiProviderKind::AzureOpenai => headers.push(("api-key".to_owned(), key.clone())),
-                _ => headers.push(("authorization".to_owned(), format!("Bearer {key}"))),
-            }
-        }
-        json_request(self.url.clone(), headers, &body)
+        json_request(self.url.clone(), self.headers(), &body)
     }
 
     fn key(&self) -> &str {
@@ -223,6 +245,46 @@ impl Wire for Chat {
 
     fn tools_refused(&self, status: u16) -> bool {
         self.kind == AiProviderKind::OpenaiCompatible && matches!(status, 400 | 404 | 422 | 501)
+    }
+
+    fn embed_request(&self, texts: &[String]) -> Result<HttpRequest, AiError> {
+        let model = self
+            .embedding_model
+            .as_deref()
+            .ok_or_else(missing_embedding_model)?;
+        let body = json!({ "model": model, "input": texts, "encoding_format": "float" });
+        Ok(json_request(
+            self.embeddings_url.clone(),
+            self.headers(),
+            &body,
+        ))
+    }
+
+    /// `data[].embedding`, ordered by `data[].index` (servers may answer out of order).
+    fn parse_embeddings(&self, body: &Value, count: usize) -> Result<Vec<Vec<f32>>, AiError> {
+        let data = body
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| AiError::Answer("the answer had no embeddings".into()))?;
+        if data.len() != count {
+            return Err(AiError::Answer(format!(
+                "expected {count} embeddings, got {}",
+                data.len()
+            )));
+        }
+        let mut slots: Vec<Option<Vec<f32>>> = vec![None; count];
+        for (position, item) in data.iter().enumerate() {
+            let index = item
+                .get("index")
+                .and_then(Value::as_u64)
+                .map_or(position, |i| i as usize);
+            let slot = slots
+                .get_mut(index)
+                .filter(|s| s.is_none())
+                .ok_or_else(|| AiError::Answer("the embeddings had a bad index".into()))?;
+            *slot = Some(vector_of(item.get("embedding").unwrap_or(&Value::Null))?);
+        }
+        Ok(slots.into_iter().flatten().collect())
     }
 }
 

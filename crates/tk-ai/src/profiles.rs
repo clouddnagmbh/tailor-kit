@@ -298,6 +298,7 @@ mod tests {
                 provider,
                 model: model.into(),
                 base_url: None,
+                embedding_model: None,
             },
         }
     }

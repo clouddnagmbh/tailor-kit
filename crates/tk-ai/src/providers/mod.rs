@@ -143,6 +143,38 @@ pub trait Wire {
     fn tools_refused(&self, _status: u16) -> bool {
         false
     }
+    /// The HTTP request that embeds `texts`; the default is [`AiError::Unsupported`].
+    fn embed_request(&self, _texts: &[String]) -> Result<HttpRequest, AiError> {
+        Err(no_embeddings())
+    }
+    /// The vectors of an embedding answer to `count` texts, in the order of the texts.
+    fn parse_embeddings(&self, _body: &Value, _count: usize) -> Result<Vec<Vec<f32>>, AiError> {
+        Err(no_embeddings())
+    }
+}
+
+fn no_embeddings() -> AiError {
+    AiError::Unsupported("embeddings with this provider".into())
+}
+
+fn missing_embedding_model() -> AiError {
+    AiError::Unsupported("this profile has no embedding model".into())
+}
+
+/// A JSON array of numbers as a vector; any other element is an unusable answer.
+fn vector_of(v: &Value) -> Result<Vec<f32>, AiError> {
+    let items = v
+        .as_array()
+        .filter(|a| !a.is_empty())
+        .ok_or_else(|| AiError::Answer("an embedding was not a list of numbers".into()))?;
+    items
+        .iter()
+        .map(|n| {
+            n.as_f64()
+                .map(|f| f as f32)
+                .ok_or_else(|| AiError::Answer("an embedding was not a list of numbers".into()))
+        })
+        .collect()
 }
 
 /// Turns the bytes of a streamed answer into pieces and, at the end, the whole reply.
@@ -195,6 +227,24 @@ impl<T: Transport, W: Wire> Wired<'_, T, W> {
         let body = serde_json::from_slice::<Value>(&done.body)
             .map_err(|_| AiError::Answer("the answer was not JSON".into()))?;
         self.wire.parse(&body)
+    }
+
+    async fn embedded(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, AiError> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let request = self.wire.embed_request(&texts)?;
+        let response = self.send(request).await?;
+        if response.head.status >= 400 {
+            return Err(self.refused(response, &AiCall::default()).await);
+        }
+        let started = web_time::Instant::now();
+        let done = collect(response, ANSWER_LIMIT, started)
+            .await
+            .map_err(|e| AiError::Transport(self.masked(e.to_string())))?;
+        let body = serde_json::from_slice::<Value>(&done.body)
+            .map_err(|_| AiError::Answer("the answer was not JSON".into()))?;
+        self.wire.parse_embeddings(&body, texts.len())
     }
 
     async fn streamed(&self, call: &AiCall, on: &dyn Fn(AiDelta)) -> Result<AiReply, AiError> {
@@ -288,6 +338,13 @@ impl<T: Transport, W: Wire> AiProvider for Wired<'_, T, W> {
         on: &'a dyn Fn(AiDelta),
     ) -> LocalBoxFuture<'a, Result<AiReply, AiError>> {
         Box::pin(async move { self.streamed(&call, on).await })
+    }
+
+    fn embed<'a>(
+        &'a self,
+        texts: Vec<String>,
+    ) -> LocalBoxFuture<'a, Result<Vec<Vec<f32>>, AiError>> {
+        Box::pin(async move { self.embedded(texts).await })
     }
 }
 
@@ -442,9 +499,13 @@ pub(super) mod testing {
             provider,
             model: model.into(),
             base_url: base.map(str::to_owned),
+            embedding_model: None,
         }
     }
 }
+
+#[cfg(test)]
+mod embed_tests;
 
 #[cfg(test)]
 mod tests {

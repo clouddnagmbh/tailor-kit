@@ -32,6 +32,7 @@
   import { dropEntries, dropKey, dropPosition, graphDropActions, type GraphDropRef } from "./drops";
   import { GraphData, type GraphScope } from "./graph.svelte";
   import GraphRow from "./GraphRow.svelte";
+  import { vimKeys, type VimList } from "../keys";
   import { commitMenu, matches, refLabels, selectTarget, type GraphContext } from "./model";
 
   let { select }: { select?: string } = $props();
@@ -388,6 +389,24 @@
     e.preventDefault();
   }
 
+  const vimList: VimList = {
+    count: () => n,
+    index: () => selectedIndex,
+    select: (i) => move(i),
+    page: () => Math.max(1, Math.floor(viewport / ROW) - 1),
+    find: () => {
+      if (!search) return false;
+      search.focus();
+      search.select();
+      return true;
+    },
+    repeat: (dir) => {
+      if (hits.length === 0) return false;
+      jumpHit(dir);
+      return true;
+    },
+  };
+
   function onViewKey(e: KeyboardEvent) {
     if (e.key !== "/" || e.defaultPrevented) return;
     const t = e.target as HTMLElement | null;
@@ -518,6 +537,7 @@
           bind:this={list}
           bind:clientHeight={viewport}
           onscroll={() => (scrollTop = list?.scrollTop ?? 0)}
+          use:vimKeys={() => (host.keyboard?.vim ? vimList : null)}
           onkeydown={onListKey}
           ondragover={onDragOver}
           ondragleave={(e) => {

@@ -13,6 +13,8 @@
   import { Avatar, Badge, Button, EmptyState, Skeleton } from "@tailor-kit/ui";
   import FileDiff from "../graph/FileDiff.svelte";
   import { relativeTime, shortId } from "../graph/model";
+  import { tick } from "svelte";
+  import { vimKeys, type VimList } from "../keys";
   import { getGitViews } from "../views.svelte";
   import { openGitWizard } from "../wizards/open";
 
@@ -81,6 +83,18 @@
       });
   });
 
+  const vimList: VimList = {
+    count: () => entries?.length ?? 0,
+    index: () => entries?.findIndex((x) => x.commit.oid === chosen) ?? -1,
+    select: (i) => {
+      const e = entries?.[i];
+      if (!e) return;
+      chosen = e.commit.oid;
+      void tick().then(() => document.querySelector<HTMLElement>(`[data-testid="file-history-list"] [data-oid="${e.commit.oid}"]`)?.focus());
+    },
+    labels: () => entries?.map((x) => `${x.commit.summary} ${x.commit.author} ${x.commit.oid}`) ?? [],
+  };
+
   function onkey(e: KeyboardEvent) {
     if (!entries || entries.length === 0) return;
     const i = entries.findIndex((x) => x.commit.oid === chosen);
@@ -121,7 +135,7 @@
   {:else}
     <div class="body">
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-      <ul class="list" role="listbox" aria-label="Commits that changed the file, newest first" tabindex="-1" onkeydown={onkey} data-testid="file-history-list">
+      <ul class="list" role="listbox" aria-label="Commits that changed the file, newest first" tabindex="-1" use:vimKeys={() => (host.keyboard?.vim ? vimList : null)} onkeydown={onkey} data-testid="file-history-list">
         {#each entries as e (e.commit.oid)}
           <li>
             <button

@@ -28,6 +28,7 @@ export * from "./extension-git";
 export * from "./format";
 export * from "./glossary";
 export * from "./host";
+export * from "./keys";
 export * from "./views.svelte";
 
 export { lineDiff, lineOps, type LineOp } from "./diff/textdiff";

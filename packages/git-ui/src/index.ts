@@ -11,6 +11,7 @@ export type * from "./types";
 export type * from "./api";
 export { BackendError } from "./api";
 export type * from "./extensions";
+export type * from "./nav";
 
 export { default as ExtensionActions } from "./ExtensionActions.svelte";
 export { default as ExtensionGitActions } from "./ExtensionGitActions.svelte";
@@ -29,6 +30,7 @@ export * from "./format";
 export * from "./glossary";
 export * from "./host";
 export * from "./keys";
+export * from "./viz";
 export * from "./views.svelte";
 
 export { lineDiff, lineOps, type LineOp } from "./diff/textdiff";

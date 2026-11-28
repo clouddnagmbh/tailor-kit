@@ -2,6 +2,9 @@
 // Copyright 2026 The Tailor Kit Authors
 
 export { default as AiDialog } from "./AiDialog.svelte";
+export { default as ConsentPopover } from "./ConsentPopover.svelte";
+export { default as InlineAiButton } from "./InlineAiButton.svelte";
+export { consentLine, formatBytes, previewHost } from "./consent";
 export { default as Markdown } from "./Markdown.svelte";
 export { default as PreviewDialog } from "./PreviewDialog.svelte";
 export { default as SettingsDialog } from "./SettingsDialog.svelte";

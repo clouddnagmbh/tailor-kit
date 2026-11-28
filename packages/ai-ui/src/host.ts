@@ -23,6 +23,9 @@ export interface AiBrand {
   fileOffNote: string;
   /** The "what is sent" paragraph at the end of the dialog (what the product puts into a call). */
   sentText: string;
+  /** The product shows the preview before every call (wave 8, consent popover): the settings
+   *  dialog then has no "When to show the preview" choice. Default: false. */
+  alwaysPreview?: boolean;
 }
 
 /** The calls of `Backend.ai` the settings dialog makes (a subset of the product's `AiApi`). */

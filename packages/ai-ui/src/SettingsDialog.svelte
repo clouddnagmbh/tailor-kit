@@ -314,6 +314,7 @@
       </section>
     {/if}
 
+    {#if !brand.alwaysPreview}
     <section aria-label="What will be sent">
       <h3>Show what will be sent</h3>
       <SegmentedControl
@@ -324,6 +325,7 @@
       />
       <p class="muted">The preview is always shown the first time a profile is used. It lists everything that leaves this app.</p>
     </section>
+    {/if}
 
     {#if hasScope}
       <section aria-label={`This ${brand.scopeNoun}`}>

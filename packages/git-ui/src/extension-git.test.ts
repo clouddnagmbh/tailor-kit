@@ -178,3 +178,20 @@ describe("Git contributions of extensions (wave 15 interface)", () => {
     expect(withRefActions(provided([]), "/r", menu, () => {})).toEqual(menu);
   });
 });
+
+describe("action groups (wave 8 interface)", () => {
+  it("passes the group of an action through and leaves other actions ungrouped", () => {
+    const ext: AppExtension = {
+      id: "g",
+      gitActions: () => [
+        { id: "explain", label: "Explain", group: "ai", run: () => {} },
+        { id: "plain", label: "Plain", run: () => {} },
+      ],
+    };
+    const refs = extensionGitActions(provided([ext]), { kind: "repository" } as never);
+    expect(refs.map((r) => [r.key, r.action.group])).toEqual([
+      ["g/explain", "ai"],
+      ["g/plain", undefined],
+    ]);
+  });
+});

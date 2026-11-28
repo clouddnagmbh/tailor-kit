@@ -28,8 +28,15 @@ export interface ExtensionAction {
   /** Short text (a word or two) shown as a small pill after the label wherever the action is
    *  rendered: the button, the "More" menu and the context menus. Since tailor-kit 0.6.1. */
   badge?: string;
+  /** A heading the action belongs to (since tailor-kit 0.8.0). Products list actions of one
+   *  group together, and a product's AI entry point shows only the `"ai"` ones. Absent: no group,
+   *  shown as before. */
+  group?: ExtensionActionGroup;
   run: () => unknown;
 }
+
+/** The groups an action can name; adding one is an additive change. */
+export type ExtensionActionGroup = "ai";
 
 /** Two revisions selected together (since wave 16): two commits or tags in the commit graph, or
  *  the sides of the comparison and of the diff of two revisions. */

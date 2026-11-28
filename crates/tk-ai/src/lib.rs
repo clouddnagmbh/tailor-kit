@@ -51,8 +51,8 @@ pub use providers::{
     GeminiProvider, OpenAiCompatibleProvider, endpoint_of, provider, reply_text, request_url,
 };
 pub use runtime::{
-    CallGuard, Calls, CancelToken, DEFAULT_MAX_TOKENS, Prepared, ask_text, execute, execute_on,
-    prepare_request, preview, request_call, resolve,
+    CallGuard, Calls, CancelToken, DEFAULT_MAX_TOKENS, Prepared, ask_text, execute,
+    execute_embed_on, execute_on, prepare_request, preview, request_call, resolve,
 };
 
 /// The model suggested when the user picks `anthropic` (they can change it).
@@ -88,6 +88,11 @@ pub struct AiConfig {
     /// `None`: the provider's public endpoint. For `openai-compatible` required, e.g.
     /// `http://localhost:11434/v1`.
     pub base_url: Option<String>,
+    /// The model that turns text into vectors ([`AiProvider::embed`]), e.g.
+    /// `text-embedding-3-small`, `nomic-embed-text` (Ollama) or `gemini-embedding-001`; for
+    /// Azure OpenAI the deployment name. `None`: this profile has no embeddings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -205,6 +210,23 @@ pub trait AiProvider {
             Ok(reply)
         })
     }
+
+    /// Vectors for `texts`, one per text in the same order. The default is
+    /// [`AiError::Unsupported`]: a provider opts in, and the profile needs an
+    /// [`AiConfig::embedding_model`]. The caller keeps batches to what the provider accepts
+    /// (OpenAI-style servers 2048 inputs, Gemini 100) and masks the texts first
+    /// ([`runtime::execute_embed_on`]).
+    fn embed<'a>(
+        &'a self,
+        texts: Vec<String>,
+    ) -> LocalBoxFuture<'a, Result<Vec<Vec<f32>>, AiError>> {
+        let _ = texts;
+        Box::pin(async {
+            Err(AiError::Unsupported(
+                "embeddings with this provider".to_owned(),
+            ))
+        })
+    }
 }
 
 /// Masks every secret value in all the forms it takes in text; see [`tk_secrets::redact`].
@@ -305,6 +327,7 @@ mod tests {
             provider: AiProviderKind::Anthropic,
             model: DEFAULT_ANTHROPIC_MODEL.into(),
             base_url: None,
+            embedding_model: None,
         };
         assert_eq!(c.validate(), Ok(()));
         c.model = " ".into();

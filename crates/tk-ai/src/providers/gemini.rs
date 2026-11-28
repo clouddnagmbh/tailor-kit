@@ -17,7 +17,10 @@ use serde_json::{Value, json};
 use tk_net::transport::{HttpRequest, Transport};
 
 use super::sse::{Sse, SseEvent};
-use super::{Decoder, Wire, Wired, base_url, json_request, schema_in_prompt};
+use super::{
+    Decoder, Wire, Wired, base_url, json_request, missing_embedding_model, schema_in_prompt,
+    vector_of,
+};
 use crate::{AiCall, AiConfig, AiDelta, AiError, AiReply, AiRole, AiStop, AiToolCall, AiUsage};
 
 /// Google's public endpoint.
@@ -36,6 +39,15 @@ pub(super) fn url(config: &AiConfig, stream: bool) -> String {
     } else {
         format!("{base}/v1beta/{model}:generateContent")
     }
+}
+
+/// `POST /v1beta/models/<embedding model>:batchEmbedContents`.
+pub(super) fn embed_url(config: &AiConfig, model: &str) -> String {
+    format!(
+        "{}/v1beta/{}:batchEmbedContents",
+        base_url(config, GEMINI_BASE_URL),
+        model_path(model)
+    )
 }
 
 pub struct Gemini {
@@ -167,6 +179,43 @@ impl Wire for Gemini {
 
     fn decoder(&self) -> Box<dyn Decoder> {
         Box::new(GeminiDecoder::default())
+    }
+
+    fn embed_request(&self, texts: &[String]) -> Result<HttpRequest, AiError> {
+        let model = self
+            .config
+            .embedding_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .ok_or_else(missing_embedding_model)?;
+        let name = model_path(model);
+        let requests: Vec<Value> = texts
+            .iter()
+            .map(|t| json!({ "model": name, "content": { "parts": [{ "text": t }] } }))
+            .collect();
+        Ok(json_request(
+            embed_url(&self.config, model),
+            vec![("x-goog-api-key".to_owned(), self.key.clone())],
+            &json!({ "requests": requests }),
+        ))
+    }
+
+    fn parse_embeddings(&self, body: &Value, count: usize) -> Result<Vec<Vec<f32>>, AiError> {
+        let items = body
+            .get("embeddings")
+            .and_then(Value::as_array)
+            .ok_or_else(|| AiError::Answer("the answer had no embeddings".into()))?;
+        if items.len() != count {
+            return Err(AiError::Answer(format!(
+                "expected {count} embeddings, got {}",
+                items.len()
+            )));
+        }
+        items
+            .iter()
+            .map(|i| vector_of(i.get("values").unwrap_or(&Value::Null)))
+            .collect()
     }
 }
 

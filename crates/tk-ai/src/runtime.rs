@@ -23,7 +23,7 @@ use tk_net::transport::Transport;
 
 use crate::{
     AiCall, AiContextSource, AiDelta, AiError, AiPreview, AiProfile, AiProvider, AiReply,
-    AiRequest, AiSettings, ContextBlock, mask_call, mask_error, provider, request_url,
+    AiRequest, AiSettings, ContextBlock, mask_call, mask_error, provider, redact, request_url,
 };
 
 /// Default answer size of a generic call.
@@ -190,6 +190,25 @@ pub async fn execute_on(
     }
     cancel
         .guard(provider.stream(call, on))
+        .await?
+        .map_err(|e| mask_error(e, secrets))
+}
+
+/// Vectors for `texts` from a provider the caller built: every text is masked with `secrets`
+/// first (the same masking as a call), the cancel token stops the request, errors are masked.
+/// Returns one vector per text, in order.
+pub async fn execute_embed_on(
+    provider: &dyn AiProvider,
+    texts: Vec<String>,
+    secrets: &[String],
+    cancel: &CancelToken,
+) -> Result<Vec<Vec<f32>>, AiError> {
+    if cancel.is_cancelled() {
+        return Err(AiError::Cancelled);
+    }
+    let texts = texts.iter().map(|t| redact(t, secrets)).collect();
+    cancel
+        .guard(provider.embed(texts))
         .await?
         .map_err(|e| mask_error(e, secrets))
 }

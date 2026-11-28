@@ -4,7 +4,8 @@
 <!-- "What will be sent" (wave 16): the exact, masked call before it leaves, readable: where it
      goes, how much, how many secret values were replaced (those places are marked), the
      instructions, the messages and the tools. "Show the raw call" shows the JSON. Send or
-     Cancel; Escape cancels and nothing is sent. The result is `{ send, remember }`. -->
+     Cancel; Escape cancels and nothing is sent. The result is `{ send, remember }`. A product that asks
+     before every call passes `noRemember: true` (no "don't show again"). -->
 <script lang="ts">
   import { Badge, Button, Checkbox, DialogFooter, Icon } from "@tailor-kit/ui";
 
@@ -69,7 +70,7 @@
   <DialogFooter>
     {#snippet start()}
       <Button variant="ghost" size="sm" data-testid="ai-preview-toggle" onclick={() => (raw = !raw)}>{raw ? "Show readable" : "Show the raw call"}</Button>
-      {#if preview.required}
+      {#if preview.required && props.noRemember !== true}
         <Checkbox label="Don't show this automatically" bind:checked={remember} data-testid="ai-preview-remember" />
       {/if}
     {/snippet}

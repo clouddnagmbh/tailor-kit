@@ -18,6 +18,8 @@ export interface MenuItem {
   shortcut?: string;
   /** Secondary text after the label. */
   hint?: string;
+  /** A short word shown as a small pill after the label. */
+  badge?: string;
   /** Destructive: drawn in the danger colour. */
   danger?: boolean;
   disabled?: boolean;

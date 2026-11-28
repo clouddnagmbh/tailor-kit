@@ -200,6 +200,7 @@
             <Icon name={entry.icon} size="sm" />
           {/if}
           <span class="text">{entry.label}</span>
+          {#if entry.badge}<span class="badge" data-testid="menu-badge">{entry.badge}</span>{/if}
           {#if entry.hint}<span class="hint">{entry.hint}</span>{/if}
           {#if entry.shortcut}<Kbd keys={entry.shortcut} size="sm" />{/if}
           {#if entry.items?.length}<Icon name="chevron-right" size="sm" class="sub" />{/if}
@@ -289,6 +290,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .badge {
+    flex: none;
+    padding: 0 var(--rt-space-3);
+    border-radius: 999px;
+    background: var(--rt-bg-subtle, transparent);
+    border: 1px solid var(--rt-border);
+    color: var(--rt-fg-subtle);
+    font-size: var(--rt-text-small);
+    line-height: 1.5;
   }
   .hint {
     color: var(--rt-fg-subtle);

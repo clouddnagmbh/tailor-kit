@@ -20,7 +20,7 @@
   const host = getGitHost();
   const review = host.backend.review;
   const git = host.backend.git;
-  const preset = untrack(() => props as { head?: string; base?: string });
+  const preset = untrack(() => props as { head?: string; base?: string; title?: string; body?: string });
 
   let loaded = $state(false);
   let refs = $state<GitRef[]>([]);
@@ -60,7 +60,9 @@
       const current = heads.find((r) => r.current)?.name ?? heads[0]?.name ?? "";
       head = preset.head && heads.some((r) => r.name === preset.head) ? preset.head : current;
       base = preset.base ?? defaultBase(remote, heads.map((r) => r.name), head);
-      title = titleFromBranch(head);
+      title = preset.title ?? titleFromBranch(head);
+      body = preset.body ?? "";
+      if (preset.title !== undefined) titleTouched = true;
     } catch (e) {
       error = describe(e);
     } finally {

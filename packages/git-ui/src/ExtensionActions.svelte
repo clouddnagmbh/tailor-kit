@@ -50,7 +50,7 @@
     }
   }
 
-  const items = $derived<MenuEntry[]>(menu.map((a) => ({ id: a.key, label: a.action.label, icon: a.action.icon, run: () => run(a) })));
+  const items = $derived<MenuEntry[]>(menu.map((a) => ({ id: a.key, label: a.action.label, icon: a.action.icon, badge: a.action.badge, run: () => run(a) })));
 </script>
 
 <svelte:window bind:innerWidth={width} />
@@ -62,7 +62,7 @@
         <IconButton icon={a.action.icon ?? "spark"} label={a.action.label} {size} data-testid="extension-action" data-action={a.key} onclick={() => run(a)} />
       {:else}
         <Button {size} {variant} icon={a.action.icon ?? "spark"} data-testid="extension-action" data-action={a.key} onclick={() => run(a)}>
-          {a.action.label}
+          {a.action.label}{#if a.action.badge}<span class="badge" data-testid="extension-action-badge">{a.action.badge}</span>{/if}
         </Button>
       {/if}
     {/each}
@@ -77,6 +77,14 @@
 {/if}
 
 <style>
+  .badge {
+    margin-inline-start: var(--rt-space-2);
+    padding: 0 var(--rt-space-3);
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: var(--rt-text-small);
+    opacity: 0.8;
+  }
   .actions {
     display: inline-flex;
     align-items: center;

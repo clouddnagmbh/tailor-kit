@@ -36,7 +36,7 @@ export { dateOrder, graphPage, reachable, sortChanges, sortRefs, type GraphSourc
 export { historyCommands } from "./history/commands";
 export { CI_LABEL, DEVICE_LOGIN_REGISTERED, deviceLoginOffered, groupComments, relativeTime, requestWord, stateLabel } from "./review/model";
 export { reviewCommands } from "./review/commands";
-export { openNewPull } from "./review/open-new-pull";
+export { openNewPull, type NewPullPrefill } from "./review/open-new-pull";
 export { gitWizardCommands } from "./wizards/commands";
 export { openGitWizard } from "./wizards/open";
 export { refNameProblem, suggestRefName } from "./wizards/refname";

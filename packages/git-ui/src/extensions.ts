@@ -25,6 +25,9 @@ export interface ExtensionAction {
   icon?: string;
   /** Shown as a button (at most two per place, the first ones); else in the "More" menu. */
   inline?: boolean;
+  /** Short text (a word or two) shown as a small pill after the label wherever the action is
+   *  rendered: the button, the "More" menu and the context menus. Since tailor-kit 0.6.1. */
+  badge?: string;
   run: () => unknown;
 }
 

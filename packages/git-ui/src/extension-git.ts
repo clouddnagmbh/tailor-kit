@@ -79,6 +79,7 @@ export function gitActionEntries(
         id: r.key,
         label: r.action.label,
         icon: r.action.icon,
+        badge: r.action.badge,
         run: () => {
           try {
             const out = r.action.run();

@@ -148,6 +148,15 @@ describe("Git contributions of extensions (wave 15 interface)", () => {
     expect(fail.mock.calls.map((c) => c[0])).toEqual(["sync", "async"]);
   });
 
+  it("carries an action's badge into context menu entries", () => {
+    const ext: AppExtension = {
+      id: "b",
+      gitActions: (_ctx, t) => (t.kind === "ref" ? [{ id: "x", label: "Do it", badge: "New", run: () => {} }, { id: "y", label: "Plain", run: () => {} }] : []),
+    };
+    const entries = gitActionEntries(provided([ext]), { kind: "ref", repository: "/r", ref: "main" }, () => {});
+    expect(entries.slice(1).map((e) => ("badge" in e ? e.badge : "none"))).toEqual(["New", undefined]);
+  });
+
   it("adds ref actions to the submenu of each branch or tag of a commit's menu", () => {
     const ext: AppExtension = {
       id: "r",

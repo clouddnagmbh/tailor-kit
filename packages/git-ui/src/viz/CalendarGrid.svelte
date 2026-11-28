@@ -66,9 +66,8 @@
 <div class="calendar" data-testid="commit-calendar" data-total={total}>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg
-    {width}
-    {height}
     viewBox="0 0 {width} {height}"
+    style:max-width="{width}px"
     role="application"
     aria-label="Commit calendar: {total} commits in {weeks} weeks. Arrow keys move over the days, Enter selects a day."
     aria-roledescription="calendar"
@@ -124,11 +123,12 @@
 <style>
   .calendar {
     max-width: 100%;
-    overflow-x: auto;
     padding-bottom: var(--rt-space-2);
   }
   svg {
     display: block;
+    width: 100%;
+    height: auto;
     border-radius: var(--rt-radius-md);
   }
   svg:focus-visible {

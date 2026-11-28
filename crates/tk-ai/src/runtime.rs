@@ -22,8 +22,8 @@ use std::task::{Poll, Waker};
 use tk_net::transport::Transport;
 
 use crate::{
-    AiCall, AiContextSource, AiDelta, AiError, AiPreview, AiProfile, AiReply, AiRequest,
-    AiSettings, ContextBlock, mask_call, mask_error, provider, request_url,
+    AiCall, AiContextSource, AiDelta, AiError, AiPreview, AiProfile, AiProvider, AiReply,
+    AiRequest, AiSettings, ContextBlock, mask_call, mask_error, provider, request_url,
 };
 
 /// Default answer size of a generic call.
@@ -173,8 +173,23 @@ pub async fn execute<T: Transport>(
     }
     let p =
         provider(transport, &profile.config, key, browser).map_err(|e| mask_error(e, secrets))?;
+    execute_on(p.as_ref(), call, secrets, cancel, on).await
+}
+
+/// [`execute`] on a provider the caller built (an add-on's own): same cancel check, same
+/// guard, errors masked with `secrets`.
+pub async fn execute_on(
+    provider: &dyn AiProvider,
+    call: AiCall,
+    secrets: &[String],
+    cancel: &CancelToken,
+    on: &dyn Fn(AiDelta),
+) -> Result<AiReply, AiError> {
+    if cancel.is_cancelled() {
+        return Err(AiError::Cancelled);
+    }
     cancel
-        .guard(p.stream(call, on))
+        .guard(provider.stream(call, on))
         .await?
         .map_err(|e| mask_error(e, secrets))
 }
@@ -280,6 +295,58 @@ mod tests {
         }));
         assert_eq!(r.unwrap_err(), AiError::Cancelled);
         assert!(token.is_cancelled());
+    }
+
+    struct Fake(Result<String, AiError>);
+
+    impl AiProvider for Fake {
+        fn complete<'a>(
+            &'a self,
+            _call: AiCall,
+        ) -> tk_net::LocalBoxFuture<'a, Result<String, AiError>> {
+            let r = self.0.clone();
+            Box::pin(async move { r })
+        }
+    }
+
+    fn call() -> AiCall {
+        AiCall::default()
+    }
+
+    #[test]
+    fn execute_on_streams_a_fake_provider() {
+        let fake = Fake(Ok("hi".to_owned()));
+        let r = block_on(execute_on(
+            &fake,
+            call(),
+            &[],
+            &CancelToken::default(),
+            &|_| {},
+        ));
+        assert_eq!(r.unwrap().text, "hi");
+    }
+
+    #[test]
+    fn execute_on_masks_secrets_in_errors() {
+        let fake = Fake(Err(AiError::Provider("bad key sk-secret-1234".to_owned())));
+        let r = block_on(execute_on(
+            &fake,
+            call(),
+            &["sk-secret-1234".to_owned()],
+            &CancelToken::default(),
+            &|_| {},
+        ));
+        let text = format!("{:?}", r.unwrap_err());
+        assert!(!text.contains("sk-secret-1234"), "{text}");
+    }
+
+    #[test]
+    fn execute_on_honours_cancel() {
+        let fake = Fake(Ok("hi".to_owned()));
+        let token = CancelToken::default();
+        token.cancel();
+        let r = block_on(execute_on(&fake, call(), &[], &token, &|_| {}));
+        assert_eq!(r.unwrap_err(), AiError::Cancelled);
     }
 
     #[test]

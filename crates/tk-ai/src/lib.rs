@@ -51,7 +51,7 @@ pub use providers::{
     GeminiProvider, OpenAiCompatibleProvider, endpoint_of, provider, reply_text, request_url,
 };
 pub use runtime::{
-    CallGuard, Calls, CancelToken, DEFAULT_MAX_TOKENS, Prepared, ask_text, execute,
+    CallGuard, Calls, CancelToken, DEFAULT_MAX_TOKENS, Prepared, ask_text, execute, execute_on,
     prepare_request, preview, request_call, resolve,
 };
 

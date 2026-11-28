@@ -18,6 +18,8 @@ export { default as ExtensionGitActions } from "./ExtensionGitActions.svelte";
 export { default as ExtensionGitHint } from "./ExtensionGitHint.svelte";
 export { default as GitPanel } from "./GitPanel.svelte";
 export { default as GitViewHost } from "./GitViewHost.svelte";
+export { default as ChangeBar } from "./changes/ChangeBar.svelte";
+export * from "./changes/bar";
 export { default as CloneForm } from "./CloneForm.svelte";
 export { default as CloneRepositoryDialog } from "./CloneRepositoryDialog.svelte";
 export { default as LineDiff } from "./diff/LineDiff.svelte";

@@ -20,7 +20,23 @@
   import EditorPicker from "../extension/EditorPicker.svelte";
   import { diff3, join, toLines, type Block, type Choice } from "./diff3";
 
-  let { path, onclose }: { path: string; onclose: () => void } = $props();
+  let {
+    path,
+    onclose,
+    keys = false,
+    onresolved,
+    header = true,
+  }: {
+    path: string;
+    onclose: () => void;
+    /** Wave 8 (additive): ⌘/Ctrl+Enter resolves the file with the shown result. */
+    keys?: boolean;
+    /** Wave 8 (additive): called once the file is resolved (`via`: the key or the button) instead of
+     *  closing the view; the host decides what comes next (the next file, the commit). */
+    onresolved?: (path: string, via: "key" | "button") => void;
+    /** Wave 8 (additive): `false` leaves out the title and "Back" (the host has its own). */
+    header?: boolean;
+  } = $props();
   const host = getGitHost();
   const provided = getGitExtensions();
 
@@ -83,13 +99,15 @@
     edited = null;
   }
 
-  async function resolve() {
+  async function resolve(via: "key" | "button" = "button") {
+    if (busy || blocked) return;
     busy = true;
     error = null;
     try {
       await host.backend.git.resolveText(path, result);
       await host.reload();
-      closeOnce();
+      if (onresolved) onresolved(path, via);
+      else closeOnce();
     } catch (e) {
       error = e instanceof BackendError || e instanceof Error ? e.message : String(e);
     } finally {
@@ -100,13 +118,22 @@
   const lines = (l: string[]) => (l.length === 0 ? "(nothing)" : l.join("\n"));
 </script>
 
-<div class="merge" data-testid="text-merge">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  class="merge"
+  data-testid="text-merge"
+  onkeydown={(e) => {
+    if (!keys || e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.defaultPrevented) return;
+    e.preventDefault();
+    void resolve("key");
+  }}
+>
   <ExtensionGitHint target={{ place: "git", repository: host.activeRepository ?? "", view: "conflict" }} />
-  <header>
-    <h2>Resolve <code>{path}</code></h2>
+  <header class:bare={!header}>
+    {#if header}<h2>Resolve <code>{path}</code></h2>{:else}<span class="grow"></span>{/if}
     <EditorPicker {editors} kind="merge" bind:value={choice} onchange={(v) => chooseEditor(host.storage, "merge", v)} />
     <ExtensionGitActions target={{ kind: "conflict", repository: host.activeRepository ?? "", path }} label="Conflict actions" />
-    <Button variant="ghost" onclick={onclose}>Back</Button>
+    {#if header}<Button variant="ghost" onclick={onclose}>Back</Button>{/if}
   </header>
   {#if error}
     <Banner tone="danger"><span data-testid="text-merge-error">{error}</span></Banner>
@@ -147,7 +174,7 @@
     <TextArea label="Result" mono rows={10} data-testid="text-merge-result" value={result} oninput={(e) => (edited = (e.currentTarget as HTMLTextAreaElement).value)} />
     {#if blocked}<Banner tone="warn">{blocked}</Banner>{/if}
     <footer>
-      <Button variant="primary" data-testid="text-merge-resolve" disabled={busy || !!blocked} loading={busy} onclick={resolve}>Resolve with this result</Button>
+      <Button variant="primary" data-testid="text-merge-resolve" disabled={busy || !!blocked} loading={busy} onclick={() => resolve("button")}>Resolve with this result</Button>
       <Button variant="ghost" onclick={onclose}>Cancel</Button>
     </footer>
   {/if}
@@ -166,6 +193,9 @@
     display: flex;
     align-items: center;
     gap: var(--rt-space-3);
+  }
+  .grow {
+    flex: 1;
   }
   h2 {
     flex: 1;

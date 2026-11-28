@@ -85,7 +85,15 @@
   import { getGitViews } from "./views.svelte";
   import { openGitWizard, type GitWizardKind } from "./wizards/open";
 
-  let { onopen }: { onopen: (info: GitOwnerInfo) => Promise<void> } = $props();
+  let {
+    onopen,
+    changes: showChanges = true,
+  }: {
+    onopen: (info: GitOwnerInfo) => Promise<void>;
+    /** Wave 8 (additive): `false` leaves out the "Changes" section (file list and commit form) for a
+     *  product that shows the working copy in its main area; everything else stays. */
+    changes?: boolean;
+  } = $props();
   const host = getGitHost();
   const views = getGitViews();
   const commands = $derived(host.commands(views));
@@ -855,6 +863,7 @@
       </div>
     {/if}
 
+    {#if showChanges}
     <div class="changes" data-testid="git-changes">
       <Section title="Changes" count={files.length > 0 ? files.length : undefined}>
         {#snippet actions()}
@@ -952,6 +961,7 @@
         {/if}
       </Section>
     </div>
+    {/if}
 
     {#if stashes.length > 0}
       <div class="stashes" data-testid="git-stashes">

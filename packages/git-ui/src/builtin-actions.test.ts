@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { withBuiltinFileActions } from "./builtin-actions";
+import { commandsFor, withBuiltinFileActions } from "./builtin-actions";
 import { extensionGitActions, gitActionEntries } from "./extension-git";
 import type { GitContent } from "./host";
 import { GitViews } from "./views.svelte";
@@ -70,5 +70,41 @@ describe("the kit's Blame and File history actions", () => {
     expect(withBuiltinFileActions(base, { content }, new GitViews())).toBe(base);
     expect(withBuiltinFileActions(null, { content }, new GitViews())).toBeNull();
     expect(withBuiltinFileActions(base, {}, undefined)).toBe(base);
+  });
+});
+
+describe("commandsFor", () => {
+  it("lists every action of every extension on the target, in order, with its group", () => {
+    const a: GitExtension = { id: "a", gitActions: () => [{ id: "one", label: "One", run: () => {} }, { id: "ai", label: "Ask", group: "ai", badge: "beta", run: () => {} }] };
+    const b: GitExtension = { id: "b", gitActions: (_c, t) => (t.kind === "repository" ? [{ id: "two", label: "Two", icon: "x", run: () => {} }] : []) };
+    const repo: GitActionTarget = { kind: "repository", repository: "/r" };
+    const out = commandsFor(provided([a, b]), repo);
+    expect(out.map((c) => [c.key, c.label, c.group ?? null, c.badge ?? null])).toEqual([
+      ["a/one", "One", null, null],
+      ["a/ai", "Ask", "ai", "beta"],
+      ["b/two", "Two", null, null],
+    ]);
+    expect(commandsFor(provided([a, b]), { kind: "commit", repository: "/r", commit: "c" }).map((c) => c.key)).toEqual(["a/one", "a/ai"]);
+    expect(commandsFor(null, repo)).toEqual([]);
+  });
+
+  it("runs an action and reports a failure instead of throwing", async () => {
+    const seen: string[] = [];
+    const x: GitExtension = {
+      id: "x",
+      gitActions: () => [
+        { id: "ok", label: "Ok", run: () => void seen.push("ran") },
+        { id: "sync", label: "Sync", run: () => { throw new Error("no sync"); } },
+        { id: "async", label: "Async", run: async () => { throw new Error("no async"); } },
+      ],
+    };
+    const errors: string[] = [];
+    const [ok, sync, asy] = commandsFor(provided([x]), { kind: "repository", repository: "/r" }, (m) => errors.push(m));
+    ok!.run();
+    sync!.run();
+    asy!.run();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen).toEqual(["ran"]);
+    expect(errors).toEqual(["no sync", "no async"]);
   });
 });

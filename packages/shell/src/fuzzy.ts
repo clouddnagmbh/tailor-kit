@@ -43,3 +43,31 @@ export function fuzzyFilter<T>(items: readonly T[], query: string, text: (item: 
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((x) => x.item);
 }
+
+/** Which characters of `text` the words of `query` matched, for highlighting (since tailor-kit
+ *  0.8.1): ascending indices into `text`, or `null` if it does not match. Each word is matched
+ *  greedily from its previous word's start, so it can differ from the best-scoring placement
+ *  `fuzzyScore` weighs; a highlight is a hint, not the ranking. Empty query: no indices. */
+export function fuzzyPositions(query: string, text: string): number[] | null {
+  const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const lower = text.toLowerCase();
+  const out = new Set<number>();
+  for (const token of tokens) {
+    // Prefer a contiguous match of the whole word, then the word start, then a subsequence.
+    const whole = lower.indexOf(token);
+    if (whole >= 0) {
+      for (let i = 0; i < token.length; i++) out.add(whole + i);
+      continue;
+    }
+    let from = 0;
+    const found: number[] = [];
+    for (const ch of token) {
+      const i = lower.indexOf(ch, from);
+      if (i < 0) return null;
+      found.push(i);
+      from = i + 1;
+    }
+    for (const i of found) out.add(i);
+  }
+  return [...out].sort((a, b) => a - b);
+}

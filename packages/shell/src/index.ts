@@ -6,7 +6,7 @@ export { default as DialogHost } from "./DialogHost.svelte";
 export { default as Resizer } from "./Resizer.svelte";
 export type { Command } from "./command";
 export type { HostedDialog } from "./dialog";
-export { fuzzyFilter, fuzzyScore } from "./fuzzy";
+export { fuzzyFilter, fuzzyPositions, fuzzyScore } from "./fuzzy";
 export { HintStore } from "./hint-store";
 export { formatShortcut, isMacPlatform, matchShortcut, type Shortcut } from "./shortcuts";
 export { createShellStorage, isNumber, type ShellStorage } from "./storage";

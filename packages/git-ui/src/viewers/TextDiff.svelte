@@ -5,9 +5,13 @@
      file) are virtualised: a viewport of fixed-height rows draws only the rows in view, so the
      frame time does not depend on the size of the file (wave 3, strand G). -->
 <script lang="ts">
+  import DiffMinimap from "../diff/DiffMinimap.svelte";
   import Words from "../diff/Words.svelte";
   import { EmptyState } from "@tailor-kit/ui";
+  import { getGitHost } from "../host";
   import { diffRows } from "./model";
+
+  let scrollIds = 0;
 
   let {
     before,
@@ -30,8 +34,21 @@
   $effect(() => onhunks?.(rows.filter((r) => r.kind === "hunk").length));
 
   const virtual = $derived(rows.length > VIRTUAL_FROM);
+  // The host may switch on a strip with the changed blocks beside the diff (wave 8). Such a diff
+  // scrolls inside a frame of its own, so the strip has something to show and to move.
+  let host: ReturnType<typeof getGitHost> | null = null;
+  try {
+    host = getGitHost();
+  } catch {
+    // Outside a Git host (a gallery, a test): no strip.
+  }
+  const minimapOn = $derived(host?.viz?.diffMinimap === true);
+  const framed = $derived(minimapOn && !virtual && rows.length > 40);
+  const scrollId = `diff-scroll-${++scrollIds}`;
+  const kinds = $derived(minimapOn ? rows.map((r) => (r.kind === "added" ? "a" : r.kind === "removed" ? "r" : r.kind === "hunk" ? "h" : "c")) : []);
   let viewport = $state<HTMLDivElement>();
   let scrollTop = $state(0);
+  let scrollHeight = $state(0);
   let viewHeight = $state(480);
   /** The height of one row in px: the theme's small leading. */
   let rowHeight = $state(16);
@@ -45,6 +62,13 @@
   const first = $derived(Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN));
   const last = $derived(Math.min(rows.length, Math.ceil((scrollTop + viewHeight) / rowHeight) + OVERSCAN));
   const visible = $derived(virtual ? rows.slice(first, last) : rows);
+  $effect(() => {
+    rows.length;
+    if (viewport) scrollHeight = viewport.scrollHeight;
+  });
+  function seek(fraction: number) {
+    if (viewport) viewport.scrollTop = fraction * viewport.scrollHeight;
+  }
 </script>
 
 {#snippet line(row: (typeof rows)[number])}
@@ -63,29 +87,44 @@
 <div class="text-diff" data-testid="text-diff">
   {#if rows.length === 0}
     <div data-testid="text-diff-empty"><EmptyState icon="file-text" title="No line changes" text="The text is the same on both sides." size="sm" /></div>
-  {:else if virtual}
-    <!-- A scrollable region must be reachable by keyboard to be scrolled. -->
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div
-      class="viewport"
-      data-testid="text-diff-virtual"
-      data-rows={rows.length}
-      data-drawn={visible.length}
-      role="region"
-      aria-label="Diff, {rows.length} rows"
-      tabindex="0"
-      bind:this={viewport}
-      bind:clientHeight={viewHeight}
-      onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}
-      style:--row-height="{rowHeight}px"
-    >
-      <div class="sizer" style:height="{rows.length * rowHeight}px">
-        <div class="window" style:transform="translateY({first * rowHeight}px)">
-          {#each visible as row}
+  {:else if virtual || framed}
+    <div class="frame" class:with-map={minimapOn}>
+      <!-- A scrollable region must be reachable by keyboard to be scrolled. -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div
+        class="viewport"
+        id={scrollId}
+        data-testid={virtual ? "text-diff-virtual" : "text-diff-framed"}
+        data-rows={rows.length}
+        data-drawn={visible.length}
+        role="region"
+        aria-label="Diff, {rows.length} rows"
+        tabindex="0"
+        bind:this={viewport}
+        bind:clientHeight={viewHeight}
+        onscroll={(e) => {
+          scrollTop = e.currentTarget.scrollTop;
+          scrollHeight = e.currentTarget.scrollHeight;
+        }}
+        style:--row-height="{rowHeight}px"
+      >
+        {#if virtual}
+          <div class="sizer" style:height="{rows.length * rowHeight}px">
+            <div class="window" style:transform="translateY({first * rowHeight}px)">
+              {#each visible as row}
+                {@render line(row)}
+              {/each}
+            </div>
+          </div>
+        {:else}
+          {#each rows as row}
             {@render line(row)}
           {/each}
-        </div>
+        {/if}
       </div>
+      {#if minimapOn}
+        <DiffMinimap {kinds} {scrollTop} scrollHeight={virtual ? rows.length * rowHeight : scrollHeight} clientHeight={viewHeight} controls={scrollId} onseek={seek} />
+      {/if}
     </div>
   {:else}
     {#each rows as row}
@@ -140,6 +179,15 @@
     height: min(70vh, 48rem);
     overflow: auto;
     contain: strict;
+  }
+  .frame.with-map {
+    display: flex;
+    height: min(70vh, 48rem);
+  }
+  .frame.with-map .viewport {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
   }
   .sizer {
     position: relative;

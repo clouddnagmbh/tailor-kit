@@ -10,6 +10,7 @@
 // Replacing them: an extension that offers an action with the id `blame` (or `file-history`) on a
 // file target replaces the kit's action of that name, whatever its label or extension id.
 
+import { extensionGitActions } from "./extension-git";
 import type { ExtensionAction, GitActionTarget, GitExtension, ProvidedGitExtensions } from "./extensions";
 import type { GitHost } from "./host";
 import type { GitViews } from "./views.svelte";
@@ -59,4 +60,46 @@ export function withBuiltinFileActions(
   if (host.content || !views) return provided;
   const own = builtinFileExtension(provided, views);
   return provided ? { ...provided, extensions: [...provided.extensions, own] } : { extensions: [own], ctx: {} as ProvidedGitExtensions["ctx"] };
+}
+
+/** One action of an extension as a command of a command palette (since tailor-kit 0.8.1). */
+export interface ActionCommand {
+  /** `<extension id>/<action id>`, unique for the target. */
+  key: string;
+  extension: string;
+  label: string;
+  icon?: string;
+  badge?: string;
+  group?: ExtensionAction["group"];
+  /** Runs the action. A failing action reports through `onerror` and never throws. */
+  run: () => void;
+}
+
+/** Every action every extension offers on `target`, plus the kit's own file actions, as flat
+ *  commands for a palette: one place that lists what the menus of the views list, so a product's
+ *  palette finds every action without knowing the extensions. `provided` is
+ *  `GitHost.extensions` (already carrying the built-in file actions if the product wants them,
+ *  see `withBuiltinFileActions`). A failing extension is skipped (it reports itself elsewhere). */
+export function commandsFor(
+  provided: ProvidedGitExtensions | null,
+  target: GitActionTarget,
+  onerror: (message: string) => void = () => {},
+): ActionCommand[] {
+  const fail = (e: unknown) => onerror(e instanceof Error ? e.message : String(e));
+  return extensionGitActions(provided, target).map((r) => ({
+    key: r.key,
+    extension: r.extension,
+    label: r.action.label,
+    icon: r.action.icon,
+    badge: r.action.badge,
+    group: r.action.group,
+    run: () => {
+      try {
+        const out = r.action.run();
+        if (out instanceof Promise) out.catch(fail);
+      } catch (e) {
+        fail(e);
+      }
+    },
+  }));
 }

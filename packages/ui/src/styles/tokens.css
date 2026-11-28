@@ -74,6 +74,15 @@
   --rt-ease-out: cubic-bezier(0, 0, 0.2, 1);
   --rt-dur-fast: 120ms;
   --rt-dur-normal: 200ms;
+  /* Wave 8: motion that explains (popovers, a view changing, a drag): fast 120 ms, base 180 ms. */
+  --rt-motion-fast: 120ms;
+  --rt-motion-base: 180ms;
+
+  /* Wave 8: height of one row in a list (sidebar, file lists, graph rows). `data-density` on
+     <html> picks the step; compact is the default for lists, comfortable for touch and zoom. */
+  --rt-row-h-compact: 24px;
+  --rt-row-h-comfortable: 30px;
+  --rt-row-h: var(--rt-row-h-compact);
 
   /* Focus ring: `outline` for buttons and links, `--rt-focus-ring` (box-shadow) for fields. */
   --rt-focus-width: 2px;
@@ -193,6 +202,25 @@
   --rt-diff-del-bg: rgb(201 48 44 / 0.08);
   --rt-diff-add-word: rgb(24 128 74 / 0.26);
   --rt-diff-del-word: rgb(201 48 44 / 0.22);
+
+  /* Wave 8: the colour of everything the AI does (sparkle, consent, answers); never the brand colour. */
+  --rt-ai: #7c45c8;
+  --rt-ai-bg: #f5effc;
+  --rt-ai-fg: #6234a3;
+  --rt-ai-border: #dcc9f3;
+  /* Wave 8: charts. Six categorical colours (each at least 3:1 on `--rt-bg`, apart from the brand
+     yellow and from the lanes' blue) and five sequential steps from few to many (light to strong). */
+  --rt-chart-1: #3e63dd;
+  --rt-chart-2: #12896b;
+  --rt-chart-3: #c2410c;
+  --rt-chart-4: #8e4ec6;
+  --rt-chart-5: #c0307f;
+  --rt-chart-6: #0a7f9f;
+  --rt-seq-1: #dbe5fb;
+  --rt-seq-2: #aec3f6;
+  --rt-seq-3: #7d9bec;
+  --rt-seq-4: #4f72dd;
+  --rt-seq-5: #2d49b5;
 }
 
 /* ── Dark palette: layered greys, never pure black; accents tuned for dark ────────────────── */
@@ -273,6 +301,21 @@
     --rt-diff-del-bg: rgb(242 117 109 / 0.12);
     --rt-diff-add-word: rgb(76 194 127 / 0.32);
     --rt-diff-del-word: rgb(242 117 109 / 0.3);
+    --rt-ai: #c29bf5;
+    --rt-ai-bg: #251b38;
+    --rt-ai-fg: #d7bcfa;
+    --rt-ai-border: #43315f;
+    --rt-chart-1: #8b9dff;
+    --rt-chart-2: #3dd6a4;
+    --rt-chart-3: #ff9e6b;
+    --rt-chart-4: #c29bf5;
+    --rt-chart-5: #f27ac2;
+    --rt-chart-6: #4cc9e0;
+    --rt-seq-1: #1f2a52;
+    --rt-seq-2: #2e418a;
+    --rt-seq-3: #4561c9;
+    --rt-seq-4: #7b94f2;
+    --rt-seq-5: #b7c4ff;
   }
 }
 
@@ -351,6 +394,21 @@
   --rt-diff-del-bg: rgb(242 117 109 / 0.12);
   --rt-diff-add-word: rgb(76 194 127 / 0.32);
   --rt-diff-del-word: rgb(242 117 109 / 0.3);
+  --rt-ai: #c29bf5;
+  --rt-ai-bg: #251b38;
+  --rt-ai-fg: #d7bcfa;
+  --rt-ai-border: #43315f;
+  --rt-chart-1: #8b9dff;
+  --rt-chart-2: #3dd6a4;
+  --rt-chart-3: #ff9e6b;
+  --rt-chart-4: #c29bf5;
+  --rt-chart-5: #f27ac2;
+  --rt-chart-6: #4cc9e0;
+  --rt-seq-1: #1f2a52;
+  --rt-seq-2: #2e418a;
+  --rt-seq-3: #4561c9;
+  --rt-seq-4: #7b94f2;
+  --rt-seq-5: #b7c4ff;
 }
 
 /* ── Derived tokens: declared on every themed element, so they follow a scoped theme ──────── */
@@ -363,10 +421,17 @@
   --rt-shadow: var(--rt-elev-3);
 }
 
+/* Wave 8: density. Set `data-density="comfortable"` on <html>; without it, rows are compact. */
+:root[data-density="comfortable"] {
+  --rt-row-h: var(--rt-row-h-comfortable);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --rt-dur-fast: 0ms;
     --rt-dur-normal: 0ms;
+    --rt-motion-fast: 0ms;
+    --rt-motion-base: 0ms;
   }
 }
 

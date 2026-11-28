@@ -117,4 +117,50 @@ describe("tokens v2", () => {
       }
     });
   }
+
+  // Wave 8 additions.
+  it("has the wave 8 tokens: density, motion, the AI colour, chart colours", () => {
+    for (const n of ["--rt-row-h-compact", "--rt-row-h-comfortable", "--rt-row-h", "--rt-motion-fast", "--rt-motion-base"]) expect(scales.has(n), n).toBe(true);
+    expect(scales.get("--rt-row-h-compact")).toBe("24px");
+    expect(scales.get("--rt-row-h-comfortable")).toBe("30px");
+    expect(scales.get("--rt-motion-fast")).toBe("120ms");
+    expect(scales.get("--rt-motion-base")).toBe("180ms");
+    expect(css).toContain(':root[data-density="comfortable"]');
+    for (const palette of [light, dark]) {
+      for (const n of ["--rt-ai", "--rt-ai-bg", "--rt-ai-fg", "--rt-ai-border"]) expect(palette.has(n), n).toBe(true);
+      for (let i = 1; i <= 6; i++) expect(palette.has(`--rt-chart-${i}`)).toBe(true);
+      for (let i = 1; i <= 5; i++) expect(palette.has(`--rt-seq-${i}`)).toBe(true);
+    }
+  });
+
+  it("zeroes the motion tokens for reduced motion", () => {
+    const at = css.indexOf("prefers-reduced-motion: reduce");
+    const rule = css.slice(at, css.indexOf("}", css.indexOf("}", at) + 1));
+    expect(rule).toContain("--rt-motion-fast: 0ms");
+    expect(rule).toContain("--rt-motion-base: 0ms");
+  });
+
+  for (const [name, palette] of [
+    ["light", light],
+    ["dark", dark],
+  ] as const) {
+    it(`keeps the AI text readable in ${name}`, () => {
+      expect(contrast(palette.get("--rt-ai")!, palette.get("--rt-bg")!)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(palette.get("--rt-ai-fg")!, palette.get("--rt-ai-bg")!)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`draws charts in ${name} with at least 3:1 on the canvas, apart from each other and from the brand yellow`, () => {
+      const colours = [1, 2, 3, 4, 5, 6].map((i) => palette.get(`--rt-chart-${i}`)!);
+      for (const c of colours) expect(contrast(c, palette.get("--rt-bg")!), c).toBeGreaterThanOrEqual(3);
+      expect(new Set(colours).size).toBe(6);
+      for (const c of colours) expect(c.toLowerCase()).not.toBe("#f2b705");
+    });
+
+    it(`has sequential steps in ${name} that get stronger one by one`, () => {
+      const bg = palette.get("--rt-bg")!;
+      const steps = [1, 2, 3, 4, 5].map((i) => contrast(palette.get(`--rt-seq-${i}`)!, bg));
+      // Light: from nearly the canvas (low contrast) to strong; dark: from nearly the canvas to bright.
+      for (let i = 1; i < steps.length; i++) expect(steps[i]!, `step ${i + 1}`).toBeGreaterThan(steps[i - 1]!);
+    });
+  }
 });

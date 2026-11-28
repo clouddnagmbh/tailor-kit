@@ -199,6 +199,32 @@ export interface GitHost {
   /** Keyboard settings; read each time a key is pressed, so a change takes effect at once.
    *  Absent: everything off. */
   readonly keyboard?: GitKeyboard;
+
+  /** Optional graphics of the views (wave 8); read on every render, so a change takes effect at
+   *  once. Absent: the views look as they always did. */
+  readonly viz?: GitViz;
+}
+
+/** What the file tree shows of a file or folder: how much it changed lately. */
+export interface FileActivity {
+  /** Commits that changed it in the window. */
+  readonly changes: number;
+  /** Author time of the newest change, Unix seconds. */
+  readonly last: number;
+  /** 0 … 1: `changes` relative to the busiest entry of the tree, for the length of the bar. */
+  readonly share: number;
+  /** The window in days ("in 90 days"). */
+  readonly days: number;
+}
+
+/** Optional graphics the host switches on (wave 8, strand E). */
+export interface GitViz {
+  /** A strip beside every text diff with its changed blocks; a click jumps there. */
+  readonly diffMinimap?: boolean;
+  /** The blame gutter is coloured by the age of the commit. */
+  readonly blameAge?: boolean;
+  /** A bar after each name in the file tree; `null`: nothing to show for this path. */
+  readonly fileActivity?: (path: string) => FileActivity | null;
 }
 
 /** Keyboard options of the Git lists. */

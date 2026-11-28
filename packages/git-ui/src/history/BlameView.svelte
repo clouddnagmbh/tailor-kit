@@ -12,6 +12,7 @@
   import { Avatar, Button, EmptyState, IconButton, Skeleton, tooltip } from "@tailor-kit/ui";
   import { absoluteTime, relativeTime, shortId } from "../graph/model";
   import { getGitViews } from "../views.svelte";
+  import { AGE_LABELS, ageColor, ageStep } from "../viz/color";
   import { blameLines, commitCount, textLines } from "./model";
 
   let { path, rev }: { path: string; rev?: string } = $props();
@@ -30,6 +31,9 @@
   let token = 0;
 
   const rows = $derived(blame ? blameLines(blame, lines) : []);
+  // Wave 8: the gutter is tinted by how old the commit of a line is, when the host asks for it.
+  const byAge = $derived(host.viz?.blameAge === true);
+  const ageOf = (time: number) => ageStep(Math.max(0, (now / 1000 - time) / 86_400));
   const at = $derived(current ?? "HEAD");
   const name = $derived(path.replace(/^\//, "").split("/").pop() ?? path);
 
@@ -97,6 +101,12 @@
     <span class="file" title={path}>{name}</span>
     <span class="at" data-testid="blame-at">at {at === "HEAD" ? "the latest commit" : shortId(at)}</span>
     {#if blame && !blame.binary}<span class="count">{blame.lines.toLocaleString("en-US")} lines from {commitCount(blame)} commit{commitCount(blame) === 1 ? "" : "s"}</span>{/if}
+    {#if byAge && blame && !blame.binary}
+      <span class="ages" aria-label="Colour by age of the commit" data-testid="blame-age-legend">
+        {#each AGE_LABELS as l, i (l)}<i style:background={ageColor(i)} title={l}></i>{/each}
+        <span class="ages-text">new to old</span>
+      </span>
+    {/if}
     <span class="spacer"></span>
     <ExtensionGitActions target={{ kind: "file", repository: host.activeRepository ?? "", path: blame?.path ?? path, rev: at === "HEAD" ? undefined : at }} label="File actions" />
     <Button size="sm" variant="ghost" icon="history" data-testid="blame-file-history" onclick={() => views.open({ kind: "file-history", path: blame?.path ?? path })}>File history</Button>
@@ -117,7 +127,7 @@
     {:else}
       <div class="lines" role="table" aria-label="Who changed each line" aria-busy={loading} data-testid="blame-lines">
         {#each rows as r (r.n)}
-          <div class="row band-{r.band}" class:first={r.first} role="row" data-testid="blame-line" data-line={r.n} data-commit={r.hunk.commit.oid}>
+          <div class="row band-{r.band}" class:first={r.first} class:aged={byAge} role="row" data-testid="blame-line" data-line={r.n} data-commit={r.hunk.commit.oid} data-age={byAge ? ageOf(r.hunk.commit.time) : undefined} style:--age={byAge ? ageColor(ageOf(r.hunk.commit.time)) : undefined}>
             <div class="gutter" role="cell">
               {#if r.first}
                 <Avatar name={r.hunk.commit.author} />
@@ -198,6 +208,24 @@
   }
   .row.first {
     border-top: 1px solid var(--rt-border);
+  }
+  .row.aged .gutter {
+    box-shadow: inset 4px 0 0 var(--age);
+  }
+  .ages {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .ages i {
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .ages-text {
+    margin-left: var(--rt-space-2);
+    color: var(--rt-fg-muted);
+    font: var(--rt-font-caption);
   }
   .gutter {
     display: flex;

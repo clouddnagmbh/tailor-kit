@@ -13,6 +13,7 @@
   import { Badge, Icon, Menu, Spinner, type MenuEntry } from "@tailor-kit/ui";
   import { vimKeys, type VimList } from "../keys";
   import { stateLetter } from "./model";
+  import ActivityBar from "../viz/ActivityBar.svelte";
 
   let {
     rev,
@@ -189,6 +190,10 @@
         {/if}
         <span class="name">{entry.name}</span>
         {#if entry.kind === "submodule"}<span class="note">submodule</span>{/if}
+        {#if host.viz?.fileActivity}
+          {@const activity = host.viz.fileActivity(entry.path)}
+          {#if activity}<ActivityBar {activity} />{/if}
+        {/if}
         {#if letter}<Badge kind="status" value={letter} tone={TONE[letter]} />{/if}
         {#if entry.ignored}<span class="note">ignored</span>{/if}
       </button>

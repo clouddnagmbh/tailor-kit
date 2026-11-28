@@ -19,6 +19,7 @@
   import { getGitViews } from "../views.svelte";
   import FileCompare from "../viewers/FileCompare.svelte";
   import type { Side } from "../viewers/model";
+  import { vimKeys, type VimList } from "../keys";
   import { countStates, fileName, filterFiles, groupByFolder, NO_FILTER, statusLetter, summaryText, visibleFiles, type ChangeFilter, type StateFilter } from "./model";
 
   const host = getGitHost();
@@ -149,12 +150,25 @@
     e.preventDefault();
   }
 
+  const vimList: VimList = {
+    count: () => groups.reduce((n, g) => n + g.files.length, 0),
+    index: () => groups.flatMap((g) => g.files).findIndex((f) => f.path === selected),
+    select: (i) => {
+      const f = groups.flatMap((g) => g.files)[i];
+      if (f) selected = f.path;
+    },
+    labels: () => groups.flatMap((g) => g.files.map((f) => f.path)),
+    activate: () => {
+      if (current) views.open({ kind: "file", path: current.path });
+    },
+  };
+
   const branchLabel = $derived(copy ? (copy.branch ?? (copy.detached ? "detached HEAD" : "no commits yet")) : "");
   const sync = $derived(copy && (copy.ahead > 0 || copy.behind > 0) ? `↑${copy.ahead} ↓${copy.behind}` : "");
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<section class="changes" data-testid="changes-view" aria-label="Changes in the working copy" {onkeydown}>
+<section class="changes" data-testid="changes-view" aria-label="Changes in the working copy" use:vimKeys={() => (host.keyboard?.vim ? vimList : null)} {onkeydown}>
   <ExtensionGitHint target={hintTarget} />
   <header class="bar">
     {#if copy}

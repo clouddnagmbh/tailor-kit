@@ -4,13 +4,14 @@
      (`git.fileTree`), at a revision or in the working tree, where changed files carry their
      state and ignored ones are dimmed. -->
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
 
   import type { GitTreeEntry } from "../types";
   import { gitActionEntries } from "../extension-git";
   import { getGitExtensions } from "../host";
   import { getGitHost } from "../host";
   import { Badge, Icon, Menu, Spinner, type MenuEntry } from "@tailor-kit/ui";
+  import { vimKeys, type VimList } from "../keys";
   import { stateLetter } from "./model";
 
   let {
@@ -103,6 +104,55 @@
     onselect(entry);
   }
 
+  /** The entries that are on screen, top to bottom, with their parent folder. */
+  function visible(dir = "/", parent: string | null = null, out: { entry: GitTreeEntry; parent: string | null }[] = []) {
+    for (const entry of entries[dir] ?? []) {
+      out.push({ entry, parent });
+      if (entry.kind === "dir" && open[entry.path]) visible(entry.path, entry.path, out);
+    }
+    return out;
+  }
+
+  let treeEl = $state<HTMLElement>();
+  function pick(entry: GitTreeEntry) {
+    onselect(entry);
+    void tick().then(() => {
+      for (const b of treeEl?.querySelectorAll<HTMLElement>("[data-path]") ?? []) if (b.dataset.path === entry.path) b.focus();
+    });
+  }
+
+  const vimList: VimList = {
+    count: () => visible().length,
+    index: () => visible().findIndex((v) => v.entry.path === selected),
+    select: (i) => {
+      const v = visible()[i];
+      if (v) pick(v.entry);
+    },
+    labels: () => visible().map((v) => v.entry.name),
+    open: (expand) => {
+      const list = visible();
+      const at = list.findIndex((v) => v.entry.path === selected);
+      const v = list[at];
+      if (!v) return;
+      const dir = v.entry.kind === "dir";
+      if (expand) {
+        if (!dir) return;
+        if (!open[v.entry.path]) {
+          open[v.entry.path] = true;
+          if (entries[v.entry.path] === undefined) void read(v.entry.path);
+        } else if (list[at + 1]?.parent === v.entry.path) pick(list[at + 1]!.entry);
+      } else if (dir && open[v.entry.path]) open[v.entry.path] = false;
+      else if (v.parent) {
+        const up = list.find((x) => x.entry.path === v.parent);
+        if (up) pick(up.entry);
+      }
+    },
+    activate: () => {
+      const v = visible().find((x) => x.entry.path === selected);
+      if (v) toggle(v.entry);
+    },
+  };
+
   const TONE = { A: "ok", M: "warn", D: "danger", "?": "neutral" } as const;
 </script>
 
@@ -152,7 +202,7 @@
   {/if}
 {/snippet}
 
-<div class="tree" role="tree" aria-label="Files" data-testid="file-tree">
+<div class="tree" role="tree" aria-label="Files" data-testid="file-tree" bind:this={treeEl} use:vimKeys={() => (host.keyboard?.vim ? vimList : null)}>
   {@render level("/", 0)}
 </div>
 

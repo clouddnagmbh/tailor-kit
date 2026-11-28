@@ -195,6 +195,16 @@ export interface GitHost {
 
   /** Only a product with owned content provides it; the views work without. */
   readonly content?: GitContent;
+
+  /** Keyboard settings; read each time a key is pressed, so a change takes effect at once.
+   *  Absent: everything off. */
+  readonly keyboard?: GitKeyboard;
+}
+
+/** Keyboard options of the Git lists. */
+export interface GitKeyboard {
+  /** Vim-style keys in the lists (`j k gg G Ctrl+d Ctrl+u h l / n N`); default off. */
+  readonly vim?: boolean;
 }
 
 const KEY = Symbol("git-host");

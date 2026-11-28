@@ -116,7 +116,7 @@
   let message = $state("");
   // An extension asked for a message (`AppState.prefillCommitMessage`): shown when the field is empty.
   $effect(() => {
-    if (!host.commitPrefill) return;
+    if (!showChanges || !host.commitPrefill) return;
     const text = host.takeCommitPrefill();
     if (text !== null && untrack(() => message).trim() === "") message = text;
   });
